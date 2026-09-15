@@ -1,0 +1,70 @@
+name: J.A.R.V.I.S. CI/CD & Code Quality
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  validate-and-test:
+    name: Build, Syntax & Smoke Test (${{ matrix.os }} - Py ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+        python-version: [ '3.11', '3.12' ]
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: 📦 Install Core Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest requests psutil
+
+      - name: 🔒 Security & Secrets Audit
+        shell: bash
+        run: |
+          echo "Verifying no private credentials exist in the commit..."
+          if [ -f config/api_keys.json ]; then
+            echo "ERROR: config/api_keys.json should not be tracked!"
+            exit 1
+          fi
+          if [ -f .env ]; then
+            echo "ERROR: .env should not be tracked!"
+            exit 1
+          fi
+          echo "Security audit passed: No sensitive secrets leaked."
+
+      - name: ⚙️ Python Syntax Compilation Test
+        shell: bash
+        run: |
+          echo "Testing syntax of all modules..."
+          python -m py_compile main.py ui.py
+          python -m compileall actions/ core/ dashboard/ memory/ scripts/
+
+      - name: 🧪 Run System Info & Telemetry Smoke Tests
+        shell: bash
+        run: |
+          python -c "
+          from core.system_info import get_drive_stats, get_free_weather, fetch_top_dev_news
+          print('Disk stats test:', get_drive_stats())
+          print('Weather test:', get_free_weather())
+          print('News test:', fetch_top_dev_news(1))
+          "
+
+      - name: 🔍 Lint & Code Health Check
+        shell: bash
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,venv,build,dist
