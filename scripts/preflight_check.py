@@ -1,9 +1,37 @@
 import os, sys, time
+from pathlib import Path
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+def check_directories():
+    """Ensure all critical operational directories exist."""
+    dirs = [
+        os.path.join(PROJECT_ROOT, 'config'),
+        os.path.join(PROJECT_ROOT, 'logs'),
+        os.path.join(PROJECT_ROOT, 'memory', 'journals'),
+        os.path.join(PROJECT_ROOT, 'core', 'assets', 'sfx'),
+        os.path.join(PROJECT_ROOT, 'core', 'models', 'piper'),
+    ]
+    for d in dirs:
+        os.makedirs(d, exist_ok=True)
+
+def check_icon():
+    """Ensure custom Stark Arc Reactor ICO and PNG icons exist."""
+    ico_path = os.path.join(PROJECT_ROOT, 'config', 'jarvis.ico')
+    png_path = os.path.join(PROJECT_ROOT, 'config', 'jarvis.png')
+    if os.path.exists(ico_path) and os.path.exists(png_path) and os.path.getsize(ico_path) > 10000:
+        print('  [OK] Stark Arc Reactor Icons: Ready (Cached)')
+        return
+    print('  [*] Generating custom Stark Arc Reactor icons...')
+    try:
+        from scripts.generate_icon import build_assets
+        build_assets()
+        print('  [OK] Stark Arc Reactor Icons: Ready')
+    except Exception as e:
+        print(f'  [!] Icon generation note: {e}')
 
 def check_sfx():
     sfx_dir = os.path.join(PROJECT_ROOT, 'core', 'assets', 'sfx')
@@ -76,17 +104,25 @@ def check_wakeword():
     except Exception as e:
         print(f'  [!] Wake word check note: {e}')
 
-def main():
-    print('===================================================')
-    print('       SudhirDevOps1 AI - Pre-Flight Self-Check')
-    print('===================================================')
+def run_preflight(verbose=True):
+    """Programmatic entry point for main.py / run_jarvis.pyw."""
+    if verbose:
+        print('===================================================')
+        print('       SudhirDevOps1 AI - Pre-Flight Self-Check')
+        print('===================================================')
     t0 = time.monotonic()
+    check_directories()
+    check_icon()
     check_sfx()
     check_piper_hindi()
     check_wakeword()
     dt = time.monotonic() - t0
-    print(f'Pre-flight complete in {dt:.2f}s. All assets ready.')
-    print('===================================================\n')
+    if verbose:
+        print(f'Pre-flight complete in {dt:.2f}s. All assets ready.')
+        print('===================================================\n')
+
+def main():
+    run_preflight(verbose=True)
 
 if __name__ == '__main__':
     main()

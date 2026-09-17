@@ -4724,6 +4724,19 @@ class MainWindow(QMainWindow):
             apply_ui_accent(_ui_color)
 
         self.setWindowTitle(f"{_display} — {APP_VERSION}")
+        # Apply custom Arc Reactor icon to Window, Taskbar & Alt-Tab
+        ico_file = Path(__file__).resolve().parent / "config" / "jarvis.ico"
+        if ico_file.exists():
+            from PyQt6.QtGui import QIcon
+            app_icon = QIcon(str(ico_file))
+            self.setWindowIcon(app_icon)
+            QApplication.setWindowIcon(app_icon)
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI.MarkLIII")
+            except Exception:
+                pass
         self.setMinimumSize(_MIN_W, _MIN_H)
         self.resize(_DEFAULT_W, _DEFAULT_H)
 
@@ -4995,6 +5008,13 @@ class MainWindow(QMainWindow):
         Returns True on success.
         """
         try:
+            from scripts.generate_icon import build_assets
+            build_assets()
+            if out_path.exists():
+                return True
+        except Exception:
+            pass
+        try:
             import math
             import PIL.Image
             import PIL.ImageDraw
@@ -5241,9 +5261,11 @@ class MainWindow(QMainWindow):
             if _os == "Windows":
                 pythonw  = python.parent / "pythonw.exe"
                 target   = str(pythonw if pythonw.exists() else python)
+                launcher = script.parent / "run_jarvis.pyw"
+                run_target = str(launcher if launcher.exists() else script)
                 lnk      = str(desktop / "J.A.R.V.I.S.lnk")
-                icon_loc = str(ico_path) if ico_path.exists() else f"{target},0"
-                self._create_lnk_windows(lnk, target, str(script),
+                icon_loc = f"{ico_path},0" if ico_path.exists() else f"{target},0"
+                self._create_lnk_windows(lnk, target, run_target,
                                          str(script.parent), icon_loc)
 
             # ── macOS — proper .app bundle (no Terminal window) ───────────────

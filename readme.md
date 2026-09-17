@@ -40,6 +40,8 @@ It's not just an assistant — it's an extension of your digital life.
 | 🎨 Live Theming | Recolour the entire HUD from a hue wheel or hex — applied instantly across every panel |
 | 🎭 Emotional Expressions | Real-time visual mood badge and HUD color-pulse reactions (`LOVE`, `JEALOUS`, `EXCITED`, `CARING`, `TACTICAL`) with zero tokens |
 | ✨ 1-Click Vibe Presets | 1-click all-in-one setup (GF Soulmate, Stark Tactical, DevOps Beast, Mentor & Guru) with 100% restart persistence |
+| 🚀 1-Click Auto-Setup | Self-healing `.bat` launcher — first-time automatic Python check, pip dependency install, preflight asset verification, and crash protection |
+| 🖥️ Desktop App & Taskbar | Background `run_jarvis.pyw` launcher with registered Windows `AppUserModelID`, custom Arc Reactor taskbar icon, and runtime logging |
 | 〰️ Reactive HUD & Arc Reactor | 4 distinct avatar modes (`reactor`, `celestial`, `orb`, `matrix`) featuring authentic continuous ambient idling hum, rotating copper coils, vibrating core glow, and real-time voice reactivity |
 | 🔊 Stark SFX Engine | Zero-latency boot and UI sound effects (`boot`, `wake`, `confirm`, `ack`) backed by Windows native `winsound` and `sounddevice` |
 | 🎙️ Voice Picker | Choose from 5 native Gemini voices and switch live from the UI — no restart |

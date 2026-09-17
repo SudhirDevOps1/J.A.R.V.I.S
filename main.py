@@ -58,6 +58,22 @@ import sounddevice as sd
 import numpy as np
 from google import genai
 from google.genai import types
+
+# Windows AppUserModelID registration (Taskbar Icon)
+if sys.platform == "win32":
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI.MarkLIII")
+    except Exception:
+        pass
+
+# Ensure critical assets (icons, SFX, models) are ready
+try:
+    from scripts.preflight_check import run_preflight
+    run_preflight(verbose=False)
+except Exception:
+    pass
+
 from ui import JarvisUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,

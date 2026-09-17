@@ -2,6 +2,35 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [2026-09-17 16:30] — Robust Auto-Setup Launcher, Desktop Shortcut Fix, & Custom Arc Reactor Icon
+
+### 🚀 Self-Healing Auto-Setup Batch Launcher (`start_jarvis.bat`)
+1. **First-Run Automatic Dependency & Asset Check**:
+   - Automatically detects Python installation across `%LOCALAPPDATA%` and system `PATH`.
+   - Auto-activates virtual environments (`.venv` or `venv`) if present.
+   - Verifies all required dependencies (`PyQt6`, `google-genai`, `sounddevice`, `edge-tts`, `pillow`, `psutil`, `requests`) and auto-installs via pip on first launch.
+   - Cyberpunk startup banner with colored diagnostic telemetry.
+   - Added automatic recovery and pause protection so crashes display stack trace rather than closing immediately.
+
+### 🖥️ Desktop Shortcut Architecture Fix (`run_jarvis.pyw`, `ui.py`, `main.py`)
+1. **Background Launcher (`run_jarvis.pyw`)**:
+   - Double-clicking the desktop shortcut now runs `run_jarvis.pyw` through `pythonw.exe`.
+   - Explicitly locks working directory to project root, eliminating relative path breakage.
+   - Redirects stdout and stderr to `logs/jarvis_runtime.log` with auto-rotation, preventing `pythonw.exe` stream crashes.
+   - Automatically runs silent preflight check so missing assets/models are cached before the UI mounts.
+2. **Windows Taskbar Integration**:
+   - Registered Windows `AppUserModelID` (`SudhirDevOps1.JARVIS.AI.MarkLIII`) via `shell32.dll`.
+   - Windows taskbar and Alt-Tab switcher now render the custom Arc Reactor icon instead of the generic Python logo.
+   - Added `self.setWindowIcon()` and `QApplication.setWindowIcon()` to `MainWindow`.
+
+### 🎨 Brand-New Custom Stark Arc Reactor Icon (`scripts/generate_icon.py`, `config/jarvis.ico`, `config/jarvis.png`)
+1. **High-Definition Multi-Layer Arc Reactor Design**:
+   - Master 1024×1024 vector-style raster render with 10 copper-gold electromagnetic coils, technical angle calibration notches, intermediate cyan energy rails, and glowing quantum fusion core.
+   - Generated multi-resolution `config/jarvis.ico` containing 256×256, 128×128, 64×64, 48×48, 32×32, and 16×16 frames.
+   - Generated 512×512 master `config/jarvis.png` for web dashboard, mobile links, and cross-platform desktop icons.
+
+---
+
 ## [2026-09-17 16:10] — Real-Time Emotional Avatar Expressions & 1-Click Vibe Presets with 100% Restart Persistence
 
 ### 🎭 Real-Time Emotional Avatar Reactions (`core/expression_engine.py`, `ui.py`, `main.py`)
