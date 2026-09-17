@@ -393,6 +393,17 @@ def save_edge_voice(voice: str) -> None:
     _patch_config(edge_voice=(voice or "").strip())
 
 
+def get_preferred_language() -> str:
+    """Return preferred conversation language ('hinglish', 'hindi', 'english', 'auto'). Default: 'hinglish'."""
+    val = (load_api_keys().get("preferred_language") or "hinglish").lower().strip()
+    return val if val in ("hinglish", "hindi", "english", "auto") else "hinglish"
+
+
+def save_preferred_language(lang: str) -> None:
+    """Persist preferred conversation language."""
+    _patch_config(preferred_language=(lang or "hinglish").strip().lower())
+
+
 def _auto_detect_obsidian_settings() -> dict | None:
     """Auto-detect Obsidian vault and Local REST API key from local system."""
     appdata = os.environ.get("APPDATA", "")

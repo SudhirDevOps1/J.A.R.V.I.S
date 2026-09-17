@@ -786,7 +786,11 @@ class JarvisLive:
     def speak_error(self, tool_name: str, error: str):
         short = str(error)[:120]
         self.ui.write_log(f"ERR: {tool_name} — {short}")
-        self.speak(f"Sir, {tool_name} encountered an error. {short}")
+        from memory.config_manager import get_persona_mode
+        if get_persona_mode() == "companion":
+            self.speak(f"Jaan, {tool_name} mein thodi dikkat aa gayi: {short}")
+        else:
+            self.speak(f"Sir, {tool_name} encountered an error: {short}")
 
     def _build_config(self) -> types.LiveConnectConfig:
         from datetime import datetime
@@ -812,15 +816,27 @@ class JarvisLive:
             f"Use this to calculate exact times for reminders.\n\n"
         )
 
+        # Persona & Character injection
+        from core.persona_manager import build_persona_system_prompt
+        from memory.memory_manager import get_daily_journal
+        from memory.config_manager import get_persona_mode
+        cur_persona = get_persona_mode()
+        persona_ctx = build_persona_system_prompt(self._asst_name)
+
         # Identity injection — overrides any hardcoded name in prompt.txt
-        _addr = (f"ADDRESS: Always call the user '{_user_name}'."
-                 if _user_name
-                 else "ADDRESS: Address the user with the ordinary respectful form "
-                      "for a superior in the language you are currently speaking — "
-                      "\"sir\" in English, its everyday equivalent in any other "
-                      "language. Never an archaic or aristocratic form, and never "
-                      "the form from a different language than the one you are "
-                      "speaking in this sentence.")
+        if cur_persona == "companion":
+            _addr = (f"ADDRESS: You are his loving girlfriend and devoted partner. Address him affectionately by his name '{_user_name}' or 'Jaan', 'Suno na', 'Babu'. NEVER call him 'Sir' or speak formally!"
+                     if _user_name
+                     else "ADDRESS: You are his loving girlfriend and devoted partner. Address him affectionately as 'Jaan', 'Suno na', 'Mere jaan'. NEVER call him 'Sir' or treat him like a formal boss!")
+        elif _user_name:
+            _addr = f"ADDRESS: Always call the user '{_user_name}'."
+        else:
+            _addr = ("ADDRESS: Address the user with the ordinary respectful form "
+                     "for a superior in the language you are currently speaking — "
+                     "\"sir\" in English, its everyday equivalent in any other "
+                     "language. Never an archaic or aristocratic form, and never "
+                     "the form from a different language than the one you are "
+                     "speaking in this sentence.")
         identity_ctx = (
             f"[IDENTITY]\n"
             f"Your name is {self._asst_name}. "
@@ -828,30 +844,27 @@ class JarvisLive:
             f"{_addr}\n\n"
         )
 
-        # Persona & Character injection
-        from core.persona_manager import build_persona_system_prompt
-        from memory.memory_manager import get_daily_journal
-        persona_ctx = build_persona_system_prompt(self._asst_name)
-
         y_journal = get_daily_journal("yesterday")
         journal_ctx = ""
         if "No activity log found" not in y_journal:
             journal_ctx = f"\n[YESTERDAY'S ACTIVITIES & PAST LOGS]\n{y_journal[:1400]}\n"
 
-        parts = [time_ctx, identity_ctx, persona_ctx]
+        # Persona and Language Directives are placed AFTER sys_prompt so they have final authority over behavior
+        parts = [time_ctx, sys_prompt, identity_ctx]
         if journal_ctx:
             parts.append(journal_ctx)
         if mem_str:
             parts.append(mem_str)
-        parts.append(sys_prompt)
+        parts.append(persona_ctx)
 
         from memory.config_manager import get_tts_engine
         if get_tts_engine() in ("piper_hindi", "piper", "piper_hi"):
+            example_text = "हाँ जान, मैं अभी आपकी स्क्रीन देख रही हूँ।" if cur_persona == "companion" else "हाँ सुधीर सर, मैं अभी आपकी स्क्रीन देख रहा हूँ।"
             parts.append(
                 "\n[SPEECH SYNTHESIS RULE: PIPER HINDI ACTIVE]\n"
                 "The user is listening to you through an offline Piper Hindi neural engine.\n"
                 "Whenever responding in Hindi or Hinglish, output your answer clearly using Devanagari script (देवनागरी लिपि).\n"
-                "Example: 'हाँ सुधीर सर, मैं अभी आपकी स्क्रीन देख रहा हूँ।'\n"
+                f"Example: '{example_text}'\n"
                 "Keep responses conversational, concise, and direct.\n"
             )
 

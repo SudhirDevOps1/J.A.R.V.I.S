@@ -58,6 +58,7 @@ from memory.config_manager import (
     get_assistant_gender, save_assistant_gender,
     get_edge_voice, save_edge_voice,
     get_obsidian_config, save_obsidian_config,
+    get_preferred_language, save_preferred_language,
 )
 APP_VERSION  = get_app_name()
 APP_PROTOCOL = get_protocol_name()
@@ -2331,7 +2332,7 @@ class CustomizeOverlay(QWidget):
       3. ⚙ IDENTITY & VOICE: Assistant name, user name, Gemini voice pills, and Stark SFX toggle.
     """
 
-    saved = pyqtSignal(str, str, str, str, str, int, dict, bool, str, int, str, str, str, str, dict)
+    saved = pyqtSignal(str, str, str, str, str, int, dict, bool, str, int, str, str, str, str, dict, str)
     _OW, _OH = 580, 640
 
     def __init__(self, assistant_name="JARVIS", user_name="",
@@ -2378,6 +2379,8 @@ class CustomizeOverlay(QWidget):
         self._sel_persona         = self._initial_persona
         self._initial_gender      = get_assistant_gender()
         self._sel_gender          = self._initial_gender
+        self._initial_language    = get_preferred_language()
+        self._sel_language        = self._initial_language
         self._initial_tts_engine  = get_tts_engine()
         self._sel_tts_engine      = self._initial_tts_engine
         self._initial_edge_voice  = get_edge_voice()
@@ -2736,6 +2739,27 @@ class CustomizeOverlay(QWidget):
         lay_id.addLayout(gen_row)
         self._refresh_gender_btns()
 
+        # 3b. Preferred Conversation Language
+        lay_id.addWidget(_lbl("PREFERRED CONVERSATION LANGUAGE", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        lang_row = QHBoxLayout(); lang_row.setSpacing(4)
+        self._lang_btns = {}
+        languages = [
+            ("hinglish", "🇮🇳 HINGLISH"),
+            ("hindi", "🇮🇳 HINDI"),
+            ("english", "🇬🇧 ENGLISH"),
+            ("auto", "🌐 AUTO"),
+        ]
+        for l_key, l_label in languages:
+            b = QPushButton(l_label)
+            b.setFixedHeight(26)
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _=False, lk=l_key: self._on_language_pick(lk))
+            self._lang_btns[l_key] = b
+            lang_row.addWidget(b)
+        lay_id.addLayout(lang_row)
+        self._refresh_language_btns()
+
         # 4. Speech Engine Selector
         lay_id.addWidget(_lbl("SPEECH AUDIO ENGINE", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
         tts_row = QHBoxLayout(); tts_row.setSpacing(4)
@@ -3011,6 +3035,19 @@ class CustomizeOverlay(QWidget):
             else:
                 b.setStyleSheet(f"background: #00121a; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
 
+    # ── Language selection ─────────────────────────────────────────────────
+    def _on_language_pick(self, lang: str):
+        self._sel_language = lang
+        self._refresh_language_btns()
+
+    def _refresh_language_btns(self):
+        for l_key, b in self._lang_btns.items():
+            on = (l_key == self._sel_language)
+            if on:
+                b.setStyleSheet(f"background: {C.PRI_DIM}; color: #000; border: 1px solid {C.PRI}; border-radius: 3px;")
+            else:
+                b.setStyleSheet(f"background: #00121a; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
+
     # ── Speech engine selection ────────────────────────────────────────────
     def _on_tts_engine_pick(self, eng: str):
         self._sel_tts_engine = eng
@@ -3121,6 +3158,7 @@ class CustomizeOverlay(QWidget):
         save_sfx_enabled(self._chk_sfx.isChecked())
         save_persona_mode(self._sel_persona)
         save_assistant_gender(self._sel_gender)
+        save_preferred_language(self._sel_language)
         save_tts_engine(self._sel_tts_engine)
         save_edge_voice(self._sel_edge_voice)
 
@@ -3138,7 +3176,8 @@ class CustomizeOverlay(QWidget):
             name, user, self._sel_color or DEFAULT_UI_COLOR, self._sel_voice,
             self._sel_avatar_mode, self._sel_density, self._sel_hud_fx, self._chk_sfx.isChecked(),
             self._sel_anim_mode, self._sel_hud_glow,
-            self._sel_persona, self._sel_gender, self._sel_tts_engine, self._sel_edge_voice, self._obsidian_cfg
+            self._sel_persona, self._sel_gender, self._sel_tts_engine, self._sel_edge_voice, self._obsidian_cfg,
+            self._sel_language
         )
         self.hide()
 
@@ -4330,6 +4369,11 @@ class MainWindow(QMainWindow):
 
         # Center column: HUD + resizable content panel via QSplitter
         self.hud = HudCanvas(face_path, _display)
+        self.hud.set_avatar_mode(get_avatar_mode())
+        self.hud.set_anim_mode(get_anim_mode())
+        self.hud.set_hud_glow(get_hud_glow())
+        self.hud.set_particle_density(get_particle_density())
+        self.hud.set_hud_fx(get_hud_fx())
         self.hud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._content_panel = self._build_content_panel()
 
@@ -5161,9 +5205,19 @@ class MainWindow(QMainWindow):
         self._title_lbl.setFont(QFont("Courier New", 17, QFont.Weight.Bold))
         self._title_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         mid.addWidget(self._title_lbl)
-        _sub_text = ("Just A Rather Very Intelligent System"
-                     if _disp in ("JARVIS", "J.A.R.V.I.S")
-                     else "Personal AI Assistant")
+        _cur_persona = get_persona_mode()
+        persona_subtitles = {
+            "jarvis": "Just A Rather Very Intelligent System",
+            "teacher": "AI Mentor & Academic Instructor",
+            "companion": "💖 Devoted Romantic Partner & Soulmate",
+            "devops": "Autonomous DevOps & Cloud Specialist",
+        }
+        if _disp in ("JARVIS", "J.A.R.V.I.S") and _cur_persona == "jarvis":
+            _sub_text = "Just A Rather Very Intelligent System"
+        elif _cur_persona in persona_subtitles:
+            _sub_text = persona_subtitles[_cur_persona]
+        else:
+            _sub_text = "Personal AI Assistant"
         self._sub_lbl = QLabel(_sub_text)
         self._sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._sub_lbl.setFont(QFont("Courier New", 7))
@@ -6107,7 +6161,8 @@ class MainWindow(QMainWindow):
                            hud_glow: int = 60, persona_mode: str = "jarvis",
                            gender: str = "male", tts_engine: str = "edge_tts",
                            edge_voice: str = "hi-IN-MadhurNeural",
-                           obsidian_cfg: dict = None):
+                           obsidian_cfg: dict = None,
+                           language: str = "hinglish"):
         """Update all name/theme/visual-dependent UI elements and persist to config."""
         self._assistant_name = name.strip() or "JARVIS"
         display = self._assistant_name.upper()
@@ -6172,9 +6227,25 @@ class MainWindow(QMainWindow):
             if hud_fx is not None:
                 data["hud_fx"] = hud_fx
             data["sfx_enabled"] = sfx_enabled
+            data["persona_mode"] = persona_mode
+            data["assistant_gender"] = gender
+            data["preferred_language"] = language
+            data["tts_engine"] = tts_engine
+            data["edge_voice"] = edge_voice
+            if obsidian_cfg is not None:
+                data["obsidian_config"] = obsidian_cfg
+
+            save_persona_mode(persona_mode)
+            save_assistant_gender(gender)
+            save_preferred_language(language)
+            save_tts_engine(tts_engine)
+            save_edge_voice(edge_voice)
+            if obsidian_cfg is not None:
+                save_obsidian_config(obsidian_cfg)
+
             API_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
             self._log.append_log(f"SYS: Identity updated — {display} ({avatar_mode.upper()} mode, {anim_mode.upper()} dynamics)")
-            self._log.append_log(f"SYS: Persona: {persona_mode.upper()} ({gender.upper()}) | Engine: {tts_engine.upper()}")
+            self._log.append_log(f"SYS: Persona: {persona_mode.upper()} ({gender.upper()}) | Lang: {language.upper()} | Engine: {tts_engine.upper()}")
             if color_changed:
                 self._log.append_log(f"SYS: UI colour applied — {ui_color}")
             if voice_changed:

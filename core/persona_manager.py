@@ -141,8 +141,41 @@ def get_gender_grammar_directive(gender: str) -> str:
 """
 
 
-def build_persona_system_prompt(assistant_name: str = "JARVIS", mode: str | None = None, gender: str | None = None) -> str:
-    """Compile the full persona prompt, including tone, anti-corporate guardrail, and gender grammar."""
+def get_language_directive(language: str | None = None) -> str:
+    """Enforce explicit conversational language preference."""
+    from memory.config_manager import get_preferred_language
+    lang = (language or get_preferred_language()).lower().strip()
+
+    if lang == "hindi":
+        return """
+[CONVERSATION LANGUAGE DIRECTIVE: HINDI (हिंदी)]
+- The user's preferred language is Hindi.
+- Always respond in fluent, clear, and natural conversational Hindi.
+- Do NOT reply in pure English unless explicitly asked to translate or write code.
+"""
+    elif lang == "english":
+        return """
+[CONVERSATION LANGUAGE DIRECTIVE: ENGLISH]
+- The user's preferred language is English.
+- Always respond in articulate, natural English.
+"""
+    elif lang == "auto":
+        return """
+[CONVERSATION LANGUAGE DIRECTIVE: ADAPTIVE]
+- Automatically mirror whatever language the user speaks in their latest message (Hindi, Hinglish, or English).
+"""
+    else:  # default 'hinglish'
+        return """
+[CONVERSATION LANGUAGE DIRECTIVE: NATURAL HINDI / HINGLISH]
+- The user's preferred language is conversational Hindi & Hinglish.
+- Speak in warm, natural everyday conversational Hindi/Hinglish (e.g., 'Main abhi check karti hoon, bilkul chinta mat karo', 'Aapka task complete ho gaya hai').
+- Keep technical terms, file names, programming commands, and library names in English.
+- Do NOT use stiff textbook Hindi; speak like a real modern Indian speaker.
+"""
+
+
+def build_persona_system_prompt(assistant_name: str = "JARVIS", mode: str | None = None, gender: str | None = None, language: str | None = None) -> str:
+    """Compile the full persona prompt, including tone, anti-corporate guardrail, gender grammar, and language."""
     if not mode:
         mode = get_persona_mode()
     if not gender:
@@ -151,5 +184,6 @@ def build_persona_system_prompt(assistant_name: str = "JARVIS", mode: str | None
     persona_body = _PERSONA_PROMPTS.get(mode, _PERSONA_PROMPTS["jarvis"])
     anti_corp = get_anti_corporate_guardrail(assistant_name)
     grammar = get_gender_grammar_directive(gender)
+    lang_directive = get_language_directive(language)
 
-    return f"{persona_body}\n{anti_corp}\n{grammar}\n"
+    return f"{persona_body}\n{anti_corp}\n{grammar}\n{lang_directive}\n"
