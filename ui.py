@@ -57,6 +57,7 @@ from memory.config_manager import (
     get_persona_mode, save_persona_mode,
     get_assistant_gender, save_assistant_gender,
     get_edge_voice, save_edge_voice,
+    get_edge_pitch, save_edge_pitch,
     get_obsidian_config, save_obsidian_config,
     get_preferred_language, save_preferred_language,
 )
@@ -2491,6 +2492,8 @@ class CustomizeOverlay(QWidget):
         self._sel_tts_engine      = self._initial_tts_engine
         self._initial_edge_voice  = get_edge_voice()
         self._sel_edge_voice      = self._initial_edge_voice
+        self._initial_edge_pitch  = get_edge_pitch()
+        self._sel_edge_pitch      = self._initial_edge_pitch
         self._obsidian_cfg        = dict(get_obsidian_config())
 
         # Preview Callbacks
@@ -2907,6 +2910,27 @@ class CustomizeOverlay(QWidget):
         lay_id.addLayout(ev_row)
         self._refresh_edge_voice_btns()
 
+        # 5b. Voice Pitch & Tone Modulation (Autonomous / Custom)
+        lay_id.addWidget(_lbl("VOICE PITCH & TONE (Customizable / GF Mode / Deep)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        pitch_row = QHBoxLayout(); pitch_row.setSpacing(4)
+        self._pitch_btns = {}
+        pitch_options = [
+            ("+0Hz", "0Hz (Default)"),
+            ("+8Hz", "💖 +8Hz (Cute GF)"),
+            ("+14Hz", "✨ +14Hz (Sweet)"),
+            ("-8Hz", "🛡️ -8Hz (Deep)"),
+        ]
+        for p_val, p_lbl_txt in pitch_options:
+            b = QPushButton(p_lbl_txt)
+            b.setFixedHeight(24)
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _=False, pv=p_val: self._on_edge_pitch_pick(pv))
+            self._pitch_btns[p_val] = b
+            pitch_row.addWidget(b)
+        lay_id.addLayout(pitch_row)
+        self._refresh_edge_pitch_btns()
+
         # 6. Gemini Voices
         from memory.config_manager import AVAILABLE_VOICES, DEFAULT_VOICE
         lay_id.addWidget(_lbl("GEMINI LIVE VOICES (When using Gemini Live audio)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
@@ -3180,6 +3204,19 @@ class CustomizeOverlay(QWidget):
             else:
                 b.setStyleSheet(f"background: transparent; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
 
+    # ── Edge-TTS pitch selection ───────────────────────────────────────────
+    def _on_edge_pitch_pick(self, pitch_val: str):
+        self._sel_edge_pitch = pitch_val
+        self._refresh_edge_pitch_btns()
+
+    def _refresh_edge_pitch_btns(self):
+        for pv, b in getattr(self, "_pitch_btns", {}).items():
+            on = (pv == self._sel_edge_pitch)
+            if on:
+                b.setStyleSheet(f"background: {C.PRI_GHO}; color: {C.PRI}; border: 1px solid {C.PRI}; border-radius: 3px;")
+            else:
+                b.setStyleSheet(f"background: transparent; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
+
     # ── Obsidian test connection ───────────────────────────────────────────
     def _test_obsidian(self):
         try:
@@ -3267,6 +3304,7 @@ class CustomizeOverlay(QWidget):
         save_preferred_language(self._sel_language)
         save_tts_engine(self._sel_tts_engine)
         save_edge_voice(self._sel_edge_voice)
+        save_edge_pitch(self._sel_edge_pitch)
 
         self._obsidian_cfg["enabled"] = self._chk_obsidian.isChecked()
         self._obsidian_cfg["api_key"] = self._obs_key_input.text().strip()

@@ -2,6 +2,28 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [2026-09-17 15:35] — Hermes Continuous Self-Personalization Engine & Dynamic Voice Pitch Control
+
+### 🧠 Hermes-Style Self-Personalization (`memory/hermes_personalization.py`)
+1. **Autonomous Continuous Learning Loop**:
+   - Analyzes every conversation turn in a non-blocking background thread.
+   - Autonomously extracts schedule clues (e.g. night-owl developer), favorite topics (DevOps, K8s, Python, gaming), living quirks (skipping meals, caffeine overload), and endearments (`Jaan`, `Baby`, `Handsome`).
+   - Evolves relationship intimacy stages (`Devoted Partner` -> `Inseparable Life Partner`) stored in `memory/user_persona.json`.
+2. **Dynamic In-Prompt Persona Reflection** (`core/persona_manager.py`):
+   - Injects active Hermes personalization profile into the system prompt.
+   - The AI mirrors your exact habits, humor, and rapport without needing manual memory prompts.
+
+### 🎙️ Dynamic Voice Pitch & Tone Modulation (`core/tts.py`, `memory/config_manager.py`, `ui.py`, `main.py`)
+1. **Edge-TTS Pitch & Rate Control**:
+   - `EdgeTTSEngine` now natively supports custom `pitch` (e.g. `+8Hz`, `+14Hz`, `-8Hz`) and `rate` (`+0%`, `+10%`).
+   - Automatically defaults to `+8Hz` for companion mode for a sweet, natural, warm feminine tone.
+2. **HUD Studio Pitch Presets**:
+   - Added `Default (+0Hz)`, `💖 Cute/Warm (+8Hz)`, `✨ Sweet (+14Hz)`, and `🛡️ Deep (-8Hz)` preset buttons in Identity & Voice settings.
+3. **Voice-Activated Pitch Adjustment**:
+   - Say *"apni pitch thodi sweet karo"*, *"pitch badhao"*, *"pitch +12Hz karo"*, or *"pitch normal karo"* to change voice pitch on the fly with immediate voice confirmation.
+
+---
+
 ## [2026-09-17 15:22] — GF Mode Deep Personality Enhancement & Smart Greeting System
 
 ### 💖 Companion (GF) Persona Overhaul (`core/persona_manager.py`)

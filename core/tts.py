@@ -132,9 +132,16 @@ def _play_audio_bytes(audio_bytes: bytes) -> None:
 # ---------------------------------------------------------------------------
 
 class EdgeTTSEngine:
-    """Microsoft EdgeTTS – free, requires internet."""
+    """Microsoft EdgeTTS – free, requires internet with dynamic pitch and rate control."""
 
-    def __init__(self, voice: str = "en-US-GuyNeural"):
+    def __init__(self, voice: str = "en-US-GuyNeural", pitch: str | None = None, rate: str | None = None):
+        try:
+            from memory.config_manager import get_edge_pitch, get_edge_rate
+            self.pitch = pitch if pitch is not None else get_edge_pitch()
+            self.rate  = rate if rate is not None else get_edge_rate()
+        except Exception:
+            self.pitch = pitch or "+0Hz"
+            self.rate  = rate or "+0%"
         self.voice = voice
 
     def speak(self, text: str) -> None:
@@ -148,7 +155,9 @@ class EdgeTTSEngine:
 
     async def _synth(self, text: str) -> bytes:
         import edge_tts
-        comm = edge_tts.Communicate(text, self.voice)
+        pitch_arg = self.pitch if self.pitch else "+0Hz"
+        rate_arg  = self.rate if self.rate else "+0%"
+        comm = edge_tts.Communicate(text, self.voice, pitch=pitch_arg, rate=rate_arg)
         buf  = bytearray()
         async for chunk in comm.stream():
             if chunk["type"] == "audio":

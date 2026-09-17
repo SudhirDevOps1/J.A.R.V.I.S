@@ -205,7 +205,7 @@ def get_language_directive(language: str | None = None) -> str:
 
 
 def build_persona_system_prompt(assistant_name: str = "JARVIS", mode: str | None = None, gender: str | None = None, language: str | None = None) -> str:
-    """Compile the full persona prompt, including tone, anti-corporate guardrail, gender grammar, and language."""
+    """Compile the full persona prompt, including tone, anti-corporate guardrail, gender grammar, language, and Hermes adaptive profile."""
     if not mode:
         mode = get_persona_mode()
     if not gender:
@@ -216,4 +216,11 @@ def build_persona_system_prompt(assistant_name: str = "JARVIS", mode: str | None
     grammar = get_gender_grammar_directive(gender)
     lang_directive = get_language_directive(language)
 
-    return f"{persona_body}\n{anti_corp}\n{grammar}\n{lang_directive}\n"
+    hermes_ctx = ""
+    try:
+        from memory.hermes_personalization import get_hermes_persona_context
+        hermes_ctx = get_hermes_persona_context()
+    except Exception:
+        pass
+
+    return f"{persona_body}\n{anti_corp}\n{grammar}\n{lang_directive}\n{hermes_ctx}\n"

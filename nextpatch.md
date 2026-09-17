@@ -423,6 +423,17 @@ This document outlines the **architectural blueprint, dependency requirements, t
 
 ---
 
+### 19. 🧠 Hermes Recursive Self-Personalization & Voice Pitch Modulation
+
+* **Goal:** Emulate Nous Hermes agent-style recursive self-personalization, where the assistant autonomously adapts to the user's personality, schedule, inside jokes, and voice preferences on every turn.
+* **Key Architecture:**
+  - **Autonomous Profiler (`memory/hermes_personalization.py`)**: Asynchronously monitors spoken and typed turns to extract schedule patterns (night-owl developer), tech stacks (DevOps/K8s/Python), living habits, and inside jokes into `memory/user_persona.json`.
+  - **Dynamic In-Prompt Persona Injection**: Automatically loads and injects the live Hermes profile into `core/persona_manager.py`, ensuring responses mirror the user's exact rapport and humor.
+  - **Edge-TTS Pitch Control (`core/tts.py`, `memory/config_manager.py`)**: Native support for custom pitch adjustments (`+8Hz` Cute GF, `+14Hz` Sweet, `-8Hz` Deep, `0Hz` Default) via UI buttons or voice commands (*"apni pitch thodi sweet karo"*).
+  - **Zero Token Overhead**: All pattern learning runs locally on regex and lexical state machines without calling external LLM tokens for memory extraction.
+
+---
+
 ## 🔒 Security, Safety, & Stability Guidelines
 
 1. **Isolation Guarantee**: All third-party skills must reside in `plugins/`. If a plugin fails or crashes, J.A.R.V.I.S.'s `core/plugin_loader.py` will isolate the crash without closing the main UI.

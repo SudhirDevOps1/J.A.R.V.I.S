@@ -651,6 +651,18 @@ class JarvisLive:
         from memory.memory_manager import log_daily_activity
         log_daily_activity(text)
 
+        # Hermes autonomous learning & pitch intent handler
+        try:
+            from memory.hermes_personalization import learn_from_interaction, adjust_pitch_by_intent
+            learn_from_interaction(text)
+            matched, new_pitch, confirm_msg = adjust_pitch_by_intent(text)
+            if matched:
+                self.ui.write_log(f"SYS: Voice pitch updated to {new_pitch}.")
+                self.speak(confirm_msg)
+                return
+        except Exception:
+            pass
+
         # Multi-Provider routing: if user configured OpenRouter, Groq, DeepSeek, or Custom LLM,
         # route typed queries through MultiLLMClient with full persona and second-brain context.
         from memory.config_manager import load_api_keys
@@ -765,9 +777,15 @@ class JarvisLive:
         elif eng in ("edge_tts", "edge", "neural"):
             try:
                 from core.tts import EdgeTTSEngine
+                from memory.config_manager import get_edge_pitch, get_edge_rate
                 v = get_edge_voice()
-                if not hasattr(self, "_edge_engine") or self._edge_engine is None or getattr(self._edge_engine, "voice", "") != v:
-                    self._edge_engine = EdgeTTSEngine(voice=v)
+                p = get_edge_pitch()
+                r = get_edge_rate()
+                if (not hasattr(self, "_edge_engine") or self._edge_engine is None
+                        or getattr(self._edge_engine, "voice", "") != v
+                        or getattr(self._edge_engine, "pitch", "") != p
+                        or getattr(self._edge_engine, "rate", "") != r):
+                    self._edge_engine = EdgeTTSEngine(voice=v, pitch=p, rate=r)
                 threading.Thread(target=self._edge_engine.speak, args=(text,), daemon=True).start()
                 return
             except Exception as e:
@@ -939,6 +957,13 @@ class JarvisLive:
                         from memory.config_manager import save_assistant_config, get_assistant_name
                         save_assistant_config(get_assistant_name(), new_user_name)
                         self.ui.write_log(f"SYS: User name recognized as '{new_user_name}'.")
+
+                # Check if voice pitch was updated verbally
+                elif k_clean in ("pitch", "voice_pitch", "speech_pitch"):
+                    from memory.config_manager import save_edge_pitch
+                    p_val = str(value).strip()
+                    save_edge_pitch(p_val)
+                    self.ui.write_log(f"SYS: Voice pitch updated to '{p_val}'.")
 
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
@@ -1320,6 +1345,18 @@ class JarvisLive:
                                 from memory.config_manager import get_tts_engine
                                 if get_tts_engine() in ("piper_hindi", "piper", "piper_hi"):
                                     self._speak_with_piper(full_out)
+                            # Hermes Continuous Learning from spoken turn
+                            if full_in:
+                                try:
+                                    from memory.hermes_personalization import learn_from_interaction, adjust_pitch_by_intent
+                                    learn_from_interaction(full_in, full_out)
+                                    matched, new_pitch, confirm_msg = adjust_pitch_by_intent(full_in)
+                                    if matched:
+                                        self.ui.write_log(f"SYS: Voice pitch updated to {new_pitch}.")
+                                        self.speak(confirm_msg)
+                                except Exception:
+                                    pass
+
                             out_buf = []
 
                             # Vision injection: model finished tool-response turn → now send the image

@@ -76,6 +76,8 @@ It's not just an assistant — it's an extension of your digital life.
 | 🔮 Obsidian Second Brain | Dual-mode note sync with Obsidian Local REST API + offline Markdown vault integration |
 | ⚡ Smart Token Efficiency | Crisp, high-bandwidth responses (1–3 natural sentences for dialogue) that preserve context without wasting tokens |
 | 🎙️ Neural Edge-TTS | Studio-grade, natural voices for Hindi (Madhur, Swara) and English (Chris, Jenny) with offline Piper fallback |
+| 🎚️ Dynamic Pitch & Tone | Customizable pitch presets (`+8Hz Cute GF`, `+14Hz Sweet`, `-8Hz Deep`, `0Hz Default`) or custom Hz/rate via UI or voice command |
+| 🧠 Hermes Personalization | Continuous background learning of schedule, habits, inside jokes, and intimacy stages stored in `user_persona.json` and mirrored dynamically |
 | 🌐 Language Locking | Dedicated UI buttons for Hinglish, Hindi, English, and Auto with guaranteed persistence across restarts |
 
 ---
