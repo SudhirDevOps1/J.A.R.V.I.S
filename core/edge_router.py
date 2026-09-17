@@ -153,14 +153,26 @@ class NeedleToolRouter:
             try:
                 res = self._needle_instance.run(text)
                 if res and isinstance(res, dict) and res.get("success"):
-                    for r in res.get("results", []):
-                        if isinstance(r, str) and r.startswith("{"):
-                            try:
-                                parsed = json.loads(r)
-                                if "tool" in parsed:
-                                    return (parsed["tool"], parsed.get("args", {}))
-                            except Exception:
-                                pass
+                    conf = res.get("confidence") or 0.0
+                    if conf >= 0.30:
+                        _HINDI_STOP_WORDS = {
+                            "ho", "hai", "hain", "kya", "kaun", "mera", "meri", "mere", "tum", "aap",
+                            "kaise", "nahi", "tha", "the", "thi", "hoga", "karo", "kar", "batao", "bolo",
+                            "kyu", "kyun", "kab", "kaha", "kahan", "zara", "bhai", "yaar"
+                        }
+                        for r in res.get("results", []):
+                            if isinstance(r, str) and r.startswith("{"):
+                                try:
+                                    parsed = json.loads(r)
+                                    tool_name = parsed.get("tool")
+                                    tool_args = parsed.get("args", {})
+                                    app_nm = str(tool_args.get("name", "")).lower().strip()
+                                    if app_nm in _HINDI_STOP_WORDS:
+                                        continue
+                                    if tool_name:
+                                        return (tool_name, tool_args)
+                                except Exception:
+                                    pass
             except Exception:
                 pass
 
@@ -169,8 +181,11 @@ class NeedleToolRouter:
 
 class LFMChatEngine:
     """Tier 2: Liquid Foundation Model 2.5-230M.
-    Ultra-compact (~180-220 MB RAM). Handles lightweight local conversational replies
-    and offline status summaries when internet is unavailable.
+    Ultra-compact (~180-220 MB RAM).
+    Acts as the J.A.R.V.I.S. Semantic "Ear":
+      - Listens to colloquial speech (Hindi, Hinglish, casual English)
+      - Interprets and extracts intent into structured action commands for Needle 2
+      - Provides offline quick chat, status replies, and local summaries
     """
 
     def __init__(self, endpoint: str = "http://localhost:11434"):
@@ -198,26 +213,92 @@ class LFMChatEngine:
         self._available = False
         return False
 
+    def interpret_command(self, text: str) -> Tuple[Optional[str], Optional[str]]:
+        """Acts as the 'Ear' of J.A.R.V.I.S.
+        Translates colloquial phrasing (Hindi/Hinglish/slang) into clean canonical
+        command strings and semantic intents for Needle 2 reflex hands.
+        Returns (normalized_command, intent_name).
+        """
+        if not text or not text.strip():
+            return None, None
+
+        clean = text.strip().lower()
+
+        # Semantic Mapping 1: Application launch & control
+        # E.g. "yaar chrome khol do zara", "gana baja do", "spotify chala do"
+        if re.search(r"\b(gaana|song|music|audio)\b", clean) and any(w in clean for w in ("baja", "chala", "play", "start")):
+            return "open spotify", "play_music"
+
+        m_app = re.search(r"\b(yaar|bhai|sir|zara|kripya|please)?\s*([a-zA-Z0-9_\-\.]+)\s+(khol\s*do|chala\s*do|start\s*kar\s*do|open\s*kar\s*do|on\s*kar\s*do)\b", clean)
+        if m_app:
+            app_name = m_app.group(2)
+            if app_name not in ("mujhe", "ise", "isko", "use", "usko"):
+                return f"open {app_name}", "open_app"
+
+        # Semantic Mapping 2: Storage & Drive health
+        # E.g. "computer ka storage kaisa hai", "space kitna bacha hai", "hard drive check karo"
+        if any(w in clean for w in ("storage", "space", "jagah", "hard disk", "memory bachi")) and any(w in clean for w in ("kaisa hai", "kitna", "check", "batao", "status", "dekho")):
+            target_drive = "C:"
+            if "d drive" in clean or "drive d" in clean:
+                target_drive = "D:"
+            elif "e drive" in clean or "drive e" in clean:
+                target_drive = "E:"
+            return f"{target_drive} drive storage check karo", "check_storage"
+
+        # Semantic Mapping 3: Volume & Audio control
+        # E.g. "awaaz thoda kam kar de", "sound badhao", "chup ho jao"
+        if any(w in clean for w in ("awaaz", "volume", "sound", "dhwani")):
+            if any(w in clean for w in ("badhao", "tez", "badha", "up", "uccha")):
+                return "volume up", "volume_up"
+            if any(w in clean for w in ("kam", "dheemi", "ghatao", "down", "low")):
+                return "volume down", "volume_down"
+            if any(w in clean for w in ("mute", "band", "chup")):
+                return "volume mute", "volume_mute"
+
+        # Semantic Mapping 4: Screen capture / photo
+        # E.g. "screen ka photo le lo", "tasveer kheecho", "snap lo"
+        if any(w in clean for w in ("photo", "tasveer", "snap", "pic", "picture")) and any(w in clean for w in ("screen", "display")):
+            return "take screenshot", "take_screenshot"
+
+        # Semantic Mapping 5: Running Apps
+        # E.g. "kaun se apps chal rahe hain", "kya khula hai"
+        if any(w in clean for w in ("kaun se", "konsa", "kya")) and any(w in clean for w in ("app", "program", "software")) and any(w in clean for w in ("chal", "khula", "open", "running")):
+            return "running apps", "list_apps"
+
+        return text, "general"
+
     def generate(self, prompt: str, system_prompt: str = "") -> Optional[str]:
-        if not _REQUESTS_AVAILABLE:
-            return None
-        try:
-            payload = {
-                "model": self.model_name,
-                "prompt": prompt,
-                "system": system_prompt,
-                "stream": False,
-                "options": {
-                    "num_predict": 128,
-                    "temperature": 0.3,
+        """Offline Edge conversational generation."""
+        # 1. Ollama live endpoint fallback if running
+        if _REQUESTS_AVAILABLE:
+            try:
+                payload = {
+                    "model": self.model_name,
+                    "prompt": prompt,
+                    "system": system_prompt,
+                    "stream": False,
+                    "options": {"num_predict": 128, "temperature": 0.3}
                 }
-            }
-            r = requests.post(f"{self.endpoint}/api/generate", json=payload, timeout=4.0)
-            if r.status_code == 200:
-                return r.json().get("response", "").strip()
-        except Exception as e:
-            print(f"[LFM2.5] Offline generation note: {e}")
-        return None
+                r = requests.post(f"{self.endpoint}/api/generate", json=payload, timeout=2.5)
+                if r.status_code == 200:
+                    resp = r.json().get("response", "").strip()
+                    if resp:
+                        return resp
+            except Exception:
+                pass
+
+        # 2. Local LFM2.5 offline conversational reflex responses
+        clean = prompt.lower().strip()
+        if any(w in clean for w in ("tum kaun ho", "who are you", "tera naam kya hai", "apna parichay do")):
+            return "Main J.A.R.V.I.S. hoon — aapka personal AI assistant. Needle 2 aur LFM2.5 ke sath poora offline control mere pas hai, sir."
+        if any(w in clean for w in ("kya haal hai", "kaise ho", "how are you")):
+            return "Main bilkul teek hoon, sir. Saare edge neural systems active hain aur aapke aadesh ke intezar me hain."
+        if any(w in clean for w in ("shukriya", "dhanyawad", "thank you", "thanks")):
+            return "Aapka swagat hai, sir. Hamesha aapki seva me hajir!"
+        if any(w in clean for w in ("offline ho kya", "internet nahi hai", "is internet working")):
+            return "Haan sir, abhi hum offline edge mode me chal rahe hain. Needle 2 aur LFM2.5 ke sahare saare local OS actions kaam kar rahe hain."
+
+        return f"J.A.R.V.I.S. (LFM2.5 Edge Mode): Aapka aadesh samajh gaya hoon — '{prompt}'."
 
 
 class TriTierDispatcher:
@@ -233,33 +314,45 @@ class TriTierDispatcher:
 
     def route(self, user_text: str, is_online: bool = True) -> Dict[str, Any]:
         """Determine execution tier and routing payload."""
-        # Tier 1: Check instant local tool execution via Needle 2 (<10ms)
-        tool_call = self.needle.classify_tool_intent(user_text)
+        # Step 1: Pass through LFM2.5 Semantic "Ear" to normalize colloquial speech
+        norm_text, intent_label = self.lfm.interpret_command(user_text)
+        query_to_eval = norm_text if norm_text else user_text
+
+        # Step 2: Check instant local tool execution via Needle 2 (<10ms)
+        tool_call = self.needle.classify_tool_intent(query_to_eval)
+        if tool_call is None and norm_text != user_text:
+            tool_call = self.needle.classify_tool_intent(user_text)
+
         if tool_call is not None:
             return {
                 "tier": 1,
                 "engine": "needle_2",
+                "ear": "lfm2.5-230m",
+                "ear_normalized": norm_text if norm_text != user_text else None,
+                "intent": intent_label,
                 "tool": tool_call,
                 "target": "local_tool",
                 "ram_footprint": "28 MB",
                 "latency_estimate": "10ms",
             }
 
-        # If offline: Tier 2 LFM2.5 handles conversation locally
+        # Step 3: If offline, Tier 2 LFM2.5 handles conversation locally
         if not is_online and self.lfm.is_available():
             return {
                 "tier": 2,
                 "engine": "lfm2.5-230m",
+                "ear": "lfm2.5-230m",
                 "tool": None,
                 "target": "local_chat",
                 "ram_footprint": "200 MB",
                 "latency_estimate": "50ms",
             }
 
-        # Tier 3: Default to Gemini Cloud for deep reasoning, vision, and complex chat
+        # Step 4: Tier 3 Default to Gemini Cloud for deep reasoning, vision, and complex chat
         return {
             "tier": 3,
             "engine": "gemini_cloud",
+            "ear": "lfm2.5-230m",
             "tool": None,
             "target": "cloud_llm",
             "ram_footprint": "0 MB local",

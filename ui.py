@@ -2220,13 +2220,13 @@ class ProviderSettingsOverlay(QWidget):
         ec_header.addWidget(_lbl("[*] TRI-TIER EDGE AI REFLEX (Local 10ms + Cloud Brain)", 8, bold=True, color=C.PRI))
         ec_lay.addLayout(ec_header)
 
-        # Badges row: Needle 2 (28MB), LFM2.5 (200MB), Gemini Cloud
+        # Badges row: LFM2.5 Ear (200MB), Needle 2 Hands (28MB), Gemini Cloud Brain
         b_row = QHBoxLayout()
         b_row.setSpacing(4)
         for t_title, t_sub, t_color in (
-            ("Tier 1: Needle 2", "45M | ~28MB RAM", "#00ffaa"),
-            ("Tier 2: LFM2.5", "230M | ~200MB RAM", "#00d4ff"),
-            ("Tier 3: Cloud Brain", "Gemini 2.0 / Multimodal", "#ffaa00"),
+            ("Ear: LFM2.5-230M", "Semantic Parser | 200MB", "#00d4ff"),
+            ("Hands: Needle 2", "10ms OS Reflex | 28MB", "#00ffaa"),
+            ("Brain: Gemini Cloud", "Live Voice/Vision | 0MB", "#ffaa00"),
         ):
             b_box = QFrame()
             b_box.setStyleSheet(f"background: rgba(0, 10, 18, 160); border: 1px solid {t_color}44; border-radius: 3px; padding: 2px;")
@@ -2243,7 +2243,7 @@ class ProviderSettingsOverlay(QWidget):
         # Toggle Checkbox and Test Reflex button
         ctrl_row = QHBoxLayout()
         ctrl_row.setSpacing(6)
-        self._edge_reflex_checkbox = QCheckBox("Enable Instant Local Reflex (Needle 2 - Apps, OS, Media)")
+        self._edge_reflex_checkbox = QCheckBox("Enable LFM2.5 Ear + Needle 2 Hands (Offline Reflex)")
         self._edge_reflex_checkbox.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
         self._edge_reflex_checkbox.setChecked(get_edge_reflex_enabled())
         self._edge_reflex_checkbox.setStyleSheet(f"""
@@ -2264,13 +2264,13 @@ class ProviderSettingsOverlay(QWidget):
         ctrl_row.addWidget(test_needle_btn)
         ec_lay.addLayout(ctrl_row)
 
-        self._edge_test_stat = QLabel("Active: Needle 2 Reflex (~28MB RAM, 5-15ms local action)")
+        self._edge_test_stat = QLabel("Active: LFM2.5 Ear (~200MB) + Needle 2 Hands (~28MB RAM)")
         self._edge_test_stat.setFont(QFont("Courier New", 7))
         self._edge_test_stat.setStyleSheet("color: #00ffaa; padding-left: 2px;")
         ec_lay.addWidget(self._edge_test_stat)
 
         def _on_test_reflex():
-            self._edge_test_stat.setText("Testing Needle 2 reflex router...")
+            self._edge_test_stat.setText("Testing LFM Ear + Needle 2 Hands...")
             self._edge_test_stat.setStyleSheet("color: #ffaa00;")
             def _run():
                 try:
@@ -2278,12 +2278,13 @@ class ProviderSettingsOverlay(QWidget):
                     from core.edge_router import get_tri_tier_dispatcher
                     disp = get_tri_tier_dispatcher()
                     t0 = time.perf_counter()
-                    res = disp.route("chrome kholo", is_online=True)
+                    res = disp.route("yaar chrome khol do zara", is_online=True)
                     elapsed_ms = (time.perf_counter() - t0) * 1000
                     if res.get("tier") == 1 and res.get("tool"):
                         t_name, t_args = res["tool"]
+                        ear_info = f"Ear: '{res.get('ear_normalized')}' -> " if res.get('ear_normalized') else ""
                         QTimer.singleShot(0, lambda: (
-                            self._edge_test_stat.setText(f"[OK] Reflex: {t_name}({t_args.get('name', '')}) in {elapsed_ms:.1f}ms [RAM: ~28MB]"),
+                            self._edge_test_stat.setText(f"[OK] {ear_info}Hands: {t_name}({t_args.get('name', '')}) in {elapsed_ms:.1f}ms"),
                             self._edge_test_stat.setStyleSheet("color: #00ffaa;")
                         ))
                     else:

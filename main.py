@@ -720,6 +720,8 @@ class JarvisLive:
                 if routing.get("tier") == 1 and routing.get("tool"):
                     t_name, t_args = routing["tool"]
                     if self._action_registry.has(t_name):
+                        if routing.get("ear_normalized"):
+                            self.ui.write_log(f"⚡ [LFM2.5 Ear]: '{text}' -> '{routing['ear_normalized']}'")
                         self.ui.write_log(f"⚡ [Needle 2 Reflex (28MB)]: {t_name} {t_args}")
                         _ctx = {"player": self.ui, "speak": self.speak, "response": None, "session_memory": None}
                         t_res = self._action_registry.run(t_name, t_args, _ctx)
