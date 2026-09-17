@@ -144,6 +144,38 @@ class NeedleToolRouter:
         if re.search(r"\b(screenshot|screen shot|snip)\b", clean):
             return ("computer_control", {"action": "screenshot"})
 
+        # -- YouTube / Music / Song Play ------------------------------------------
+        m_yt_song = re.search(r"\b(gaana|gana|song|music|naghma|dhun|track|qawwali|ghazal)\b", clean)
+        m_yt_play_action = any(w in clean for w in (
+            "baja", "bajao", "baja do", "play", "chala", "chalao", "chala do",
+            "sun", "suno", "suna", "lagao", "laga do", "laga", "start"
+        ))
+        if m_yt_song and m_yt_play_action:
+            # Extract song name by stripping action/filler words
+            song_q = re.sub(
+                r"\b(gaana|gana|song|music|track|naghma|dhun|qawwali|ghazal"
+                r"|baja\s*do|baja|bajao|play|chala\s*do|chala|chalao"
+                r"|lagao|laga\s*do|laga|start|sun|suno|suna"
+                r"|zara|yaar|bhai|sir|please|koi|ek|mujhe|mera|meri|acha|accha|kuch)\b",
+                "", clean
+            ).strip(" ,.-'\"")
+            # Also strip possessives like "arijit ka" -> keep "arijit"
+            song_q = re.sub(r"\bka\b|\bki\b|\bke\b|\bne\b", "", song_q).strip(" ,.-")
+            song_q = " ".join(song_q.split())  # collapse whitespace
+            song_q = song_q or "popular hindi songs"
+            return ("youtube_video", {"action": "play", "query": song_q})
+
+        # YouTube search: "youtube par X dekho", "X ka video dikhao"
+        m_yt_platform = re.search(r"\b(youtube|yt)\b", clean)
+        m_yt_watch = any(w in clean for w in ("dekho", "dikhao", "play", "open", "chalao", "kholo", "search"))
+        if m_yt_platform and m_yt_watch:
+            vid_q = re.sub(
+                r"\b(youtube|yt|par|ka|ki|ke|video|dekho|dikhao|play|open|chalao|kholo|search|zara|yaar|bhai)\b",
+                "", clean
+            ).strip(" ,.-")
+            vid_q = " ".join(vid_q.split())
+            return ("youtube_video", {"action": "play", "query": vid_q or "trending"})
+
         # -- System Metrics ---------------------------------------------------
         if re.search(r"\b(cpu usage|ram usage|temperature|system status|hardware status|pc performance)\b", clean):
             return ("system_status", {})
@@ -226,8 +258,21 @@ class LFMChatEngine:
 
         # Semantic Mapping 1: Application launch & control
         # E.g. "yaar chrome khol do zara", "gana baja do", "spotify chala do"
-        if re.search(r"\b(gaana|song|music|audio)\b", clean) and any(w in clean for w in ("baja", "chala", "play", "start")):
-            return "open spotify", "play_music"
+        if re.search(r"\b(gaana|gana|song|music|audio|track|naghma|dhun|qawwali|ghazal)\b", clean) and \
+                any(w in clean for w in ("baja", "bajao", "baja do", "chala", "chalao", "chala do",
+                                          "play", "start", "lagao", "laga do", "sun", "suno")):
+            # Extract song query by removing action/filler words
+            song_q = re.sub(
+                r"\b(gaana|gana|song|music|audio|track|naghma|dhun|qawwali|ghazal"
+                r"|baja\s*do|baja|bajao|play|chala\s*do|chala|chalao"
+                r"|lagao|laga\s*do|laga|start|sun|suno"
+                r"|zara|yaar|bhai|sir|please|koi|ek|mujhe|mera|meri|acha|accha)\b",
+                "", clean
+            ).strip(" ,.-'\"")
+            song_q = re.sub(r"\bka\b|\bki\b|\bke\b|\bne\b", "", song_q).strip(" ,.-")
+            song_q = " ".join(song_q.split())
+            song_query = song_q or "popular hindi songs"
+            return f"play song {song_query}", "play_youtube"
 
         m_app = re.search(r"\b(yaar|bhai|sir|zara|kripya|please)?\s*([a-zA-Z0-9_\-\.]+)\s+(khol\s*do|chala\s*do|start\s*kar\s*do|open\s*kar\s*do|on\s*kar\s*do)\b", clean)
         if m_app:
