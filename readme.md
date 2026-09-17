@@ -38,7 +38,8 @@ It's not just an assistant — it's an extension of your digital life.
 | 🧩 Plugin System | Drop a single `.py` file into `plugins/` — JARVIS learns a new skill on next launch |
 | 🎙️ Real-time Voice | Ultra-low latency conversation in any language via Gemini Live API |
 | 🎨 Live Theming | Recolour the entire HUD from a hue wheel or hex — applied instantly across every panel |
-| 〰️ Reactive HUD | Waveform and reactor core pulse to real audio — your mic while listening, JARVIS while speaking |
+| 〰️ Reactive HUD & Arc Reactor | 4 distinct avatar modes (`reactor`, `celestial`, `orb`, `matrix`) featuring authentic continuous ambient idling hum, rotating copper coils, vibrating core glow, and real-time voice reactivity |
+| 🔊 Stark SFX Engine | Zero-latency boot and UI sound effects (`boot`, `wake`, `confirm`, `ack`) backed by Windows native `winsound` and `sounddevice` |
 | 🎙️ Voice Picker | Choose from 5 native Gemini voices and switch live from the UI — no restart |
 | ♾️ Unlimited Sessions | Sliding-window context compression — one conversation can last for hours |
 | 🖥️ System Control | Launch apps, adjust volume/brightness, WiFi, shortcuts, power — all by voice |

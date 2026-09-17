@@ -680,27 +680,34 @@ class HudCanvas(QWidget):
             self._scale = 1.0 + math.sin(self._tick * 0.035) * 0.012 + amp * 0.03
             rot_spd = (1.8 + amp * 5.2) if is_active else 0.75
 
-        # Advance rotational elements only when speed > 0
+        # ── Advance Celestial Halo ────────────────────────────────────────────
         if rot_spd > 0.001:
             self._halo_angle = (self._halo_angle + rot_spd) % 360.0
-
             for ph in self._photons:
                 ph["angle"] = (ph["angle"] + math.radians(rot_spd * ph["spd"])) % (math.pi * 2)
 
-            self._reactor_outer_ang = (self._reactor_outer_ang + rot_spd * 0.75) % 360.0
-            self._reactor_inner_ang = (self._reactor_inner_ang - rot_spd * 1.35) % 360.0
+        # ── Advance Stark Arc Reactor ─────────────────────────────────────────
+        # An Arc Reactor is a living mechanical power core: it maintains an ambient,
+        # humming rotation even while resting, and surges with voice amplitude.
+        reactor_spd = max(0.22 if anim_mode != "kinetic" else 0.55, rot_spd)
+        self._reactor_outer_ang = (self._reactor_outer_ang + reactor_spd * 0.75) % 360.0
+        self._reactor_inner_ang = (self._reactor_inner_ang - reactor_spd * 1.35) % 360.0
 
-            self._orb_ang_x = (self._orb_ang_x + 0.9 + amp * 2.8) % 360.0
-            self._orb_ang_y = (self._orb_ang_y + 1.3 + amp * 3.4) % 360.0
-            self._orb_ang_z = (self._orb_ang_z + 0.6 + amp * 1.8) % 360.0
+        # ── Advance Quantum Plasma Orb ────────────────────────────────────────
+        orb_drift = max(0.20 if anim_mode != "kinetic" else 0.60, rot_spd)
+        self._orb_ang_x = (self._orb_ang_x + 0.45 * orb_drift + amp * 2.8) % 360.0
+        self._orb_ang_y = (self._orb_ang_y + 0.65 * orb_drift + amp * 3.4) % 360.0
+        self._orb_ang_z = (self._orb_ang_z + 0.30 * orb_drift + amp * 1.8) % 360.0
 
-            for mc in getattr(self, "_matrix_cols", []):
-                mc["y"] += mc["spd"] * (1.0 + amp * 2.5)
-                if mc["y"] > 1.3:
-                    mc["y"] = -0.3
-                    if random.random() < 0.35:
-                        chars = "0123456789ABCDEFJARVISSTARK"
-                        mc["chars"] = [random.choice(chars) for _ in range(20)]
+        # ── Advance Cyber Matrix Rain ─────────────────────────────────────────
+        matrix_mult = (1.0 + amp * 2.5) if is_active else 0.30
+        for mc in getattr(self, "_matrix_cols", []):
+            mc["y"] += mc["spd"] * matrix_mult
+            if mc["y"] > 1.3:
+                mc["y"] = -0.3
+                if random.random() < 0.35:
+                    chars = "0123456789ABCDEFJARVISSTARK"
+                    mc["chars"] = [random.choice(chars) for _ in range(20)]
 
         # Update stardust particles only when active or in kinetic mode
         if is_active or anim_mode == "kinetic":
@@ -855,7 +862,7 @@ class HudCanvas(QWidget):
                 p.rotate(i * 36 + self._reactor_outer_ang + 90)
 
                 # Copper block base
-                p.setBrush(QBrush(QColor(240, 140, 30, int(210 * glow_mult))))
+                p.setBrush(QBrush(QColor(240, 140, 30, max(0, min(255, int(210 * glow_mult))))))
                 p.setPen(QPen(primary_c, 1.2))
                 p.drawRoundedRect(QRectF(-7, -13, 14, 26), 2, 2)
 
@@ -874,11 +881,12 @@ class HudCanvas(QWidget):
                           start_a, 42 * 16)
 
             # Central Palladium/Vibranium Energy Core
-            core_r = R * 0.28 + (amp * (R * 0.22) if is_active else 0.0)
+            idle_pulse = math.sin(self._tick * 0.05) * (R * 0.015)
+            core_r = R * 0.28 + (amp * (R * 0.22) if is_active else idle_pulse)
             grad = QRadialGradient(cx, cy, core_r)
             grad.setColorAt(0.0, QColor(255, 255, 255, 255))
-            grad.setColorAt(0.35, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int((190 + amp * 55) * glow_mult)))
-            grad.setColorAt(0.70, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int((120 + amp * 50) * glow_mult)))
+            grad.setColorAt(0.35, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), max(0, min(255, int((190 + amp * 55) * glow_mult)))))
+            grad.setColorAt(0.70, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), max(0, min(255, int((120 + amp * 50) * glow_mult)))))
             grad.setColorAt(1.0, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), 0))
             p.setBrush(QBrush(grad))
             p.setPen(Qt.PenStyle.NoPen)
@@ -912,7 +920,7 @@ class HudCanvas(QWidget):
                 p.save()
                 p.translate(cx, cy)
                 p.rotate(rot_deg)
-                p.setPen(QPen(QColor(col.red(), col.green(), col.blue(), int((140 + amp * 70) * glow_mult)), 2.0))
+                p.setPen(QPen(QColor(col.red(), col.green(), col.blue(), max(0, min(255, int((140 + amp * 70) * glow_mult)))), 2.0))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawEllipse(QPointF(0, 0), r_rad, r_rad * tilt_factor)
 
@@ -926,11 +934,12 @@ class HudCanvas(QWidget):
                 p.restore()
 
             # Central Pulsing Plasma Sphere
-            core_r = orb_r * 0.40 + (amp * (orb_r * 0.28) if is_active else 0.0)
+            orb_idle_pulse = math.sin(self._tick * 0.04) * (orb_r * 0.018)
+            core_r = orb_r * 0.40 + (amp * (orb_r * 0.28) if is_active else orb_idle_pulse)
             grad = QRadialGradient(cx, cy, core_r)
             grad.setColorAt(0.0, QColor(255, 255, 255, 255))
-            grad.setColorAt(0.3, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int((190 + amp * 45) * glow_mult)))
-            grad.setColorAt(0.7, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int((110 + amp * 60) * glow_mult)))
+            grad.setColorAt(0.3, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), max(0, min(255, int((190 + amp * 45) * glow_mult)))))
+            grad.setColorAt(0.7, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), max(0, min(255, int((110 + amp * 60) * glow_mult)))))
             grad.setColorAt(1.0, QColor(0, 0, 0, 0))
             p.setBrush(QBrush(grad))
             p.setPen(Qt.PenStyle.NoPen)

@@ -58,24 +58,40 @@ def play_sfx(name: str) -> None:
                 return
         except Exception:
             pass
-        with _LOCK:
-            if name in _CACHE:
-                d, sr = _CACHE[name]
-            else:
-                p = os.path.join(SFX_DIR, f'{name}.wav')
-                if not os.path.exists(p):
-                    _ensure()
-                if not os.path.exists(p):
-                    return
-                with wave.open(p, 'rb') as wf:
-                    sr = wf.getframerate()
-                    raw = wf.readframes(wf.getnframes())
-                    d = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-                    _CACHE[name] = (d, sr)
-        try:
-            sd.play(d, sr)
-        except Exception:
-            pass
+        p = os.path.join(SFX_DIR, f'{name}.wav')
+        if not os.path.exists(p):
+            _ensure()
+        if not os.path.exists(p):
+            return
+
+        # On Windows, winsound provides instantaneous, zero-latency system audio
+        # that bypasses PortAudio/sounddevice stream conflicts while the microphone is open.
+        played = False
+        if os.name == 'nt':
+            try:
+                import winsound
+                winsound.PlaySound(p, winsound.SND_ASYNC | winsound.SND_FILENAME)
+                played = True
+            except Exception:
+                played = False
+
+        if not played:
+            with _LOCK:
+                if name in _CACHE:
+                    d, sr = _CACHE[name]
+                else:
+                    try:
+                        with wave.open(p, 'rb') as wf:
+                            sr = wf.getframerate()
+                            raw = wf.readframes(wf.getnframes())
+                            d = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+                            _CACHE[name] = (d, sr)
+                    except Exception:
+                        return
+            try:
+                sd.play(d, sr)
+            except Exception:
+                pass
     threading.Thread(target=_run, daemon=True).start()
 
 _ensure()

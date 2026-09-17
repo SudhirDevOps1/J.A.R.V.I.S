@@ -161,12 +161,15 @@ This document outlines the **architectural blueprint, dependency requirements, t
 * **Architecture:** Core sound manager enhancement in `core/sfx.py` and optional TTS routing in `core/tts.py`.
 * **Components:**
   - **Futuristic SFX Engine**:
-    - `PyQt6.QtMultimedia.QSoundEffect` for zero-latency local `.wav` playback.
+    - Multi-tiered audio dispatch in `core/sfx.py`: native Windows `winsound.PlaySound` (instant, zero-latency system audio bypass) + `sounddevice` fallback.
     - Sound triggers:
       - `boot.wav`: Arc-reactor startup hum when JARVIS initializes.
       - `wake.wav`: Subtle dual-tone beep when "Hey Jarvis" is recognized.
       - `ack.wav`: High-tech chirp when starting long tasks.
       - `confirm.wav`: Mechanical click when user hits Confirm banner.
+  - **Arc Reactor Dynamic Mechanical Physics (`ui.py`)**:
+    - Ambient idling hum: continuous rotation (`+0.22` deg outer, `-0.32` deg inner) and organic core breathing pulse even during reactive resting standby, ensuring the reactor never freezes or appears dead.
+    - Dynamic hyper-drive acceleration on voice speech and thought processing.
   - **Paul Bettany / Custom Voice Cloning**:
     - While Gemini 3.1 Live has excellent native voices (Charon, Puck, etc.), power users can toggle an offline TTS engine (e.g., Coqui TTS / Piper TTS) or ElevenLabs API with an authentic Paul Bettany voice clone model.
 

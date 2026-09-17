@@ -134,16 +134,24 @@ def _launch_steam_url(exe: Path, url: str) -> None:
 def _get_steam_libraries(steam_path: Path) -> list[Path]:
     libraries = [steam_path / "steamapps"]
     vdf_path  = steam_path / "steamapps" / "libraryfolders.vdf"
-    if not vdf_path.exists():
-        return libraries
-    try:
-        content = vdf_path.read_text(encoding="utf-8", errors="ignore")
-        for raw_path in re.findall(r'"path"\s+"([^"]+)"', content):
-            lib = Path(raw_path.replace("\\\\", "/")) / "steamapps"
-            if lib.exists() and lib not in libraries:
-                libraries.append(lib)
-    except Exception:
-        pass
+    if vdf_path.exists():
+        try:
+            content = vdf_path.read_text(encoding="utf-8", errors="ignore")
+            for raw_path in re.findall(r'"path"\s+"([^"]+)"', content):
+                lib = Path(raw_path.replace("\\\\", "/")) / "steamapps"
+                if lib.exists() and lib not in libraries:
+                    libraries.append(lib)
+        except Exception:
+            pass
+
+    # Multi-drive secondary library discovery across all connected partitions
+    if is_windows():
+        for drive in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+            for sub in ("SteamLibrary/steamapps", "Steam/steamapps", "Games/Steam/steamapps"):
+                candidate = Path(f"{drive}:/{sub}")
+                if candidate.exists() and candidate not in libraries:
+                    libraries.append(candidate)
+
     return libraries
 
 

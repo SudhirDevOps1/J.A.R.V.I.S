@@ -4,6 +4,30 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ---
 
+## [2026-09-17 14:55] — Arc Reactor Alive Ambient Dynamics, Boot Sound FX Fix & Multi-Drive Game Discovery
+
+### ⚛️ Arc Reactor Alive Dynamic Physics (`ui.py`)
+1. **Continuous Ambient Mechanical Idling**:
+   - Resolved the issue where the Arc Reactor appeared frozen and non-functional when idle.
+   - Under `anim_mode == "reactive"`, when the assistant is in resting standby, the Arc Reactor now maintains an authentic ambient mechanical rotation (outer ring: `+0.22` deg/tick, inner slotted disc: `-0.32` deg/tick).
+   - Added organic breathing pulse to the palladium/vibranium core radius (`core_r = R * 0.28 + idle_pulse`) so it hums like an active power plant even when silent.
+   - Dynamically surges into high-velocity rotation (`rot_spd = 1.8 + amp * 5.2`) during active speech or thought processing.
+2. **Radial Gradient Alpha Clamping**:
+   - Clamped all gradient color alpha values for copper coils, radial core blooms, and Quantum Orb rings using `max(0, min(255, int(...)))`, eliminating Qt alpha overflow warnings.
+
+### 🔊 Fail-Safe Boot & UI Sound Playback (`core/sfx.py`, `config/api_keys.json`)
+1. **Unmuted by Default**:
+   - Fixed `sfx_enabled: false` setting in `config/api_keys.json` by updating default to `true`.
+2. **Windows Native `winsound` Fallback**:
+   - Upgraded `core/sfx.py::play_sfx()` to utilize native Windows `winsound.PlaySound(wav_path, winsound.SND_ASYNC | winsound.SND_FILENAME)` alongside `sounddevice`.
+   - Bypasses PortAudio/sounddevice driver latency and avoids stream conflicts when microphones or Bluetooth headsets are active, ensuring the Stark boot sound rings out 100% of the time on startup.
+
+### 🎮 Multi-Drive Game Library Discovery (`actions/game_updater.py`)
+1. **Multi-Drive Scanning**:
+   - Enhanced `_get_steam_libraries()` to automatically detect Steam, Epic, and game library directories across all available system partitions (`C:`, `D:`, `E:`, etc.), allowing game updates and launches on secondary storage drives.
+
+---
+
 ## [2026-09-17 14:40] — Devoted GF Mode, Full Date/Time Startup Greeting, Verbal Name Adaptability, Language Persistence & QColor Alpha Clamping
 
 ### 💖 100% Human Girlfriend Experience (Alone & Loyal, Romantic, Cute Jealousy)
