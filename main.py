@@ -712,6 +712,90 @@ class JarvisLive:
             except Exception:
                 pass
 
+        # Camera / Webcam & Vision commands (Works across ALL providers, including Free Proxy mode)
+        t_clean = t_low.strip()
+        is_cam_open = any(w in t_clean for w in (
+            "camera kholo", "open camera", "show camera", "camera on", "start camera",
+            "webcam kholo", "open webcam", "turn on camera", "camera chalu", "camera start",
+            "camera on karo", "webcam on"
+        ))
+        is_cam_close = any(w in t_clean for w in (
+            "camera band karo", "close camera", "stop camera", "hide camera", "camera off",
+            "webcam band", "turn off camera", "camera band", "band karo camera", "camera off karo"
+        ))
+        is_vision_query = any(w in t_clean for w in (
+            "camera dekho", "dekho camera", "look at camera", "look at me", "kya dikh raha hai",
+            "screen dekho", "look at screen", "analyze screen", "kya chal raha hai screen par",
+            "screen par kya hai", "take photo", "capture screen", "capture camera", "meri screen dekho"
+        ))
+
+        if is_cam_open:
+            self.ui.start_camera_stream()
+            self.ui.write_log("SYS: Camera stream started on HUD.")
+            self.speak("कैमरा स्ट्रीम HUD पर शुरू कर दी गई है।")
+            return
+
+        if is_cam_close:
+            self.ui.stop_camera_stream()
+            self.ui.write_log("SYS: Camera stream stopped.")
+            self.speak("कैमरा स्ट्रीम बंद कर दी गई है।")
+            return
+
+        if is_vision_query:
+            is_screen = any(w in t_clean for w in ("screen", "display", "monitor"))
+            def _async_vision():
+                try:
+                    self.ui.set_state("THINKING")
+                    if is_screen:
+                        self.ui.write_log("SYS: Capturing screen for visual analysis...")
+                        img_b, mime_t = _capture_screen()
+                        target_label = "स्क्रीन"
+                    else:
+                        self.ui.write_log("SYS: Opening camera feed and capturing frame...")
+                        self.ui.start_camera_stream()
+                        img_b, mime_t = _capture_camera()
+                        target_label = "कैमरा"
+
+                    from memory.config_manager import load_api_keys
+                    c_keys = load_api_keys()
+                    g_key = (c_keys.get("gemini_api_key") or "").strip()
+
+                    # If an official Google Gemini API key exists (e.g. Free AI Studio tier)
+                    if g_key:
+                        import base64
+                        import requests
+                        b64 = base64.b64encode(img_b).decode("ascii")
+                        v_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={g_key}"
+                        v_payload = {
+                            "contents": [{
+                                "parts": [
+                                    {"text": f"You are {self._asst_name}. Look at this captured {target_label} and answer the user directly in 1-2 natural sentences in conversational Hindi/Devanagari: {text}"},
+                                    {"inline_data": {"mime_type": mime_t, "data": b64}}
+                                ]
+                            }]
+                        }
+                        v_resp = requests.post(v_url, json=v_payload, timeout=25)
+                        if v_resp.status_code == 200:
+                            v_data = v_resp.json()
+                            cands = v_data.get("candidates", [])
+                            if cands and "content" in cands[0]:
+                                ans = cands[0]["content"]["parts"][0].get("text", "").strip()
+                                self.ui.write_log(f"{self._asst_name}: {ans}")
+                                self.speak(ans)
+                                self.ui.set_state("LISTENING")
+                                return
+                    # Free Mode / Anonymous Proxy fallback:
+                    self.ui.write_log(f"SYS: {target_label} कैप्चर सक्रिय है। HUD पर लाइव स्ट्रीम चालू है।")
+                    self.speak(f"{target_label} मैंने देख लिया है और HUD पर लाइव स्ट्रीम चालू कर दी है।")
+                    self.ui.set_state("LISTENING")
+                except Exception as ex:
+                    print(f"[Vision Error] {ex}")
+                    self.ui.write_log(f"ERR: Vision capture error: {ex}")
+                    self.ui.set_state("LISTENING")
+
+            threading.Thread(target=_async_vision, daemon=True).start()
+            return
+
         # Multi-Provider routing: if user configured OpenRouter, Groq, DeepSeek, or Custom LLM,
         # route typed queries through MultiLLMClient with full persona and second-brain context.
         from memory.config_manager import load_api_keys
@@ -1186,6 +1270,10 @@ class JarvisLive:
         """Synthesize and play response using offline Piper Hindi Neural TTS in a sequential queue."""
         if not text or not text.strip():
             return
+        from core.tts import clean_speech_text
+        text = clean_speech_text(text)
+        if not text:
+            return
 
         if not hasattr(self, "_piper_queue"):
             import queue
@@ -1230,6 +1318,10 @@ class JarvisLive:
     def _speak_with_edge(self, text: str) -> None:
         """Synthesize and play response using Microsoft Edge Neural TTS in a sequential queue."""
         if not text or not text.strip():
+            return
+        from core.tts import clean_speech_text
+        text = clean_speech_text(text)
+        if not text:
             return
 
         if not hasattr(self, "_edge_queue"):

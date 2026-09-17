@@ -181,6 +181,8 @@ def get_language_directive(language: str | None = None) -> str:
 [CONVERSATION LANGUAGE DIRECTIVE: HINDI (हिंदी)]
 - The user's preferred language is Hindi.
 - Always respond in fluent, clear, and natural conversational Hindi.
+- CRITICAL FOR NATURAL HUMAN VOICE: Write your conversational Hindi responses in clean Devanagari script (हिंदी लिपि) so that the neural speech synthesizer pronounces every word smoothly with authentic Indian emotional warmth, rather than robotic English spelling.
+- Keep technical terms, code snippets, and terminal commands in English.
 - Do NOT reply in pure English unless explicitly asked to translate or write code.
 """
     elif lang == "english":
@@ -193,14 +195,16 @@ def get_language_directive(language: str | None = None) -> str:
         return """
 [CONVERSATION LANGUAGE DIRECTIVE: ADAPTIVE]
 - Automatically mirror whatever language the user speaks in their latest message (Hindi, Hinglish, or English).
+- When responding in conversational Hindi, write in Devanagari script so the voice engine speaks naturally with human warmth.
 """
     else:  # default 'hinglish'
         return """
 [CONVERSATION LANGUAGE DIRECTIVE: NATURAL HINDI / HINGLISH]
 - The user's preferred language is conversational Hindi & Hinglish.
-- Speak in warm, natural everyday conversational Hindi/Hinglish (e.g., 'Main abhi check karti hoon, bilkul chinta mat karo', 'Aapka task complete ho gaya hai').
-- Keep technical terms, file names, programming commands, and library names in English.
-- Do NOT use stiff textbook Hindi; speak like a real modern Indian speaker.
+- Speak in warm, natural everyday conversational Hindi.
+- CRITICAL FOR NATURAL HUMAN VOICE: Write conversational Hindi sentences in clean Devanagari script (e.g., 'मैं अभी चेक करती हूँ, बिल्कुल चिंता मत करो', 'आपका काम हो गया!') so the neural voice synthesizer reads it with authentic Indian human emotion instead of mechanical Romanized phonetic distortion.
+- Keep technical terms, system metrics, file names, and code syntax in English.
+- Speak like a caring, real Indian friend — natural, expressive, and never robotic.
 """
 
 

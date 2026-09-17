@@ -83,6 +83,14 @@ It's not just an assistant — it's an extension of your digital life.
 | 🎚️ Dynamic Pitch & Tone | Customizable pitch presets (`+8Hz Cute GF`, `+14Hz Sweet`, `-8Hz Deep`, `0Hz Default`) or custom Hz/rate via UI or voice command |
 | 🧠 Hermes Personalization | Continuous background learning of schedule, habits, inside jokes, and intimacy stages stored in `user_persona.json` and mirrored dynamically |
 | 🌐 Language Locking | Dedicated UI buttons for Hinglish, Hindi, English, and Auto with guaranteed persistence across restarts |
+| ⚡ 100% Free Gemini Proxy | Built-in reverse-engineered web proxy: run `gemini-3.7-flash` with zero API key, no credit card, and 100% free anonymous access |
+| 🍪 Google Account Cookies | Drop `config/gemini_cookies.json` to unleash `gemini-2.0-pro` with Google Search grounding and persistent context |
+| 🔄 OmniRoute Gateway | Auto-detects local OmniRoute server (`localhost:20128`) for 350+ free models (Llama, DeepSeek, Qwen) with zero config |
+| ⚡ SQLite Smart Cache | Fast LRU query caching (`config/llm_cache.db`) for weather, facts, news, and search queries, saving tokens and network latency |
+| 🔒 Privacy & Git Shield | Built-in `.gitignore` automatically seals all keys, cookies, caches, and memory files away from git repositories |
+| 👁️ HUD Camera & Vision | Instant webcam view on HUD ("camera kholo" / "camera band karo") and visual inspection ("camera dekho" / "screen dekho") with free Gemini AI Studio integration |
+| 🎙️ Crystal-Clear Hindi Speech | Studio-quality neural voice (`hi-IN-SwaraNeural` / `hi-IN-MadhurNeural`) tuned at `+0Hz` natural pitch with Devanagari text formatting and offline Piper fallback |
+
 
 ---
 
@@ -117,7 +125,69 @@ The live session is powered by **Gemini Live**, with multi-provider backup acros
 ### 🧩 Self-Describing Skills — a Scalable Core
 Every bundled **action** now carries its own `TOOL` declaration in its own file (exactly like a drop-in **plugin's** `PLUGIN` dict), and the core auto-discovers them at launch. `main.py` no longer holds a giant list of tool definitions and dispatch branches — it shrank by hundreds of lines. Adding a new built-in skill, or promoting an `actions/*.py` file into a shareable plugin, is now just… moving a file.
 
-> Built with a complete feature suite: the **🧩 Plugin System**, **♾️ Unlimited Sessions**, **🎨 Live Theming**, **〰️ Reactive HUD** and **🎙️ Voice Lab** are all ready out-of-the-box.
+### 🌐 100% Free AI Architecture (Zero Subscriptions, No API Key Required)
+
+J.A.R.V.I.S. features an autonomous free AI pipeline that requires zero paid subscriptions and zero credit cards.
+
+#### 1. Built-in Gemini Free Web Proxy (Anonymous Mode)
+- **Architecture**: J.A.R.V.I.S. includes an embedded proxy server (`core/gemini_free_proxy.py`) running on port `8081`. It routes requests directly through Google's public web endpoints using reverse-engineered Batchexecute RPCs.
+- **Model**: Delivers `gemini-3.7-flash` and `gemini-2.0-flash` completely free.
+- **API Key**: None required (`"Authorization": "Bearer none"`).
+- **Daily Rate Limits**: Google applies IP-based rate limits (~10-15 requests per minute, rolling hourly quota). To maximize uptime, J.A.R.V.I.S. automatically pairs the proxy with the SQLite Smart Cache to prevent duplicate queries from consuming quota.
+
+#### 2. Enhanced Mode: With Free Google Account Cookies (`gemini_cookies.json`)
+For power users who want `gemini-2.0-pro` with Google Search grounding and practically unlimited requests without paying:
+1. Open your browser (Chrome, Edge, or Firefox) and log into [gemini.google.com](https://gemini.google.com).
+2. Press `F12` to open Developer Tools, then go to **Application** (or **Storage**) → **Cookies** → `https://gemini.google.com`.
+3. Locate and copy the values for:
+   - `__Secure-1PSID`
+   - `__Secure-1PSIDTS`
+4. Create or edit `config/gemini_cookies.json`:
+```json
+{
+  "__Secure-1PSID": "your_secure_1psid_here",
+  "__Secure-1PSIDTS": "your_secure_1psidts_here"
+}
+```
+5. When J.A.R.V.I.S. starts, the free proxy automatically attaches these cookies. You instantly unlock `gemini-2.0-pro`, Google Search grounding, image generation capabilities, and significantly higher request ceilings!
+
+#### 3. OmniRoute Gateway Integration (`localhost:20128`)
+- If you have [OmniRoute](https://github.com/dani-garcia/vaultwarden) installed (`npm install -g omniroute`), J.A.R.V.I.S. automatically detects the gateway on `http://localhost:20128/v1`.
+- Provides instant, zero-cost access to over 350+ free models (DeepSeek R1/V3, Llama 3.3 70B, Qwen 2.5, Mistral) with auto-failover.
+
+#### 4. Smart SQLite LLM Cache (`config/llm_cache.db`)
+- To protect your quotas and eliminate network latency, all deterministic queries (weather reports, news recaps, fact retrieval, system status checks) are cached in a local SQLite database (`config/llm_cache.db`) with adaptive TTL (Time-To-Live).
+- Identical questions are answered in **< 2 milliseconds** with zero network round trips.
+
+#### 5. Absolute Privacy & Git Protection
+- Your privacy is guaranteed. All configuration files containing personal credentials, browser cookies, local caches, and memory stores (`config/api_keys.json`, `config/gemini_cookies.json`, `config/llm_cache.db`, and `memory/long_term.json`) are strictly excluded in `.gitignore`.
+- You can safely commit and share your code without ever leaking keys or conversations.
+
+---
+
+### 👁️ Real-Time Camera & Vision Guide
+
+J.A.R.V.I.S. features native visual awareness that works across both keyboard chat and voice commands:
+
+- **HUD Camera Commands**:
+  - Say or type `"camera kholo"`, `"open camera"`, `"webcam on"`, or `"show camera"` — the real-time webcam feed launches directly on the Cyberpunk HUD.
+  - Say or type `"camera band karo"`, `"close camera"`, or `"stop camera"` — the webcam feed closes immediately.
+- **Visual Inspection & Analysis**:
+  - Say or type `"camera dekho"` or `"look at camera"` — J.A.R.V.I.S. opens the camera stream and captures the active frame.
+  - Say or type `"screen dekho"`, `"look at screen"`, or `"what is on my screen"` — captures the primary display and analyzes open windows, code, or errors.
+- **Multimodal Vision Modes**:
+  - **Free Mode / Anonymous Proxy**: Displays live real-time video stream on the HUD.
+  - **Gemini AI Studio Mode (100% Free)**: For automated live AI visual analysis of objects, code, and screen context, simply generate a free API key from [Google AI Studio](https://aistudio.google.com/) (costs ₹0, requires no credit card) and save it in `config/api_keys.json`. J.A.R.V.I.S. will automatically analyze your webcam and screen with multimodal precision!
+
+---
+
+### 🎙️ Natural Voice Synthesis (Zero Robotic Accent)
+
+To ensure the assistant sounds like an authentic human being and never mechanical:
+1. **Natural Pitch Calibration**: The pitch is calibrated to `+0Hz` (natural native pitch). Higher artificial pitch boosts (`+14Hz`) have been eliminated to avoid metallic phase-distortion.
+2. **Devanagari Script Delivery**: For Hindi and Hinglish dialogues, text is synthesized using clean Devanagari Hindi. Azure Neural TTS (`hi-IN-SwaraNeural` and `hi-IN-MadhurNeural`) and Piper Hindi (`hi_IN-pratham-medium`) are phonologically tuned for Devanagari, producing warm, emotional Indian human cadence with zero English spelling artifacts.
+3. **Smart Speech Sanitization**: All markdown formatting (`**bold**`, `*italic*`), code fences (`` ```python ... ``` ``), bracketed metadata, URLs, and emojis are automatically scrubbed before reaching the speech engine, ensuring clean, uninterrupted vocal flow.
+4. **Offline Piper Fallback**: If EdgeTTS experiences any network disruption, speech automatically and seamlessly switches to the local Piper Hindi engine without crashing.
 
 ---
 

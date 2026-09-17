@@ -10,11 +10,53 @@ from __future__ import annotations
 import asyncio
 import os
 import queue as _queue
+import re
 import threading
 from typing import Callable, Optional
 
 import numpy as np
 import sounddevice as sd
+
+# Regex for stripping artifacts that cause robotic TTS speech
+_RE_CODE_BLOCK = re.compile(r"```[\s\S]*?```")
+_RE_INLINE_CODE = re.compile(r"`[^`]*`")
+_RE_URL = re.compile(r"https?://\S+|www\.\S+")
+_RE_MARKDOWN = re.compile(r"[*_~#>`]")
+_RE_BRACKETS = re.compile(r"\[.*?\]|\(http\S+\)")
+_RE_EMOJIS = re.compile(
+    r"[\U00010000-\U0010ffff"
+    r"\u2600-\u26ff\u2700-\u27bf"
+    r"\ufe00-\ufe0f\u200d"
+    r"\U0001f300-\U0001f9ff"
+    r"\U0001fa00-\U0001faff]"
+)
+
+
+def clean_speech_text(text: str) -> str:
+    """Sanitize raw LLM text for speech synthesis:
+    - Strips code blocks, URLs, and markdown formatting.
+    - Strips emojis and control characters that cause robotic TTS artifacts.
+    - Preserves Devanagari, English, digits, and natural sentence punctuation.
+    """
+    if not text:
+        return ""
+    # Strip full code blocks
+    text = _RE_CODE_BLOCK.sub(" ", text)
+    # Strip inline code
+    text = _RE_INLINE_CODE.sub(" ", text)
+    # Strip URLs
+    text = _RE_URL.sub(" ", text)
+    # Strip bracketed system markers like [VISION_ACTIVE]
+    text = _RE_BRACKETS.sub(" ", text)
+    # Strip markdown syntax symbols
+    text = _RE_MARKDOWN.sub(" ", text)
+    # Strip emojis
+    text = _RE_EMOJIS.sub("", text)
+    # Collapse multiple spaces and dashes
+    text = re.sub(r"[\t\r\n]+", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
 
 
 
@@ -159,15 +201,18 @@ class EdgeTTSEngine:
         self.voice = voice
 
     def speak(self, text: str) -> None:
+        cleaned = clean_speech_text(text)
+        if not cleaned:
+            return
         loop = asyncio.new_event_loop()
         audio_bytes = None
         try:
-            audio_bytes = loop.run_until_complete(self._synth(text))
+            audio_bytes = loop.run_until_complete(self._synth(cleaned))
         except Exception as e:
             print(f"[EdgeTTS] Synthesis failed ({e}). Falling back to Piper Hindi...")
             try:
                 engine = PiperHindiTTSEngine()
-                engine.speak(text)
+                engine.speak(cleaned)
                 return
             except Exception as e_pipe:
                 print(f"[TTS Fallback] Piper Hindi also failed: {e_pipe}")
@@ -468,7 +513,7 @@ class PiperHindiTTSEngine:
         with self._lock:
             if self._voice is None:
                 self._init()
-            cleaned_text = text.strip()
+            cleaned_text = clean_speech_text(text)
             if not cleaned_text:
                 return
 
