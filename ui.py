@@ -2046,6 +2046,8 @@ class ProviderSettingsOverlay(QWidget):
         self._provider_combo.setStyleSheet(self._fs)
         providers = [
             ("gemini", "Google Gemini (gemini-2.5-flash / Multilingual)"),
+            ("gemini-web", "Gemini Web FREE (Built-in Anonymous Proxy - No Key Needed)"),
+            ("omniroute", "OmniRoute Gateway (352+ Providers, 1200+ Models)"),
             ("groq", "Groq (Ultra-Fast Llama 3.3 70B ~350 tok/s)"),
             ("openrouter", "OpenRouter (DeepSeek R1, Claude 3.5, etc.)"),
             ("deepseek", "DeepSeek Direct (DeepSeek-V3 / R1)"),
@@ -2157,6 +2159,76 @@ class ProviderSettingsOverlay(QWidget):
             threading.Thread(target=_run, daemon=True).start()
 
         c_test_btn.clicked.connect(_on_custom_test)
+
+        # Gemini Web FREE Proxy Row
+        k_lay.addWidget(_lbl("GEMINI WEB FREE PROXY (Built-in Anonymous Server)", 7, color=C.PRI))
+        gw_row = QHBoxLayout(); gw_row.setSpacing(5)
+        self._gemini_web_info = QLineEdit("http://127.0.0.1:8081/v1  (Model: gemini-3.7-flash)")
+        self._gemini_web_info.setReadOnly(True)
+        self._gemini_web_info.setFont(QFont("Courier New", 8))
+        self._gemini_web_info.setStyleSheet(self._fs + "; color: #00ffaa;")
+        gw_row.addWidget(self._gemini_web_info, 1)
+
+        gw_test_btn = QPushButton("⚡ TEST PROXY")
+        gw_test_btn.setFixedSize(90, 24)
+        gw_test_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        gw_test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        gw_test_btn.setStyleSheet(f"""
+            QPushButton {{ background: #002211; color: #00ffaa; border: 1px solid #00aa66; border-radius: 3px; }}
+            QPushButton:hover {{ background: #00331a; border-color: #00ffaa; }}
+        """)
+        gw_row.addWidget(gw_test_btn)
+        k_lay.addLayout(gw_row)
+
+        self._gemini_web_stat = QLabel("🟢 Built-in Web2API Ready (100% Free, No Key Required)")
+        self._gemini_web_stat.setFont(QFont("Courier New", 7))
+        self._gemini_web_stat.setStyleSheet("color: #00ffaa; padding-left: 2px;")
+        k_lay.addWidget(self._gemini_web_stat)
+
+        def _on_gemini_web_test():
+            self._gemini_web_stat.setText("🟡 Testing local proxy connection...")
+            self._gemini_web_stat.setStyleSheet("color: #ffaa00;")
+            def _run():
+                from core.multi_llm import test_llm_provider
+                ok, msg, lat = test_llm_provider("gemini-web")
+                self.provider_tested.emit("gemini-web", ok, msg, lat)
+            threading.Thread(target=_run, daemon=True).start()
+        gw_test_btn.clicked.connect(_on_gemini_web_test)
+
+        # OmniRoute Gateway Row
+        k_lay.addWidget(_lbl("OMNIROUTE GATEWAY (352+ Providers, 1200+ Models Unified)", 7, color=C.TEXT_MED))
+        omni_row = QHBoxLayout(); omni_row.setSpacing(5)
+        self._omni_url = QLineEdit("http://localhost:20128/v1")
+        self._omni_url.setReadOnly(True)
+        self._omni_url.setFont(QFont("Courier New", 8))
+        self._omni_url.setStyleSheet(self._fs)
+        omni_row.addWidget(self._omni_url, 1)
+
+        omni_test_btn = QPushButton("⚡ TEST OMNI")
+        omni_test_btn.setFixedSize(90, 24)
+        omni_test_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        omni_test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        omni_test_btn.setStyleSheet(f"""
+            QPushButton {{ background: #001a24; color: {C.PRI}; border: 1px solid {C.PRI_DIM}; border-radius: 3px; }}
+            QPushButton:hover {{ background: {C.PRI_GHO}; border-color: {C.PRI}; }}
+        """)
+        omni_row.addWidget(omni_test_btn)
+        k_lay.addLayout(omni_row)
+
+        self._omni_stat = QLabel("⚪ Untested (Install: npm i -g omniroute && omniroute start)")
+        self._omni_stat.setFont(QFont("Courier New", 7))
+        self._omni_stat.setStyleSheet(f"color: {C.TEXT_DIM}; padding-left: 2px;")
+        k_lay.addWidget(self._omni_stat)
+
+        def _on_omni_test():
+            self._omni_stat.setText("🟡 Checking OmniRoute on :20128...")
+            self._omni_stat.setStyleSheet("color: #ffaa00;")
+            def _run():
+                from core.multi_llm import test_llm_provider
+                ok, msg, lat = test_llm_provider("omniroute")
+                self.provider_tested.emit("omniroute", ok, msg, lat)
+            threading.Thread(target=_run, daemon=True).start()
+        omni_test_btn.clicked.connect(_on_omni_test)
 
         key_scroll.setWidget(key_container)
         lay_ai.addWidget(key_scroll, 1)
@@ -2417,10 +2489,16 @@ class ProviderSettingsOverlay(QWidget):
             self._voice_stat_lbl.setStyleSheet("color: #ff4444;")
 
     def _on_provider_tested(self, prov_id: str, ok: bool, msg: str, lat: float):
-        badge = self._gemini_stat if prov_id == "gemini" else (
-            self._groq_stat if prov_id == "groq" else (
-                self._openrouter_stat if prov_id == "openrouter" else (
-                    self._deepseek_stat if prov_id == "deepseek" else self._custom_stat
+        badge = (
+            self._gemini_stat if prov_id == "gemini" else (
+                self._gemini_web_stat if prov_id == "gemini-web" else (
+                    self._omni_stat if prov_id in ("omniroute", "omni") else (
+                        self._groq_stat if prov_id == "groq" else (
+                            self._openrouter_stat if prov_id == "openrouter" else (
+                                self._deepseek_stat if prov_id == "deepseek" else self._custom_stat
+                            )
+                        )
+                    )
                 )
             )
         )

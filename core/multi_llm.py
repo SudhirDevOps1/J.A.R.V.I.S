@@ -74,10 +74,28 @@ class MultiLLMClient:
         self.openrouter_key = cfg.get("openrouter_api_key", "").strip()
         self.deepseek_key = cfg.get("deepseek_api_key", "").strip()
 
-        # Custom endpoint support (e.g. Ollama http://localhost:11434/v1, LM Studio, vLLM)
+        # ── Legacy single custom endpoint (kept for backward compat) ──────────
         self.custom_url = (cfg.get("custom_llm_url") or cfg.get("openai_url") or "").strip()
         self.custom_key = (cfg.get("custom_llm_api_key") or cfg.get("openai_api_key") or "dummy-key").strip()
         self.custom_model = cfg.get("custom_llm_model") or "llama3.2"
+
+        # ── Multi Custom Providers (new: named, prioritized, enable/disable) ──
+        _raw_providers = cfg.get("custom_providers", [])
+        if isinstance(_raw_providers, list):
+            # Normalize + sort by priority (lower number = higher priority)
+            self.custom_providers = sorted(
+                [p for p in _raw_providers
+                 if isinstance(p, dict) and p.get("url", "").strip() and p.get("enabled", True)],
+                key=lambda p: int(p.get("priority", 99))
+            )
+        else:
+            self.custom_providers = []
+
+        # ── OmniRoute (auto-detect on localhost:20128) ────────────────────────
+        self.omniroute_auto_detect = cfg.get("omniroute_auto_detect", True)
+        self.omniroute_url = "http://localhost:20128/v1"
+        self._omniroute_checked = False
+        self._omniroute_running = False
 
         # ── Free proxy (gemini-web anonymous mode) ────────────────────────────
         self.free_proxy_enabled = cfg.get("free_proxy_enabled", True)
@@ -85,7 +103,6 @@ class MultiLLMClient:
         self.free_proxy_model = cfg.get("free_proxy_model", "gemini-3.7-flash")
 
         # ── Multi-key Gemini rotation ─────────────────────────────────────────
-        # Supports both single key (gemini_api_key) and key pool (gemini_api_keys: [])
         _pool = cfg.get("gemini_api_keys", [])
         if isinstance(_pool, list):
             _pool = [k.strip() for k in _pool if k.strip()]
@@ -101,8 +118,12 @@ class MultiLLMClient:
         # Determine active provider
         self.provider = (preferred_provider or cfg.get("preferred_llm_provider", "")).lower().strip()
         if not self.provider:
-            if self.free_proxy_enabled and _proxy_is_running():
+            if self.omniroute_auto_detect and self._check_omniroute():
+                self.provider = "omniroute"
+            elif self.free_proxy_enabled and _proxy_is_running():
                 self.provider = "gemini-web"
+            elif self.custom_providers:
+                self.provider = "custom-list"
             elif self.groq_key:
                 self.provider = "groq"
             elif self.openrouter_key:
@@ -115,6 +136,53 @@ class MultiLLMClient:
                 self.provider = "gemini"
 
         self.model = model
+
+    def _check_omniroute(self) -> bool:
+        """Check if OmniRoute is running on localhost:20128. Cached per instance."""
+        if self._omniroute_checked:
+            return self._omniroute_running
+        self._omniroute_checked = True
+        try:
+            resp = requests.get(f"{self.omniroute_url.rstrip('/v1')}/health",
+                                timeout=1.5)
+            self._omniroute_running = (resp.status_code in (200, 404))  # any response = running
+        except Exception:
+            try:
+                # Try /v1/models as fallback health check
+                resp = requests.get(f"{self.omniroute_url}/models", timeout=1.5)
+                self._omniroute_running = resp.status_code == 200
+            except Exception:
+                self._omniroute_running = False
+        return self._omniroute_running
+
+    def _try_openai_endpoint(self, url: str, api_key: str, model: str, prompt: str,
+                              timeout: int = 60, provider_name: str = "custom") -> str | None:
+        """
+        Shared helper: call any OpenAI-compatible /v1/chat/completions endpoint.
+        Returns response text on success, None on failure (caller handles fallback).
+        """
+        endpoint = url.rstrip("/")
+        if not endpoint.endswith("/chat/completions"):
+            endpoint = (f"{endpoint}/chat/completions"
+                        if endpoint.endswith("/v1")
+                        else f"{endpoint}/v1/chat/completions")
+        key = api_key.strip() or "dummy-key"
+        mdl = (model or "gpt-3.5-turbo").strip()
+        try:
+            res = requests.post(
+                endpoint,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": mdl, "messages": [{"role": "user", "content": prompt}],
+                      "temperature": 0.3},
+                timeout=timeout,
+            )
+            if res.status_code == 200:
+                return res.json()["choices"][0]["message"]["content"]
+            else:
+                print(f"[MultiLLM] {provider_name} HTTP {res.status_code}: {res.text[:120]}")
+        except Exception as e:
+            print(f"[MultiLLM] {provider_name} failed: {e}")
+        return None
 
     def _next_gemini_key(self) -> str:
         """Round-robin through the Gemini API key pool. Returns empty string if pool empty."""
@@ -172,8 +240,34 @@ class MultiLLMClient:
             except Exception as e:
                 print(f"[MultiLLM] GeminiWeb proxy error: {e} — falling back")
 
-        # 1. Custom Provider (Ollama / LM Studio / LocalAI / Private Endpoints)
+        # ── 0-A. OmniRoute Gateway (352+ providers, auto-fallback, localhost:20128) ──
+        if self.omniroute_auto_detect and self._check_omniroute():
+            model = self.model or "auto"
+            out = self._try_openai_endpoint(
+                self.omniroute_url, "omniroute", model, prompt,
+                timeout=90, provider_name="OmniRoute"
+            )
+            if out:
+                return _maybe_cache(LLMResponse(out))
+            print("[MultiLLM] OmniRoute failed — falling back to next provider")
+
+        # ── 0-B. Custom Providers List (named, prioritized) ────────────────────
+        for cp in self.custom_providers:
+            name = cp.get("name", "Custom")
+            url  = cp.get("url", "").strip()
+            key  = cp.get("api_key", "") or "dummy-key"
+            mdl  = self.model or cp.get("model", "gpt-3.5-turbo")
+            if not url:
+                continue
+            out = self._try_openai_endpoint(url, key, mdl, prompt,
+                                             timeout=75, provider_name=name)
+            if out:
+                return _maybe_cache(LLMResponse(out))
+            print(f"[MultiLLM] {name} failed — trying next provider")
+
+        # 1. Legacy Single Custom Provider (Ollama / LM Studio / LocalAI / Private Endpoints)
         if (self.provider in ("custom", "openai", "local", "ollama")) and self.custom_url:
+
             model = self.model or self.custom_model
             endpoint = self.custom_url.rstrip("/")
             if not endpoint.endswith("/chat/completions"):
@@ -339,6 +433,42 @@ def test_llm_provider(
             except requests.exceptions.ConnectionError:
                 lat = (time.perf_counter() - t0) * 1000.0
                 return False, "Proxy not running (start_proxy() not called)", lat
+
+        elif prov in ("omniroute", "omni-route", "omni"):
+            port = 20128
+            try:
+                resp = requests.get(f"http://localhost:{port}/v1/models", timeout=3.0)
+                lat = (time.perf_counter() - t0) * 1000.0
+                if resp.status_code == 200:
+                    count = len(resp.json().get("data", []))
+                    return True, f"OmniRoute Live ({count} models available)", lat
+                return False, f"OmniRoute HTTP {resp.status_code}", lat
+            except requests.exceptions.ConnectionError:
+                lat = (time.perf_counter() - t0) * 1000.0
+                return False, "OmniRoute not running. Install: npm i -g omniroute", lat
+
+        elif prov in ("custom_provider", "custom-provider"):
+            # Test a specific custom provider by URL
+            url = custom_url.strip()
+            if not url:
+                return False, "No URL provided", 0.0
+            test_url = url.rstrip("/")
+            if not test_url.endswith("/models"):
+                test_url = (f"{test_url}/models"
+                            if test_url.endswith("/v1")
+                            else f"{test_url}/v1/models")
+            try:
+                key = api_key.strip() or "dummy-key"
+                resp = requests.get(test_url,
+                                    headers={"Authorization": f"Bearer {key}"},
+                                    timeout=5.0)
+                lat = (time.perf_counter() - t0) * 1000.0
+                if resp.status_code == 200:
+                    return True, f"Endpoint Live ({url[:30]}...)", lat
+                return False, f"HTTP {resp.status_code}", lat
+            except Exception as e:
+                lat = (time.perf_counter() - t0) * 1000.0
+                return False, str(e)[:40], lat
 
         elif prov == "groq":
             key = api_key.strip() or cfg.get("groq_api_key", "").strip()
@@ -510,6 +640,40 @@ def fetch_provider_models(
                 pass
             return ["llama3.2", "qwen2.5-coder", "mistral"]
 
+        elif prov in ("omniroute", "omni-route", "omni"):
+            try:
+                resp = requests.get("http://localhost:20128/v1/models", timeout=4.0)
+                if resp.status_code == 200:
+                    data = resp.json().get("data", [])
+                    models = [m["id"] for m in data if "id" in m]
+                    if models:
+                        return models[:50]  # Limit to 50 - OmniRoute has 1200+ models
+            except Exception:
+                pass
+            return ["auto", "gpt-4o", "claude-3.5-sonnet", "gemini-2.5-pro", "deepseek-r1"]
+
+        elif prov in ("custom_provider", "custom-provider"):
+            url = custom_url.strip().rstrip("/")
+            if not url:
+                return ["default"]
+            key = api_key.strip() or "dummy-key"
+            try:
+                test_url = (f"{url}/models"
+                            if url.endswith("/v1")
+                            else f"{url}/v1/models")
+                resp = requests.get(test_url,
+                                    headers={"Authorization": f"Bearer {key}"},
+                                    timeout=4.0)
+                if resp.status_code == 200:
+                    data = resp.json().get("data", [])
+                    if data:
+                        return [m["id"] for m in data if "id" in m][:30]
+                resp2 = requests.get(f"{url.rstrip('/v1')}/api/tags", timeout=3.0)
+                if resp2.status_code == 200:
+                    return [m["name"] for m in resp2.json().get("models", []) if "name" in m]
+            except Exception:
+                pass
+            return ["auto"]
     except Exception:
         pass
 

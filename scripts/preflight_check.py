@@ -175,6 +175,25 @@ def check_llm_cache(verbose=True):
         if verbose:
             print('  [!] Smart LLM Cache: Missing')
 
+def check_omniroute(verbose=True):
+    """Check if OmniRoute gateway is running on localhost:20128."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            'http://localhost:20128/v1/models',
+            headers={'Authorization': 'Bearer omniroute'},
+            method='GET'
+        )
+        resp = urllib.request.urlopen(req, timeout=1.5)
+        if resp.status == 200:
+            if verbose:
+                print('  [OK] OmniRoute Gateway: Running on :20128 (352+ providers)')
+            return
+    except Exception:
+        pass
+    if verbose:
+        print('  [--] OmniRoute Gateway: Not running (optional - npm install -g omniroute)')
+
 def run_preflight(verbose=True):
     """Programmatic entry point for main.py / run_jarvis.pyw."""
     if verbose:
@@ -190,6 +209,7 @@ def run_preflight(verbose=True):
     check_desktop_shortcut(verbose=verbose)
     check_free_proxy(verbose=verbose)
     check_llm_cache(verbose=verbose)
+    check_omniroute(verbose=verbose)
     dt = time.monotonic() - t0
     if verbose:
         print(f'Pre-flight complete in {dt:.2f}s. All assets ready.')
