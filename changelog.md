@@ -19,7 +19,7 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
    - Redirects stdout and stderr to `logs/jarvis_runtime.log` with auto-rotation, preventing `pythonw.exe` stream crashes.
    - Automatically runs silent preflight check so missing assets/models are cached before the UI mounts.
 2. **Windows Taskbar Integration**:
-   - Registered Windows `AppUserModelID` (`SudhirDevOps1.JARVIS.AI.MarkLIII`) via `shell32.dll`.
+   - Registered Windows `AppUserModelID` (`SudhirDevOps1.JARVIS.AI`) via `shell32.dll`.
    - Windows taskbar and Alt-Tab switcher now render the custom Arc Reactor icon instead of the generic Python logo.
    - Added `self.setWindowIcon()` and `QApplication.setWindowIcon()` to `MainWindow`.
 

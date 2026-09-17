@@ -63,7 +63,7 @@ from google.genai import types
 if sys.platform == "win32":
     try:
         import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI.MarkLIII")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI")
     except Exception:
         pass
 

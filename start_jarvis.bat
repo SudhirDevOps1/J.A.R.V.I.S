@@ -61,10 +61,10 @@ if not lnk.exists():
         from ui import MainWindow
         # Invoking desktop shortcut builder via UI helper
         ico_path = Path('config/jarvis.ico').resolve()
-        pythonw = Path(sys.executable).parent / 'pythonw.exe'
-        target = str(pythonw if pythonw.exists() else sys.executable)
-        launcher = str(Path('run_jarvis.pyw').resolve())
-        MainWindow._create_lnk_windows(str(lnk), target, launcher, str(Path('.').resolve()), str(ico_path))
+        vbs = Path('launch_silent.vbs').resolve()
+        wscript = Path(os.environ.get('WINDIR', r'C:\Windows')) / 'System32' / 'wscript.exe'
+        target = str(wscript if wscript.exists() else 'wscript.exe')
+        MainWindow._create_lnk_windows(str(lnk), target, str(vbs), str(Path('.').resolve()), str(ico_path) + ',0')
         print('  [OK] Desktop Shortcut auto-created on Desktop.')
     except Exception:
         pass

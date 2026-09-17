@@ -4734,7 +4734,7 @@ class MainWindow(QMainWindow):
         if sys.platform == "win32":
             try:
                 import ctypes
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI.MarkLIII")
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI")
             except Exception:
                 pass
         self.setMinimumSize(_MIN_W, _MIN_H)
@@ -5259,12 +5259,12 @@ class MainWindow(QMainWindow):
 
             # ── Windows ───────────────────────────────────────────────────────
             if _os == "Windows":
-                pythonw  = python.parent / "pythonw.exe"
-                target   = str(pythonw if pythonw.exists() else python)
-                launcher = script.parent / "run_jarvis.pyw"
-                run_target = str(launcher if launcher.exists() else script)
+                vbs_launcher = script.parent / "launch_silent.vbs"
+                wscript = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "wscript.exe"
+                target = str(wscript if wscript.exists() else "wscript.exe")
+                run_target = str(vbs_launcher if vbs_launcher.exists() else script.parent / "run_jarvis.pyw")
                 lnk      = str(desktop / "J.A.R.V.I.S.lnk")
-                icon_loc = f"{ico_path},0" if ico_path.exists() else f"{target},0"
+                icon_loc = f"{ico_path},0"
                 self._create_lnk_windows(lnk, target, run_target,
                                          str(script.parent), icon_loc)
 
