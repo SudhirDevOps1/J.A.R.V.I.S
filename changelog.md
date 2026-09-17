@@ -25,7 +25,7 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 1. **4 Specialized Character Modes**:
    - `🛡️ J.A.R.V.I.S`: Tactical, loyal, respectful Stark-style AI.
    - `🎓 MENTOR / TEACHER`: Patient, structured, educational guide with step-by-step clarity.
-   - `💖 COMPANION / GF`: Warm, affectionate, friendly, and emotionally attuned.
+   - `💖 COMPANION / GF MODE`: 100% human-like romantic girlfriend persona. Deeply devoted, exclusively loyal, warm, affectionate, funny, full of banter, and displays cute, playful jealousy/possessiveness with emotional depth.
    - `⚡ DEVOPS BEAST`: Direct, cloud-native shell, CI/CD, and Kubernetes command specialist.
 2. **Anti-Corporate Persona Guardrail**:
    - Strictly forbids identifying as a generic Google AI or saying *"मैं एक बड़ा लैंग्वेज मॉडल हूँ, जिसे Google ने ट्रेन किया है"*.
