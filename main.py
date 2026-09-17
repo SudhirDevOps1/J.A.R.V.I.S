@@ -610,6 +610,21 @@ class JarvisLive:
         except Exception as e:
             print(f"[PluginSay] {e}")
 
+    def speak(self, text: str):
+        """Thread-safe speech synthesis for Multi-Provider and local responses."""
+        if not text:
+            return
+        def _synth():
+            try:
+                self.set_speaking(True)
+                from core.tts import speak_text
+                speak_text(text)
+            except Exception as e:
+                print(f"[TTS Error] {e}")
+            finally:
+                self.set_speaking(False)
+        threading.Thread(target=_synth, daemon=True).start()
+
     def request_reconnect(self, keep_context: bool = True, reason: str = ""):
         """Thread-safe: ask the run loop to tear down and rebuild the Live
         session. Called from the Qt thread. No-op until the async loop and
@@ -714,7 +729,7 @@ class JarvisLive:
         cfg = load_api_keys()
         prov = (cfg.get("preferred_llm_provider") or "gemini").lower().strip()
 
-        if prov in ("openrouter", "groq", "deepseek", "custom", "openai", "ollama"):
+        if prov in ("gemini-web", "omniroute", "openrouter", "groq", "deepseek", "custom", "openai", "ollama") or not _get_api_key().strip():
             def _async_multi_llm():
                 try:
                     self.ui.set_state("THINKING")
@@ -1953,17 +1968,35 @@ class JarvisLive:
             self._dashboard = None
 
         while True:
+            # Check if an official Gemini API key is provided for Live WebSockets streaming
+            _api_k = _get_api_key().strip()
+            if not _api_k:
+                print("[JARVIS] No official Gemini API Key provided. Running in Multi-Provider / Gemini Web FREE mode.")
+                self._awake = True
+                self.ui.set_state("LISTENING")
+                self.ui.write_log(f"SYS: {self._asst_name} online in FREE / Multi-Provider Mode.")
+                if self._dashboard:
+                    await self._dashboard.broadcast({"type": "status", "state": "active"})
+                
+                # In Free / Multi-Provider mode, wait for typed input or voice change
+                self._reconnect_event.clear()
+                while not self._reconnect_event.is_set():
+                    # If user entered an API key in UI settings, trigger reconnect to live stream
+                    if _get_api_key().strip():
+                        break
+                    await asyncio.sleep(1)
+                self._reconnect_event.clear()
+                continue
+
             try:
-                print("[JARVIS] Connecting...")
+                print("[JARVIS] Connecting to Gemini Live...")
                 self.ui.set_state("THINKING")
                 _resumed_with = self._resume_handle is not None
                 config = self._build_config()
 
                 # Fresh client on every reconnect — avoids stale HTTP session state
-                # v1alpha carries proactive audio; if it gets rejected we fall
-                # back to v1beta.
                 client = genai.Client(
-                    api_key=_get_api_key(),
+                    api_key=_api_k,
                     http_options={"api_version": "v1alpha" if self._enhanced_live else "v1beta"}
                 )
 
