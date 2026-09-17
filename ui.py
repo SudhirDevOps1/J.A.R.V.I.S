@@ -2705,7 +2705,7 @@ class CustomizeOverlay(QWidget):
         personas = [
             ("jarvis", "🛡️ JARVIS (Tactical AI)", p_row1),
             ("teacher", "🎓 TEACHER (Mentor)", p_row1),
-            ("companion", "💖 COMPANION (GF)", p_row2),
+            ("companion", "💖 GF SOULMATE (Romantic)", p_row2),
             ("devops", "⚡ DEVOPS (Cloud)", p_row2),
         ]
         for p_key, p_label, target_row in personas:
@@ -6117,7 +6117,7 @@ class MainWindow(QMainWindow):
         persona_subtitles = {
             "jarvis": "Just A Rather Very Intelligent System",
             "teacher": "AI Mentor & Academic Instructor",
-            "companion": "Affectionate AI Companion",
+            "companion": "💖 Devoted Romantic Partner & Soulmate",
             "devops": "Autonomous DevOps & Cloud Specialist",
         }
         if display in ("JARVIS", "J.A.R.V.I.S") and persona_mode == "jarvis":
