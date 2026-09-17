@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -392,17 +393,66 @@ def save_edge_voice(voice: str) -> None:
     _patch_config(edge_voice=(voice or "").strip())
 
 
+def _auto_detect_obsidian_settings() -> dict | None:
+    """Auto-detect Obsidian vault and Local REST API key from local system."""
+    appdata = os.environ.get("APPDATA", "")
+    obs_json = Path(appdata) / "obsidian" / "obsidian.json" if appdata else None
+    vault_candidates = []
+    if obs_json and obs_json.exists():
+        try:
+            vdata = json.loads(obs_json.read_text(encoding="utf-8"))
+            for v_info in vdata.get("vaults", {}).values():
+                vpath = v_info.get("path")
+                if vpath and Path(vpath).exists():
+                    vault_candidates.append(Path(vpath))
+        except Exception:
+            pass
+
+    for fallback in [Path(r"E:\obsidian"), Path(r"E:\obsidian\vaults")]:
+        if fallback.exists() and fallback not in vault_candidates:
+            vault_candidates.append(fallback)
+
+    for v in vault_candidates:
+        plugin_data = v / ".obsidian" / "plugins" / "obsidian-local-rest-api" / "data.json"
+        if plugin_data.exists():
+            try:
+                p_cfg = json.loads(plugin_data.read_text(encoding="utf-8"))
+                api_key = p_cfg.get("apiKey", "")
+                if api_key:
+                    use_insecure = p_cfg.get("enableInsecureServer", False)
+                    port = p_cfg.get("insecurePort", 27123) if use_insecure else p_cfg.get("port", 27124)
+                    return {
+                        "api_key": api_key,
+                        "port": port,
+                        "vault_path": str(v),
+                        "use_https": not use_insecure,
+                        "enabled": True,
+                    }
+            except Exception:
+                pass
+    return None
+
+
 def get_obsidian_config() -> dict:
     """Return Obsidian Local REST API and local vault configuration."""
     default_cfg = {
+        "enabled": True,
         "api_key": "",
-        "port": 27124,
+        "port": 27123,
         "vault_path": "",
-        "use_https": True,
+        "use_https": False,
     }
     cur = load_api_keys().get("obsidian_config")
     if isinstance(cur, dict):
         default_cfg.update(cur)
+
+    # Auto-detect from local Obsidian installation if api_key or vault_path is empty
+    if not default_cfg.get("api_key") or not default_cfg.get("vault_path"):
+        detected = _auto_detect_obsidian_settings()
+        if detected:
+            default_cfg.update(detected)
+            _patch_config(obsidian_config=default_cfg)
+
     return default_cfg
 
 
