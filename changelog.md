@@ -2,6 +2,20 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [2026-09-17 15:15] — Telemetry & APIs Dashboard UI/UX Overhaul
+
+### 🌐 Tab 3 Rebuilt: "TELEMETRY & APIS" Dashboard (`ui.py`, `core/system_info.py`)
+1. **5-Card Cyberpunk Dashboard** replacing the old empty Disk & Weather tab:
+   - 📍 **Geo-Location & Network** — City, region, country, IP, ISP, timezone, live ping latency (via `ip-api.com` + DNS socket ping)
+   - ⛅ **Live Weather** — Icon, sky description, temperature + feels-like, humidity, wind speed, barometric pressure (via `Open-Meteo API`)
+   - 💾 **Multi-Drive Storage Analyzer** — All connected drives with progress bars and color-coded usage percentages (via `psutil`)
+   - ⚡ **Hardware Telemetry** — CPU cores & usage, RAM used/total, battery status with plug indicator, system uptime (via `psutil`)
+   - 📰 **Developer News Feed** — Top 4 HackerNews headlines with scores and authors (via `HackerNews Firebase API`)
+2. **Scrollable Layout** — All cards inside a `QScrollArea` with styled thin scrollbar, so data-dense dashboard fits the 490×720 dialog.
+3. **Zero Token Cost** — All 6 API sources are 100% free, no API keys required, with aggressive caching (15-min IP cache, 10-min news cache).
+4. **Backend Rewrite** (`core/system_info.py`): New functions `get_ip_location()`, `get_network_latency()`, `get_hardware_telemetry()`, enhanced `get_free_weather()`, enhanced `fetch_top_dev_news()`.
+5. **Gemini Model Fix** (`actions/web_search.py`): Updated `models_to_try` to `["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]` fixing 404 errors. Added DDG fallback in `_gemini_headlines()`.
+
 ---
 
 ## [2026-09-17 14:55] — Arc Reactor Alive Ambient Dynamics, Boot Sound FX Fix & Multi-Drive Game Discovery

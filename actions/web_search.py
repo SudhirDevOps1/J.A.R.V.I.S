@@ -22,7 +22,7 @@ def _gemini_search(query: str) -> str:
     from google import genai
 
     client = genai.Client(api_key=_get_api_key())
-    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash"]
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]
     last_err = None
     for model_name in models_to_try:
         try:
@@ -129,7 +129,7 @@ def _gemini_headlines(n: int = 5) -> tuple[list[str], str]:
     from google import genai
 
     client = genai.Client(api_key=_get_api_key())
-    models_to_try = ["gemini-2.5-flash", "gemini-1.5-flash"]
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]
     response = None
     for model_name in models_to_try:
         try:
@@ -144,7 +144,10 @@ def _gemini_headlines(n: int = 5) -> tuple[list[str], str]:
             continue
 
     if not response:
-        raise ValueError("Failed to fetch headlines from Gemini candidate models")
+        # Graceful fallback to DuckDuckGo news if Gemini candidate models are unavailable
+        results = _ddg_news("world news today", max_results=n)
+        heads = [r["title"] for r in results if r.get("title")]
+        return heads[:n], _format_news("world news today", results)
 
     raw = ""
     for part in response.candidates[0].content.parts:

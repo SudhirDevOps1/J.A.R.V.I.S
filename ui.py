@@ -1874,7 +1874,7 @@ class ProviderSettingsOverlay(QWidget):
         tab_row.setSpacing(6)
         self._btn_tab_ai = QPushButton("🤖 AI PROVIDERS")
         self._btn_tab_voice = QPushButton("🎙️ VOICE LAB")
-        self._btn_tab_sys = QPushButton("📊 DISK & WEATHER")
+        self._btn_tab_sys = QPushButton("🌐 TELEMETRY & APIS")
 
         for b in (self._btn_tab_ai, self._btn_tab_voice, self._btn_tab_sys):
             b.setFixedHeight(26)
@@ -2128,40 +2128,79 @@ class ProviderSettingsOverlay(QWidget):
         lay_voice.addStretch(1)
         self._stack.addWidget(page_voice)
 
-        # ── Page 3: Disk Drives & Free Weather ──────────────────────────────────
+        # ── Page 3: Telemetry & APIs Dashboard ─────────────────────────────────
         page_sys = QWidget()
         lay_sys = QVBoxLayout(page_sys)
-        lay_sys.setContentsMargins(4, 4, 4, 4)
-        lay_sys.setSpacing(6)
+        lay_sys.setContentsMargins(2, 2, 2, 2)
+        lay_sys.setSpacing(4)
 
-        lay_sys.addWidget(_lbl("STORAGE DRIVE ANALYZER (Zero API Cost)", 8, bold=True, color=C.PRI))
-        self._drives_container = QWidget()
-        self._drives_lay = QVBoxLayout(self._drives_container)
-        self._drives_lay.setContentsMargins(0, 0, 0, 0)
-        self._drives_lay.setSpacing(4)
-        lay_sys.addWidget(self._drives_container)
+        _card_css = (f"background: rgba(0, 18, 26, 200); border: 1px solid {C.BORDER};"
+                     f" border-radius: 4px; padding: 6px; color: {C.TEXT};")
 
-        lay_sys.addWidget(_lbl("OPEN-METEO LIVE WEATHER (Zero Tokens / Free)", 8, bold=True, color=C.PRI))
-        self._weather_card = QLabel("Fetching live weather...")
-        self._weather_card.setFont(QFont("Courier New", 7))
-        self._weather_card.setStyleSheet(f"""
-            background: rgba(0, 20, 30, 180);
-            color: {C.TEXT};
-            border: 1px solid {C.BORDER};
-            border-radius: 4px;
-            padding: 8px;
-        """)
-        lay_sys.addWidget(self._weather_card)
-
-        refresh_sys_btn = QPushButton("🔄  REFRESH TELEMETRY & DRIVES")
-        refresh_sys_btn.setFixedHeight(26)
-        refresh_sys_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        # Refresh button at top
+        refresh_sys_btn = QPushButton("🔄  REFRESH ALL TELEMETRY")
+        refresh_sys_btn.setFixedHeight(24)
+        refresh_sys_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
         refresh_sys_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh_sys_btn.setStyleSheet(f"background: #001a24; color: {C.PRI}; border: 1px solid {C.PRI_DIM}; border-radius: 3px;")
         refresh_sys_btn.clicked.connect(self._refresh_system_metrics)
         lay_sys.addWidget(refresh_sys_btn)
 
-        lay_sys.addStretch(1)
+        # Scroll area for cards
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }"
+                             "QScrollBar:vertical { background: #000d12; width: 6px; }"
+                             f"QScrollBar::handle:vertical {{ background: {C.BORDER}; border-radius: 3px; }}"
+                             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
+        scroll_w = QWidget()
+        self._telem_lay = QVBoxLayout(scroll_w)
+        self._telem_lay.setContentsMargins(2, 2, 2, 2)
+        self._telem_lay.setSpacing(5)
+
+        # Card 1: 📍 Geo-Location & Network
+        self._geo_card = QLabel("📍  GEO-LOCATION & NETWORK\n\n   Initialising location services…")
+        self._geo_card.setFont(QFont("Courier New", 7))
+        self._geo_card.setWordWrap(True)
+        self._geo_card.setStyleSheet(_card_css)
+        self._telem_lay.addWidget(self._geo_card)
+
+        # Card 2: ⛅ Weather
+        self._weather_card = QLabel("⛅  LIVE WEATHER\n\n   Fetching hyper-local forecast…")
+        self._weather_card.setFont(QFont("Courier New", 7))
+        self._weather_card.setWordWrap(True)
+        self._weather_card.setStyleSheet(_card_css)
+        self._telem_lay.addWidget(self._weather_card)
+
+        # Card 3: 💾 Storage Drives
+        self._drives_container = QWidget()
+        self._drives_container.setStyleSheet(_card_css)
+        self._drives_lay = QVBoxLayout(self._drives_container)
+        self._drives_lay.setContentsMargins(4, 4, 4, 4)
+        self._drives_lay.setSpacing(3)
+        _drv_hdr = QLabel("💾  MULTI-DRIVE STORAGE ANALYZER")
+        _drv_hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        _drv_hdr.setStyleSheet(f"color: {C.PRI}; background: transparent; border: none;")
+        self._drives_lay.addWidget(_drv_hdr)
+        self._telem_lay.addWidget(self._drives_container)
+
+        # Card 4: ⚡ Hardware Telemetry
+        self._hw_card = QLabel("⚡  HARDWARE TELEMETRY\n\n   Reading system sensors…")
+        self._hw_card.setFont(QFont("Courier New", 7))
+        self._hw_card.setWordWrap(True)
+        self._hw_card.setStyleSheet(_card_css)
+        self._telem_lay.addWidget(self._hw_card)
+
+        # Card 5: 📰 Developer News
+        self._news_card = QLabel("📰  DEV NEWS FEED (HackerNews)\n\n   Loading top stories…")
+        self._news_card.setFont(QFont("Courier New", 7))
+        self._news_card.setWordWrap(True)
+        self._news_card.setStyleSheet(_card_css)
+        self._telem_lay.addWidget(self._news_card)
+
+        self._telem_lay.addStretch(1)
+        scroll.setWidget(scroll_w)
+        lay_sys.addWidget(scroll)
         self._stack.addWidget(page_sys)
 
         # Tab Switching Logic
@@ -2255,42 +2294,82 @@ class ProviderSettingsOverlay(QWidget):
     def _refresh_system_metrics(self):
         def _worker():
             try:
-                from core.system_info import get_drive_stats, get_free_weather
-                drives = get_drive_stats()
+                from core.system_info import (
+                    get_drive_stats, get_free_weather, get_ip_location,
+                    get_hardware_telemetry, get_network_latency, fetch_top_dev_news,
+                )
+                geo = get_ip_location()
                 weather = get_free_weather()
-                return drives, weather
+                drives = get_drive_stats()
+                hw = get_hardware_telemetry()
+                net = get_network_latency()
+                news = fetch_top_dev_news()
+                return {"geo": geo, "weather": weather, "drives": drives,
+                        "hw": hw, "net": net, "news": news}
             except Exception:
-                return [], {}
+                return {}
 
         def _bg():
-            drives, weather = _worker()
-            QTimer.singleShot(0, lambda: self._render_system_metrics(drives, weather))
+            data = _worker()
+            QTimer.singleShot(0, lambda: self._render_system_metrics(data))
 
         threading.Thread(target=_bg, daemon=True).start()
 
-    def _render_system_metrics(self, drives: list, weather: dict):
-        # Safely clear and rebuild drive widgets on the main GUI thread
-        while self._drives_lay.count():
-            item = self._drives_lay.takeAt(0)
+    def _render_system_metrics(self, data: dict):
+        geo = data.get("geo", {})
+        weather = data.get("weather", {})
+        drives = data.get("drives", [])
+        hw = data.get("hw", {})
+        net = data.get("net", {})
+        news = data.get("news", [])
+
+        # ── Card 1: Geo-Location & Network ──
+        ping_txt = f"🟢 {net.get('status', '--')}" if net.get("online") else "🔴 Offline"
+        self._geo_card.setText(
+            f"📍  GEO-LOCATION & NETWORK\n"
+            f"   City       : {geo.get('city', '--')}\n"
+            f"   Region     : {geo.get('region', '--')}, {geo.get('country', '--')}\n"
+            f"   IP         : {geo.get('ip', '--')}\n"
+            f"   ISP        : {geo.get('isp', '--')}\n"
+            f"   Timezone   : {geo.get('timezone', '--')}\n"
+            f"   Ping       : {ping_txt}"
+        )
+
+        # ── Card 2: Weather ──
+        if weather.get("success"):
+            self._weather_card.setText(
+                f"{weather.get('icon', '⛅')}  LIVE WEATHER — {weather.get('city', 'Local')}\n"
+                f"   Sky        : {weather.get('desc', '--')}\n"
+                f"   Temp       : {weather.get('temp', '--')}  (Feels {weather.get('feels_like', '--')})\n"
+                f"   Humidity   : {weather.get('humidity', '--')}\n"
+                f"   Wind       : {weather.get('wind', '--')}\n"
+                f"   Pressure   : {weather.get('pressure', '--')}"
+            )
+        else:
+            self._weather_card.setText("⛅  LIVE WEATHER\n\n   Weather service unavailable (check internet)")
+
+        # ── Card 3: Storage Drives ──
+        # Clear old drive widgets but keep the header label (index 0)
+        while self._drives_lay.count() > 1:
+            item = self._drives_lay.takeAt(1)
             if item.widget():
                 item.widget().deleteLater()
 
         for d in drives:
             d_card = QWidget()
-            d_box = QVBoxLayout(d_card); d_box.setContentsMargins(4, 2, 4, 2); d_box.setSpacing(2)
+            d_card.setStyleSheet("background: transparent; border: none;")
+            d_box = QVBoxLayout(d_card); d_box.setContentsMargins(2, 1, 2, 1); d_box.setSpacing(1)
             row = QHBoxLayout()
-            lbl = QLabel(f"Drive {d['letter']} (Free: {d['free_gb']} GB / {d['total_gb']} GB)")
-            lbl.setFont(QFont("Courier New", 7)); lbl.setStyleSheet(f"color: {C.TEXT};")
-            pct_lbl = QLabel(f"{d['percent']}% used")
-            pct_lbl.setFont(QFont("Courier New", 7)); pct_lbl.setStyleSheet("color: #00ffaa;" if d['percent'] < 80 else "#ffaa00;")
+            lbl = QLabel(f"  {d['letter']} {d.get('label', '')} — {d['free_gb']}GB free / {d['total_gb']}GB")
+            lbl.setFont(QFont("Courier New", 7)); lbl.setStyleSheet(f"color: {C.TEXT}; border: none;")
+            pct_lbl = QLabel(f"{d['percent']}%")
+            pct_lbl.setFont(QFont("Courier New", 7))
+            pct_lbl.setStyleSheet(f"color: {'#00ffaa' if d['percent'] < 80 else '#ff5533'}; border: none;")
             row.addWidget(lbl); row.addStretch(1); row.addWidget(pct_lbl)
             d_box.addLayout(row)
-
             pb = QProgressBar()
-            pb.setFixedHeight(6)
-            pb.setTextVisible(False)
-            pb.setRange(0, 100)
-            pb.setValue(int(d['percent']))
+            pb.setFixedHeight(5); pb.setTextVisible(False)
+            pb.setRange(0, 100); pb.setValue(int(d['percent']))
             pb.setStyleSheet(f"""
                 QProgressBar {{ background: #00121a; border: 1px solid {C.BORDER}; border-radius: 2px; }}
                 QProgressBar::chunk {{ background: {'#00ffff' if d['percent'] < 80 else '#ff5533'}; }}
@@ -2298,12 +2377,28 @@ class ProviderSettingsOverlay(QWidget):
             d_box.addWidget(pb)
             self._drives_lay.addWidget(d_card)
 
-        if weather.get("success"):
-            self._weather_card.setText(
-                f"City: {weather.get('city', 'Local')} | Temp: {weather.get('temp')} | Sky: {weather.get('desc')} | Wind: {weather.get('wind')}"
-            )
+        # ── Card 4: Hardware Telemetry ──
+        bat_str = "--"
+        if hw.get("battery_percent") is not None:
+            plug = "⚡" if hw.get("battery_plugged") else "🔋"
+            bat_str = f"{plug} {hw['battery_percent']}%"
+        self._hw_card.setText(
+            f"⚡  HARDWARE TELEMETRY\n"
+            f"   CPU        : {hw.get('cpu_percent', 0)}%  ({hw.get('cpu_cores', '-')} cores)\n"
+            f"   RAM        : {hw.get('ram_used_gb', 0)}GB / {hw.get('ram_total_gb', 0)}GB  ({hw.get('ram_percent', 0)}%)\n"
+            f"   Battery    : {bat_str}\n"
+            f"   Uptime     : {hw.get('uptime_str', '--')}"
+        )
+
+        # ── Card 5: Developer News ──
+        if news:
+            lines = ["📰  DEV NEWS FEED (HackerNews)\n"]
+            for i, n in enumerate(news[:4], 1):
+                lines.append(f"   {i}. {n.get('title', '')[:55]}")
+                lines.append(f"      ↑{n.get('score', 0)} • by {n.get('by', '?')}")
+            self._news_card.setText("\n".join(lines))
         else:
-            self._weather_card.setText("Open-Meteo Weather: Service ready (check internet)")
+            self._news_card.setText("📰  DEV NEWS FEED\n\n   No stories available")
 
     def _save(self):
         prov_id = self._provider_combo.currentData() or "gemini"

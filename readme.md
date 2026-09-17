@@ -52,6 +52,7 @@ It's not just an assistant — it's an extension of your digital life.
 | 🗓️ Session Memory | Summarises each conversation and mentions it naturally next morning — consumed after use, never repeats |
 | 👁️‍🗨️ Background Monitoring | User-configured topic watching — checks for new headlines once a day and alerts naturally |
 | 📊 Hardware Monitoring | Continuous CPU, RAM, GPU and temperature telemetry with localized voice alerts |
+| 🌐 Telemetry & APIs Dashboard | 5-card cyberpunk dashboard: Geo-Location & Network, Live Weather (Open-Meteo), Multi-Drive Storage, Hardware Telemetry, HackerNews Feed — all free APIs, zero tokens, scrollable UI |
 | 🌤️ Weather Report | Live weather data for your city, personalized from memory |
 | 🗺️ Dynamic Content Panel | Scrollable display layer beneath the HUD that renders web results, news, and search data |
 | 🔍 Multi-Mode Web Search | `news` / `research` / `price` / `compare` / `search` — Gemini Grounded first, DDG fallback |
