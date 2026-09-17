@@ -306,7 +306,15 @@ def save_particle_density(count: int) -> None:
 
 def get_hud_fx() -> dict:
     """Return HUD visual effect toggles."""
-    default_fx = {"scanlines": False, "shockwaves": True, "starfield": True}
+    default_fx = {
+        "scanlines": False,
+        "shockwaves": True,
+        "starfield": True,
+        "particles": True,
+        "photons": True,
+        "spectrum": True,
+        "brackets": True,
+    }
     cfg = load_api_keys().get("hud_fx")
     if isinstance(cfg, dict):
         default_fx.update(cfg)
@@ -317,4 +325,29 @@ def save_hud_fx(fx: dict) -> None:
     """Persist HUD visual effect toggles."""
     cur = get_hud_fx()
     cur.update(fx)
-    _patch_config(hud_fx=cur)
+    _patch_config(hud_fx=cur)
+
+
+def get_anim_mode() -> str:
+    """Return animation dynamics mode ('reactive', 'subtle', 'kinetic'). Default: 'reactive'."""
+    val = (load_api_keys().get("anim_mode", "reactive") or "reactive").lower().strip()
+    return val if val in ("reactive", "subtle", "kinetic") else "reactive"
+
+
+def save_anim_mode(mode: str) -> None:
+    """Persist animation dynamics mode."""
+    _patch_config(anim_mode=(mode or "reactive").strip().lower())
+
+
+def get_hud_glow() -> int:
+    """Return HUD glow / bloom intensity (default: 60, range: 10-100)."""
+    try:
+        val = int(load_api_keys().get("hud_glow", 60))
+        return max(10, min(100, val))
+    except (ValueError, TypeError):
+        return 60
+
+
+def save_hud_glow(intensity: int) -> None:
+    """Persist HUD glow intensity."""
+    _patch_config(hud_glow=max(10, min(100, int(intensity))))

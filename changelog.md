@@ -4,6 +4,32 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ---
 
+## [2026-09-17 13:25] — Reactive Sleep-on-Idle HUD Dynamics, Glow Controls & Polished HUD Studio
+
+### 🌙 Calm Standby & Reactive Dynamics (`ui.py`)
+1. **Sleep on Idle (Reactive Animation Mode)**:
+   - Eliminated constant, distracting spinning and particle jitter when the assistant is in standby.
+   - When idle, HUD canvas settles into a peaceful, dignified resting state (`rot_spd = 0.0`, `scale = 1.0`, calm 2px standby audio equalizer).
+   - Only comes alive and animates dynamically when actively speaking, listening to voice input, or processing/thinking.
+   - 3 customizable dynamics modes available in HUD Studio: `🌙 SLEEP ON IDLE (REACTIVE)` (default), `🍃 SUBTLE AMBIENT`, and `⚡ FULL KINETIC`.
+
+2. **Clean Celestial Portrait (No Lateral Blobs)**:
+   - Removed the harsh artificial cyan disks and crosshairs that appeared at the side temples.
+   - Replaced with subtle stardust photons along the orbital path and ambient golden aura.
+
+3. **HUD Glow & Bloom Intensity Slider**:
+   - Added user-controlled bloom multiplier (10% to 100%) in `CustomizeOverlay`.
+   - Modulates alpha bloom across rings, halo aura, shockwaves, and framing brackets.
+
+4. **Expanded Theme Presets & Granular FX Toggles**:
+   - Added `❄️ Arctic White (#d8f8ff)` and `🌌 Deep Nebula (#a855f7)` 1-click palettes.
+   - Granular toggles for Vocal Shockwaves, Starfield Grid, Floating Particles, Orbiting Photons, Spectrum Equalizer, Tactical Brackets, and Scanlines.
+
+5. **Qt Mnemonic Bug Fix**:
+   - Replaced single `&` with `&&` across all dialog buttons and labels (`VISUALS && HUD`, `APPLY && SAVE ALL`, `HUD STUDIO && CUSTOMISATION`), preventing Qt from rendering `&` as `_`.
+
+---
+
 ## [2026-09-17 13:10] — Multi-Mode Avatar HUD Engine, HUD Customization Studio & Harmonized Visuals
 
 ### 🎭 Visual & Customization Suite Overhaul
