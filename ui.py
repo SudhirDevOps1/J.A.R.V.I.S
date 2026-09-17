@@ -1889,6 +1889,12 @@ class SetupOverlay(QWidget):
             return
         self.done.emit(key, self._sel_os)
 
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key.Key_Escape:
+            self.hide()
+        else:
+            super().keyPressEvent(e)
+
 
 class HueWheel(QWidget):
     """
@@ -2314,8 +2320,20 @@ class ProviderSettingsOverlay(QWidget):
         self._gemini_web_info.setStyleSheet(self._fs + "; color: #00ffaa;")
         gw_row.addWidget(self._gemini_web_info, 1)
 
-        gw_test_btn = QPushButton("⚡ TEST PROXY")
-        gw_test_btn.setFixedSize(90, 24)
+        from core.gemini_free_proxy import is_running as _proxy_is_running, start_proxy as _proxy_start, stop_proxy as _proxy_stop
+
+        gw_toggle_btn = QPushButton("⏹ STOP PROXY" if _proxy_is_running() else "▶ START PROXY")
+        gw_toggle_btn.setFixedSize(100, 24)
+        gw_toggle_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        gw_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        gw_toggle_btn.setStyleSheet(f"""
+            QPushButton {{ background: #001a15; color: #00ffaa; border: 1px solid #00aa66; border-radius: 3px; }}
+            QPushButton:hover {{ background: #002e24; border-color: #00ffaa; }}
+        """)
+        gw_row.addWidget(gw_toggle_btn)
+
+        gw_test_btn = QPushButton("⚡ TEST")
+        gw_test_btn.setFixedSize(60, 24)
         gw_test_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
         gw_test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         gw_test_btn.setStyleSheet(f"""
@@ -2325,13 +2343,32 @@ class ProviderSettingsOverlay(QWidget):
         gw_row.addWidget(gw_test_btn)
         k_lay.addLayout(gw_row)
 
-        self._gemini_web_stat = QLabel("🟢 Built-in Web2API Ready (100% Free, No Key Required)")
+        _init_st = "🟢 Proxy Running on Port 8081 (100% Free, No Key Required)" if _proxy_is_running() else "⚪ Proxy Idle (Stopped — click Start to run manually)"
+        _init_clr = "#00ffaa" if _proxy_is_running() else C.TEXT_DIM
+        self._gemini_web_stat = QLabel(_init_st)
         self._gemini_web_stat.setFont(QFont("Courier New", 7))
-        self._gemini_web_stat.setStyleSheet("color: #00ffaa; padding-left: 2px;")
+        self._gemini_web_stat.setStyleSheet(f"color: {_init_clr}; padding-left: 2px;")
         k_lay.addWidget(self._gemini_web_stat)
         self._stat_labels["gemini-web"] = self._gemini_web_stat
 
+        def _on_proxy_toggle():
+            if _proxy_is_running():
+                _proxy_stop()
+                gw_toggle_btn.setText("▶ START PROXY")
+                self._gemini_web_stat.setText("⚪ Proxy Server Stopped (Port 8081 closed)")
+                self._gemini_web_stat.setStyleSheet(f"color: {C.TEXT_DIM}; padding-left: 2px;")
+            else:
+                _proxy_start(port=8081, silent=True)
+                gw_toggle_btn.setText("⏹ STOP PROXY")
+                self._gemini_web_stat.setText("🟢 Proxy Server Running on http://127.0.0.1:8081/v1")
+                self._gemini_web_stat.setStyleSheet("color: #00ffaa; padding-left: 2px;")
+
+        gw_toggle_btn.clicked.connect(_on_proxy_toggle)
+
         def _on_gemini_web_test():
+            if not _proxy_is_running():
+                _proxy_start(port=8081, silent=True)
+                gw_toggle_btn.setText("⏹ STOP PROXY")
             self._gemini_web_stat.setText("🟡 Testing local proxy connection...")
             self._gemini_web_stat.setStyleSheet("color: #ffaa00;")
             def _run():
@@ -3907,6 +3944,12 @@ class CustomizeOverlay(QWidget):
             self.on_hud_fx_preview(self._initial_hud_fx)
         self.hide()
 
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key.Key_Escape:
+            self._cancel()
+        else:
+            super().keyPressEvent(e)
+
     def _save(self):
         name = self._name_input.text().strip() or "JARVIS"
         user = self._user_input.text().strip()
@@ -4055,6 +4098,12 @@ class PluginManagerOverlay(QWidget):
         save_plugin_enabled(name, new_val)
         self._style_toggle(btn, new_val)
 
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key.Key_Escape:
+            self.hide()
+        else:
+            super().keyPressEvent(e)
+
 
 class _HudOverlay(QWidget):
     """Base for the floating panels placed by hand over the HUD.
@@ -4076,6 +4125,12 @@ class _HudOverlay(QWidget):
         if p is not None:
             p.update(self.geometry())
         super().closeEvent(e)
+
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key.Key_Escape:
+            self.hide()
+        else:
+            super().keyPressEvent(e)
 
 
 class ConfirmBanner(_HudOverlay):
@@ -4222,6 +4277,8 @@ class AudioDeviceOverlay(_HudOverlay):
             box.setFont(QFont("Courier New", 9))
             box.setFixedHeight(30)
             box.setStyleSheet(_combo_css)
+            box.setMaxVisibleItems(8)
+            box.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             # The list is served from a cache warmed on a background thread at
             # startup, so opening this panel never blocks the Qt thread on the
             # host audio API.
@@ -4292,6 +4349,12 @@ class AudioDeviceOverlay(_HudOverlay):
         # should not cost a reconnect.
         if changed:
             self.picked.emit()
+
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key.Key_Escape:
+            self.hide()
+        else:
+            super().keyPressEvent(e)
 
 
 class MemoryOverlay(_HudOverlay):
@@ -4702,6 +4765,8 @@ class PluginSettingsOverlay(QWidget):
                 w.addItems([str(o) for o in field.get("options", [])])
                 w.setFont(QFont("Courier New", 9))
                 w.setFixedHeight(30)
+                w.setMaxVisibleItems(8)
+                w.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
                 w.setStyleSheet(
                     f"QComboBox {{ background: #000d12; color: {C.TEXT}; "
                     f"border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 8px; }}"
@@ -4830,6 +4895,12 @@ class PluginSettingsOverlay(QWidget):
         lbl.setText(msg)
         color = C.PRI if ok else "#ff6b6b"
         lbl.setStyleSheet(f"color: {color}; background: transparent;")
+
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key.Key_Escape:
+            self.hide()
+        else:
+            super().keyPressEvent(e)
 
 
 class RemoteKeyOverlay(QWidget):
@@ -6906,6 +6977,9 @@ class MainWindow(QMainWindow):
     # ── Customization ────────────────────────────────────────────────────────────
 
     def _open_customize(self):
+        if self._customize_overlay and self._customize_overlay.isVisible():
+            self._customize_overlay.hide()
+            return
         cfg = _read_full_config()
         if self._customize_overlay:
             self._customize_overlay.hide()

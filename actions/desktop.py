@@ -24,9 +24,14 @@ def _get_base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 def _get_api_key() -> str:
-    path = _get_base_dir() / "config" / "api_keys.json"
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
+    try:
+        path = _get_base_dir() / "config" / "api_keys.json"
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f).get("gemini_api_key", "").strip()
+    except Exception:
+        pass
+    return ""
     
 def _get_desktop() -> Path:
     if _OS == "Linux":
@@ -102,10 +107,6 @@ def _execute_generated_code(code: str, player=None) -> str:
 
 
 def _ask_gemini_for_desktop_action(task: str) -> str:
-
-    from google import genai as _genai
-    _client = _genai.Client(api_key=_get_api_key())
-
     desktop = str(_get_desktop())
 
     os_specific = ""
@@ -142,8 +143,18 @@ Output ONLY the Python code. No explanation, no markdown, no backticks.
 Task: {task}"""
 
     try:
-        response = _client.models.generate_content(model="gemini-flash-latest", contents=prompt)
-        code = response.text.strip()
+        api_k = _get_api_key()
+        if api_k:
+            from google import genai as _genai
+            _client = _genai.Client(api_key=api_k)
+            response = _client.models.generate_content(model="gemini-flash-latest", contents=prompt)
+            code = (response.text or "").strip()
+        else:
+            from core.multi_llm import get_llm_model
+            _client = get_llm_model()
+            res = _client.generate_content(prompt)
+            code = (res.text or "").strip()
+
         if code.startswith("```"):
             lines = code.split("\n")
             code  = "\n".join(lines[1:-1]).strip()

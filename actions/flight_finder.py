@@ -19,8 +19,13 @@ API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
 
 def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
+    try:
+        if API_CONFIG_PATH.exists():
+            with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f).get("gemini_api_key", "").strip()
+    except Exception:
+        pass
+    return ""
 
 _MONTH_MAP: dict[str, int] = {
 

@@ -237,13 +237,45 @@ _OS_LAUNCHERS = {
     "Linux":   _launch_linux,
 }
 
+def list_running_apps() -> list[str]:
+    """Return a clean, sorted list of running user applications."""
+    if not _PSUTIL:
+        return ["psutil not installed"]
+    ignore = {
+        "system", "registry", "smss.exe", "csrss.exe", "wininit.exe", "services.exe",
+        "lsass.exe", "svchost.exe", "fontdrvhost.exe", "dwm.exe", "spoolsv.exe",
+        "conhost.exe", "sihost.exe", "taskhostw.exe", "explorer.exe", "ctfmon.exe",
+        "searchhost.exe", "startmenuexperiencehost.exe", "shellexperiencehost.exe",
+        "securityhealthservice.exe", "mpengine.dll", "aggregatorhost.exe",
+    }
+    user_apps = set()
+    for p in psutil.process_iter(['name']):
+        try:
+            n = (p.info.get('name') or "").strip()
+            if n and n.lower() not in ignore and not n.lower().startswith("dllhost"):
+                cleaned = n.replace(".exe", "").capitalize()
+                user_apps.add(cleaned)
+        except Exception:
+            pass
+    return sorted(list(user_apps))
+
+
 def open_app(
     parameters=None,
     response=None,
     player=None,
     session_memory=None,
 ) -> str:
-    app_name = (parameters or {}).get("app_name", "").strip()
+    params = parameters or {}
+    app_name = params.get("app_name", "").strip()
+    action = params.get("action", "open").strip().lower()
+
+    if action in ("list", "list_running", "running_apps") or app_name.lower() in ("list", "running", "all", "all apps", "running apps", "apps"):
+        apps = list_running_apps()
+        if not apps:
+            return "No running applications detected."
+        summary = ", ".join(apps[:20])
+        return f"Active applications currently running: {summary} ({len(apps)} apps active)."
 
     if not app_name:
         return "No application name provided."
@@ -276,13 +308,17 @@ def open_app(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "open_app",
-    "description": "Opens any application on the computer. Use this whenever the user asks to open, launch, or start any app, website, or program. Always call this tool — never just say you opened it.",
+    "description": "Opens any application on the computer, or lists active running applications. Use this whenever the user asks to open/launch an app or ask what apps are currently open/running.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "app_name": {
                 "type": "STRING",
-                "description": "Exact name of the application (e.g. 'WhatsApp', 'Chrome', 'Spotify')"
+                "description": "Exact name of the application (e.g. 'WhatsApp', 'Chrome', 'Spotify') or 'list' to see running apps."
+            },
+            "action": {
+                "type": "STRING",
+                "description": "'open' to launch an app, or 'list' to list all currently running applications."
             }
         },
         "required": [

@@ -74,19 +74,26 @@ try:
 except Exception:
     pass
 
-# Start Gemini Free Proxy (anonymous mode — no API key needed for flash models)
+# Start Gemini Free Proxy (anonymous mode — runs when in free mode or no key provided)
 try:
     import json as _json
     _cfg_path = Path(__file__).resolve().parent / "config" / "api_keys.json"
     _proxy_cfg = _json.loads(_cfg_path.read_text(encoding="utf-8")) if _cfg_path.exists() else {}
-    if _proxy_cfg.get("free_proxy_enabled", True):
+    _has_gemini_key = bool((_proxy_cfg.get("gemini_api_key") or "").strip())
+    _preferred_prov = (_proxy_cfg.get("preferred_llm_provider") or "gemini").lower().strip()
+
+    # If user has no Gemini key or explicitly chose gemini-web proxy, auto-start proxy:
+    _auto_start = (not _has_gemini_key) or (_preferred_prov == "gemini-web")
+    if _auto_start and _proxy_cfg.get("free_proxy_enabled", True):
         from core.gemini_free_proxy import start_proxy as _start_proxy
         _port = int(_proxy_cfg.get("free_proxy_port", 8081))
         _started = _start_proxy(port=_port, silent=True)
         if _started:
             print(f"[JARVIS] Gemini Free Proxy started on port {_port} (anonymous mode)")
+    else:
+        print("[JARVIS] Gemini Free Proxy idle (Official API Key active — background web server paused)")
 except Exception as _e:
-    print(f"[JARVIS] Free proxy start skipped: {_e}")
+    print(f"[JARVIS] Free proxy startup check: {_e}")
 
 from ui import JarvisUI
 from memory.memory_manager import (
@@ -161,8 +168,13 @@ def _pcm_level(samples) -> float:
 
 
 def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
+    try:
+        if API_CONFIG_PATH.exists():
+            with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f).get("gemini_api_key", "").strip()
+    except Exception:
+        pass
+    return ""
 
 
 def _load_system_prompt() -> str:
@@ -740,6 +752,28 @@ class JarvisLive:
             self.ui.write_log("SYS: Camera stream stopped.")
             self.speak("कैमरा स्ट्रीम बंद कर दी गई है।")
             return
+
+        # Running applications inspection intent
+        is_apps_query = any(w in t_clean for w in (
+            "apps dekho", "all apps", "all apps dekho", "running apps",
+            "kaun se app chal rahe hain", "kaunse apps chal rahe hain",
+            "apps dikhao", "open apps", "active apps", "list apps",
+            "kya khula hai", "kya chal raha hai computer me", "computer me kya chal raha hai"
+        ))
+        if is_apps_query:
+            try:
+                from actions.open_app import list_running_apps
+                apps = list_running_apps()
+                if apps:
+                    top_apps = ", ".join(apps[:12])
+                    msg = f"अभी आपके सिस्टम पर {len(apps)} ऐप्स सक्रिय हैं, जिनमें मुख्य रूप से {top_apps} शामिल हैं।"
+                else:
+                    msg = "सिस्टम पर कोई मुख्य यूजर एप्लिकेशन नहीं मिला।"
+                self.ui.write_log(f"{self._asst_name}: {msg}")
+                self.speak(msg)
+                return
+            except Exception as _ae:
+                print(f"[AppsQuery] {_ae}")
 
         if is_vision_query:
             is_screen = any(w in t_clean for w in ("screen", "display", "monitor"))
