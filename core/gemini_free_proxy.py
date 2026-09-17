@@ -205,6 +205,7 @@ def _gemini_stream_generate(prompt: str, model_id: int, think_mode: int) -> str:
 
 
 def _parse_response(raw: str) -> str:
+    candidates = []
     try:
         lines = raw.split("\n")
         for line in lines:
@@ -220,20 +221,22 @@ def _parse_response(raw: str) -> str:
                     inner = json.loads(inner_str)
                     try:
                         text = inner[4][0][1][0]
-                        if text and isinstance(text, str):
-                            return text.strip()
+                        if text and isinstance(text, str) and text.strip():
+                            candidates.append(text.strip())
                     except (IndexError, TypeError, KeyError):
                         pass
                     try:
                         candidate = inner[0][0]
-                        if candidate and isinstance(candidate, str) and len(candidate) > 2:
-                            return candidate.strip()
+                        if candidate and isinstance(candidate, str) and len(candidate.strip()) > 3:
+                            candidates.append(candidate.strip())
                     except (IndexError, TypeError):
                         pass
             except (json.JSONDecodeError, IndexError, TypeError):
                 continue
     except Exception:
         pass
+    if candidates:
+        return max(candidates, key=len)
     matches = re.findall(r'"([^"]{10,})"', raw)
     if matches:
         return max(matches, key=len)

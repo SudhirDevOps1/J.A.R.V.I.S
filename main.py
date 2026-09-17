@@ -409,7 +409,11 @@ def _keep_context_of(exc: BaseException) -> bool:
 class JarvisLive:
     def __init__(self, ui: JarvisUI):
         self.ui             = ui
-        self._asst_name     = "JARVI    S"   # updated each session from config
+        try:
+            from memory.config_manager import get_assistant_name
+            self._asst_name = (get_assistant_name() or "JARVIS").strip()
+        except Exception:
+            self._asst_name = "JARVIS"
         self.session              = None
         self.audio_in_queue       = None
         self.out_queue            = None
