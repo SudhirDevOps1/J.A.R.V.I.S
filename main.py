@@ -1539,12 +1539,14 @@ class JarvisLive:
                             txt = _clean_transcript(sc.output_transcription.text)
                             if txt and txt != (out_buf[-1] if out_buf else ""):
                                 out_buf.append(txt)
+                                self.ui.stream_log_chunk(self._asst_name, txt, is_final=False)
 
                         if sc.input_transcription and sc.input_transcription.text:
                             txt = _clean_transcript(sc.input_transcription.text)
                             if txt:
                                 in_buf.append(txt)
                                 self._last_user_speech = time.monotonic()
+                                self.ui.stream_log_chunk("You", txt, is_final=False)
 
                         if sc.turn_complete:
                             if self._turn_done_event:
@@ -1554,13 +1556,14 @@ class JarvisLive:
                             # flag and skip all further processing for that turn.
                             if self._interrupted:
                                 self._interrupted = False
+                                self.ui.stream_log_chunk(self._asst_name, "", is_final=True)
                                 in_buf  = []
                                 out_buf = []
                                 continue
 
                             full_in = " ".join(in_buf).strip()
                             if full_in:
-                                self.ui.write_log(f"You: {full_in}")
+                                self.ui.stream_log_chunk("You", "", is_final=True)
                                 self._session_log.append(f"User: {full_in}")
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
@@ -1572,7 +1575,7 @@ class JarvisLive:
 
                             full_out = " ".join(out_buf).strip()
                             if full_out:
-                                self.ui.write_log(f"{self._asst_name}: {full_out}")
+                                self.ui.stream_log_chunk(self._asst_name, "", is_final=True)
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({

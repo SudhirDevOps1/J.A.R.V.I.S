@@ -90,20 +90,54 @@ def _restore_from_trash(original: Path) -> str:
             f"automatically, but it is there and can be restored by hand.")
 
 
-_SAFE_ROOTS: list[Path] = [
-    Path.home(),
-]
+# Critical OS roots protected strictly against destructive deletion or corruption
+_CRITICAL_OS_ROOTS: list[Path] = []
+try:
+    if _OS == "Windows":
+        _CRITICAL_OS_ROOTS = [
+            Path(os.environ.get("SystemRoot", "C:\\Windows")).resolve(),
+            Path(os.environ.get("ProgramFiles", "C:\\Program Files")).resolve(),
+            Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")).resolve(),
+            Path("C:\\Recovery").resolve(),
+            Path("C:\\System Volume Information").resolve(),
+        ]
+    else:
+        _CRITICAL_OS_ROOTS = [
+            Path("/bin").resolve(),
+            Path("/sbin").resolve(),
+            Path("/usr/bin").resolve(),
+            Path("/etc").resolve(),
+            Path("/sys").resolve(),
+            Path("/proc").resolve(),
+        ]
+except Exception:
+    pass
 
-def _is_safe_path(target: Path) -> bool:
-    """Is the given path inside _SAFE_ROOTS? If not, reject the operation."""
+def _is_safe_path(target: Path, write: bool = False) -> bool:
+    """Validate path safety.
+    - Read-only operations are authorized across ALL local system drives and directories (C:, D:, E:, etc.).
+    - Write/Delete operations are protected from deleting OS system roots or drive anchors directly.
+    """
     try:
         resolved = target.resolve()
-        return any(
-            resolved == root.resolve() or resolved.is_relative_to(root.resolve())
-            for root in _SAFE_ROOTS
-        )
+        if not write:
+            return True
+
+        # Never permit modifying or deleting an entire drive root directly e.g. "C:\"
+        if resolved == Path(resolved.anchor):
+            return False
+
+        # Prevent writing or deleting in critical OS directories
+        for root in _CRITICAL_OS_ROOTS:
+            try:
+                if resolved == root or resolved.is_relative_to(root):
+                    return False
+            except Exception:
+                continue
+
+        return True
     except Exception:
-        return False
+        return not write
 
 def _get_desktop() -> Path:
     if _OS == "Linux":
@@ -149,19 +183,37 @@ def _get_videos() -> Path:
 
 
 def _resolve_path(raw: str) -> Path:
+    import tempfile
     shortcuts: dict[str, Path] = {
-        "desktop":   _get_desktop(),
-        "downloads": _get_downloads(),
-        "documents": _get_documents(),
-        "pictures":  _get_pictures(),
-        "music":     _get_music(),
-        "videos":    _get_videos(),
-        "home":      Path.home(),
+        "desktop":      _get_desktop(),
+        "downloads":    _get_downloads(),
+        "documents":    _get_documents(),
+        "pictures":     _get_pictures(),
+        "music":        _get_music(),
+        "videos":       _get_videos(),
+        "home":         Path.home(),
+        "temp":         Path(tempfile.gettempdir()),
+        "appdata":      Path(os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming"))),
+        "localappdata": Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))),
+        "c":            Path("C:\\"),
+        "c:":           Path("C:\\"),
+        "c drive":      Path("C:\\"),
+        "d":            Path("D:\\"),
+        "d:":           Path("D:\\"),
+        "d drive":      Path("D:\\"),
+        "e":            Path("E:\\"),
+        "e:":           Path("E:\\"),
+        "e drive":      Path("E:\\"),
+        "all":          Path(Path.home().anchor or "C:\\"),
+        "root":         Path(Path.home().anchor or "C:\\"),
     }
-    lower = raw.strip().lower()
+    raw_s = (raw or "").strip()
+    lower = raw_s.lower()
     if lower in shortcuts:
         return shortcuts[lower]
-    return Path(raw).expanduser()
+    if len(raw_s) == 2 and raw_s[1] == ":":
+        return Path(raw_s.upper() + "\\")
+    return Path(raw_s).expanduser()
 
 def _format_size(b: int) -> str:
     for unit in ["B", "KB", "MB", "GB", "TB"]:
@@ -217,7 +269,7 @@ def create_file(path: str, name: str = "", content: str = "") -> str:
     try:
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
+        if not _is_safe_path(target, write=True):
             return f"Access denied: {target}"
         target.parent.mkdir(parents=True, exist_ok=True)
         existed = target.exists()
@@ -239,7 +291,7 @@ def create_folder(path: str, name: str = "") -> str:
     try:
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
+        if not _is_safe_path(target, write=True):
             return f"Access denied: {target}"
         already = target.exists()
         target.mkdir(parents=True, exist_ok=True)
@@ -257,12 +309,12 @@ def delete_file(path: str, name: str = "") -> str:
     try:
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
-            return f"Access denied: {target}"
+        if not _is_safe_path(target, write=True):
+            return f"Access denied (protected system directory): {target}"
         if not target.exists():
             return f"Not found: {target.name}"
 
-        # Safe-directory check — protect critical user folders
+        # Safe-directory check — protect critical user root folders
         protected = {
             _get_desktop(), _get_downloads(), _get_documents(),
             _get_pictures(), _get_music(), _get_videos(), Path.home()
@@ -293,9 +345,9 @@ def move_file(path: str, name: str = "", destination: str = "") -> str:
             return f"Source not found: {src.name}"
         if dst is None:
             return "No destination specified."
-        if not _is_safe_path(src):
+        if not _is_safe_path(src, write=True):
             return f"Access denied (source): {src}"
-        if not _is_safe_path(dst):
+        if not _is_safe_path(dst, write=True):
             return f"Access denied (destination): {dst}"
 
         if dst.is_dir():
@@ -322,9 +374,9 @@ def copy_file(path: str, name: str = "", destination: str = "") -> str:
             return f"Source not found: {src.name}"
         if dst is None:
             return "No destination specified."
-        if not _is_safe_path(src):
+        if not _is_safe_path(src, write=False):
             return f"Access denied (source): {src}"
-        if not _is_safe_path(dst):
+        if not _is_safe_path(dst, write=True):
             return f"Access denied (destination): {dst}"
 
         if dst.is_dir():
@@ -359,7 +411,7 @@ def rename_file(path: str, name: str = "", new_name: str = "") -> str:
     try:
         base     = _resolve_path(path)
         target   = (base / name) if name else base
-        if not _is_safe_path(target):
+        if not _is_safe_path(target, write=True):
             return f"Access denied: {target}"
         if not target.exists():
             return f"Not found: {target.name}"
@@ -384,7 +436,7 @@ def read_file(path: str, name: str = "", max_chars: int = 4000) -> str:
     try:
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
+        if not _is_safe_path(target, write=False):
             return f"Access denied: {target}"
         if not target.exists():
             return f"File not found: {target.name}"
@@ -405,7 +457,7 @@ def write_file(path: str, name: str = "", content: str = "",
     try:
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
+        if not _is_safe_path(target, write=True):
             return f"Access denied: {target}"
         target.parent.mkdir(parents=True, exist_ok=True)
 
@@ -441,7 +493,7 @@ def find_files(name: str = "", extension: str = "",
                path: str = "home", max_results: int = 20) -> str:
     try:
         search_path = _resolve_path(path)
-        if not _is_safe_path(search_path):
+        if not _is_safe_path(search_path, write=False):
             return f"Access denied: {search_path}"
         if not search_path.exists():
             return f"Search path not found: {path}"
@@ -478,29 +530,72 @@ def find_files(name: str = "", extension: str = "",
 
 
 def get_largest_files(path: str = "downloads", count: int = 10) -> str:
-    count = min(count, 50)  # maksimum 50
+    count = min(count, 50)
     try:
         search_path = _resolve_path(path)
-        if not _is_safe_path(search_path):
+        if not _is_safe_path(search_path, write=False):
             return f"Access denied: {search_path}"
         if not search_path.exists():
             return f"Path not found: {path}"
 
         files = []
-        for item in search_path.rglob("*"):
-            if item.is_file():
+        is_root = False
+        try:
+            is_root = (search_path.resolve() == Path(search_path.resolve().anchor))
+        except Exception:
+            is_root = False
+
+        if is_root:
+            dirs_to_check = [
+                Path.home() / "Downloads",
+                Path.home() / "Videos",
+                Path.home() / "Documents",
+                Path.home() / "Desktop",
+            ]
+            for d in dirs_to_check:
+                if d.exists() and d.is_dir():
+                    try:
+                        for root, subdirs, filenames in os.walk(d):
+                            subdirs[:] = [s for s in subdirs if not s.startswith(".") and s.lower() not in ("windows", "appdata", "system volume information", "$recycle.bin", ".git", "node_modules", "venv", ".venv")]
+                            try:
+                                depth = len(Path(root).relative_to(d).parts)
+                                if depth >= 2:
+                                    subdirs.clear()
+                            except Exception:
+                                pass
+                            for fn in filenames:
+                                fp = Path(root) / fn
+                                try:
+                                    sz = fp.stat().st_size
+                                    if sz > 5 * 1024 * 1024:  # > 5MB
+                                        files.append((sz, fp))
+                                except Exception:
+                                    continue
+                    except Exception:
+                        continue
+        else:
+            for root, subdirs, filenames in os.walk(search_path):
+                subdirs[:] = [s for s in subdirs if not s.startswith(".") and s.lower() not in (".git", "node_modules", "venv", ".venv")]
                 try:
-                    files.append((item.stat().st_size, item))
+                    depth = len(Path(root).relative_to(search_path).parts)
+                    if depth >= 3:
+                        subdirs.clear()
                 except Exception:
-                    continue
+                    pass
+                for fn in filenames:
+                    fp = Path(root) / fn
+                    try:
+                        files.append((fp.stat().st_size, fp))
+                    except Exception:
+                        continue
 
         files.sort(reverse=True)
         top = files[:count]
 
         if not top:
-            return "No files found."
+            return f"No large files found in {search_path}."
 
-        lines = [f"Top {len(top)} largest files in {search_path.name}/:"]
+        lines = [f"Top {len(top)} largest files in {search_path}:"]
         for size, f in top:
             lines.append(f"  {_format_size(size):>10}  {f.name}  ({f.parent})")
 
@@ -510,30 +605,68 @@ def get_largest_files(path: str = "downloads", count: int = 10) -> str:
         return f"Error: {e}"
 
 
+def _get_folder_size(folder: Path, max_depth: int = 1) -> int:
+    total = 0
+    if not folder.exists():
+        return 0
+    try:
+        for root, dirs, files in os.walk(folder):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d.lower() not in (".git", "node_modules", "venv", ".venv")]
+            try:
+                depth = len(Path(root).relative_to(folder).parts)
+                if depth >= max_depth:
+                    dirs.clear()
+            except Exception:
+                pass
+            for f in files:
+                try:
+                    total += (Path(root) / f).stat().st_size
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return total
+
+
 def get_disk_usage(path: str = "all") -> str:
+    lines = []
     try:
         from core.system_info import get_drive_stats
         drives = get_drive_stats()
         if drives:
-            lines = ["Storage Drive Analysis:"]
+            lines.append("Storage Drive Status:")
             for d in drives:
                 lines.append(
-                    f"  Drive {d['letter']} → Total: {d['total_gb']} GB | Used: {d['used_gb']} GB ({d['percent']}%) | Free: {d['free_gb']} GB"
+                    f"  Drive {d['letter']} -> Total: {d['total_gb']} GB | Used: {d['used_gb']} GB ({d['percent']}%) | Free: {d['free_gb']} GB"
                 )
-            return "\n".join(lines)
     except Exception:
         pass
 
     try:
         target = _resolve_path(path if path != "all" else "home")
-        usage  = shutil.disk_usage(target)
-        pct    = usage.used / usage.total * 100
-        return (
-            f"Disk usage ({target}):\n"
-            f"  Total : {_format_size(usage.total)}\n"
-            f"  Used  : {_format_size(usage.used)} ({pct:.1f}%)\n"
-            f"  Free  : {_format_size(usage.free)}"
-        )
+        if target.exists():
+            usage = shutil.disk_usage(target)
+            pct   = usage.used / usage.total * 100
+            if not lines:
+                lines.append(
+                    f"Disk usage ({target}): Total {_format_size(usage.total)} | Used {_format_size(usage.used)} ({pct:.1f}%) | Free {_format_size(usage.free)}"
+                )
+
+        import tempfile
+        lines.append("\nTop Space Consumers (User Data & Caches):")
+        check_folders = [
+            ("Downloads", Path.home() / "Downloads"),
+            ("Videos", Path.home() / "Videos"),
+            ("Documents", Path.home() / "Documents"),
+            ("Desktop", Path.home() / "Desktop"),
+            ("Temp Cache", Path(tempfile.gettempdir())),
+        ]
+        for fname, folder in check_folders:
+            if folder.exists():
+                sz = _get_folder_size(folder, max_depth=1)
+                lines.append(f"  - {fname}: {_format_size(sz)}")
+
+        return "\n".join(lines)
     except Exception as e:
         return f"Could not get disk usage: {e}"
 
@@ -625,7 +758,7 @@ def get_file_info(path: str, name: str = "") -> str:
     try:
         base   = _resolve_path(path)
         target = (base / name) if name else base
-        if not _is_safe_path(target):
+        if not _is_safe_path(target, write=False):
             return f"Access denied: {target}"
         if not target.exists():
             return f"Not found: {target.name}"
@@ -705,7 +838,7 @@ def file_controller(
                 count=int(params.get("count", 10)),
             )
 
-        elif action == "disk_usage":
+        elif action in ("disk_usage", "storage", "analyze_storage"):
             return get_disk_usage(path)
 
         elif action == "organize_desktop":
@@ -724,17 +857,17 @@ def file_controller(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "file_controller",
-    "description": "Manages files and folders: list, create, delete, move, copy, rename, read, write, find, disk usage.",
+    "description": "Manages files, folders, and storage: list, create, delete, move, copy, rename, read, write, find, largest, disk_usage, analyze_storage.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"
+                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | analyze_storage | organize_desktop | info"
             },
             "path": {
                 "type": "STRING",
-                "description": "File/folder path or shortcut: desktop, downloads, documents, home"
+                "description": "File/folder path or shortcut: desktop, downloads, documents, home, c:, d:, temp"
             },
             "destination": {
                 "type": "STRING",

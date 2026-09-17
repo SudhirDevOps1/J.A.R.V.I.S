@@ -1379,6 +1379,9 @@ class LogWidget(QTextEdit):
         self._last_raw = ""
         self._repeat_cnt = 1
         self._ai_name_lc = "jarvis"   # updated when assistant name changes
+        self._streaming_active: bool = False
+        self._streaming_speaker: str = ""
+        self._streaming_has_content: bool = False
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._sig.connect(self._enqueue)
@@ -1386,12 +1389,98 @@ class LogWidget(QTextEdit):
     def append_log(self, text: str):
         self._sig.emit(text)
 
+    def stream_log_chunk(self, speaker: str, chunk: str, is_final: bool = False):
+        """Display live spoken speech tokens directly in the HUD sidebar in real time."""
+        try:
+            # If typewriter is currently animating an old line, flush it immediately so live audio is not held back
+            if self._typing:
+                self._tmr.stop()
+                if self._pos < len(self._text):
+                    rem = self._text[self._pos:]
+                    cur = self.textCursor()
+                    cur.movePosition(cur.MoveOperation.End)
+                    fmt = cur.charFormat()
+                    col = {
+                        "you":  qcol(C.WHITE),
+                        "ai":   qcol(C.PRI),
+                        "err":  qcol(C.RED),
+                        "file": qcol(C.GREEN),
+                        "sys":  qcol(C.ACC2),
+                    }.get(self._tag, qcol(C.TEXT))
+                    fmt.setForeground(QBrush(col))
+                    cur.insertText(rem + "\n", fmt)
+                    self.setTextCursor(cur)
+                    self.ensureCursorVisible()
+                self._typing = False
+                self._text = ""
+                self._pos = 0
+
+            # If not currently in active streaming mode, start line with speaker prefix
+            if not self._streaming_active:
+                if not chunk and is_final:
+                    return
+                spk = (speaker or "").strip()
+                spk_lower = spk.lower()
+                is_user = spk_lower == "you" or spk_lower.startswith("user")
+                col = qcol(C.WHITE) if is_user else qcol(C.PRI)
+                pfx = "You: " if is_user else f"{spk}: "
+
+                cur = self.textCursor()
+                cur.movePosition(cur.MoveOperation.End)
+                fmt = cur.charFormat()
+                fmt.setForeground(QBrush(col))
+                cur.insertText(pfx, fmt)
+                self.setTextCursor(cur)
+                self.ensureCursorVisible()
+
+                self._streaming_active = True
+                self._streaming_speaker = spk
+                self._streaming_has_content = False
+
+            # Insert chunk text if present
+            if chunk:
+                cur = self.textCursor()
+                cur.movePosition(cur.MoveOperation.End)
+                fmt = cur.charFormat()
+                spk_lower = (self._streaming_speaker or "").strip().lower()
+                is_user = spk_lower == "you" or spk_lower.startswith("user")
+                col = qcol(C.WHITE) if is_user else qcol(C.PRI)
+                fmt.setForeground(QBrush(col))
+
+                clean_chunk = chunk
+                if self._streaming_has_content and not clean_chunk.startswith((" ", ",", ".", "!", "?", ":", ";", "'", "\n")):
+                    clean_chunk = " " + clean_chunk
+
+                cur.insertText(clean_chunk, fmt)
+                self.setTextCursor(cur)
+                self.ensureCursorVisible()
+                self._streaming_has_content = True
+
+            # Finalize turn
+            if is_final:
+                if self._streaming_active:
+                    cur = self.textCursor()
+                    cur.movePosition(cur.MoveOperation.End)
+                    cur.insertText("\n")
+                    self.setTextCursor(cur)
+                    self.ensureCursorVisible()
+                self._streaming_active = False
+                self._streaming_speaker = ""
+                self._streaming_has_content = False
+                if self._queue and not self._typing:
+                    self._next()
+        except Exception as e:
+            print(f"[ActivityLog] stream error: {e}")
+
     def clear_log(self):
         self._queue.clear()
         self._typing = False
         self._text = ""
         self._pos = 0
         self._last_raw = ""
+        self._streaming_active = False
+        self._streaming_speaker = ""
+        self._streaming_has_content = False
         self.clear()
 
     def _enqueue(self, text: str):
@@ -5133,6 +5222,7 @@ class RemoteKeyOverlay(QWidget):
 
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
+    _stream_log_sig = pyqtSignal(str, str, bool)   # (speaker, chunk, is_final) — live real-time speech streaming
     _state_sig      = pyqtSignal(str)
     _content_sig    = pyqtSignal(str, str)   # (title, text) — thread-safe content display
     _reconfig_sig   = pyqtSignal()           # trigger setup overlay from any thread
@@ -5319,6 +5409,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(1500, self._rotate_news_ticker)
 
         self._log_sig.connect(self._log.append_log)
+        self._stream_log_sig.connect(self._log.stream_log_chunk)
         self._state_sig.connect(self._apply_state)
         self._content_sig.connect(self._show_content)
         self._reconfig_sig.connect(self._show_setup)
@@ -7499,6 +7590,13 @@ class JarvisUI:
 
     def write_log(self, text: str):
         self._win._log_sig.emit(text)
+
+    def stream_log_chunk(self, speaker: str, chunk: str, is_final: bool = False):
+        """Thread-safe: stream spoken tokens live to the HUD sidebar while speech occurs."""
+        try:
+            self._win._stream_log_sig.emit(speaker, chunk, is_final)
+        except Exception:
+            pass
 
     def wait_for_api_key(self):
         while not self._win._ready:
