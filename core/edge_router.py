@@ -156,7 +156,8 @@ class NeedleToolRouter:
                 r"\b(gaana|gana|song|music|track|naghma|dhun|qawwali|ghazal"
                 r"|baja\s*do|baja|bajao|play|chala\s*do|chala|chalao"
                 r"|lagao|laga\s*do|laga|start|sun|suno|suna"
-                r"|zara|yaar|bhai|sir|please|koi|ek|mujhe|mera|meri|acha|accha|kuch)\b",
+                r"|zara|yaar|bhai|sir|please|koi|ek|mujhe|mera|meri|acha|accha|kuch"
+                r"|kro|kar|karo|do|de)\b",
                 "", clean
             ).strip(" ,.-'\"")
             # Also strip possessives like "arijit ka" -> keep "arijit"
@@ -266,7 +267,8 @@ class LFMChatEngine:
                 r"\b(gaana|gana|song|music|audio|track|naghma|dhun|qawwali|ghazal"
                 r"|baja\s*do|baja|bajao|play|chala\s*do|chala|chalao"
                 r"|lagao|laga\s*do|laga|start|sun|suno"
-                r"|zara|yaar|bhai|sir|please|koi|ek|mujhe|mera|meri|acha|accha)\b",
+                r"|zara|yaar|bhai|sir|please|koi|ek|mujhe|mera|meri|acha|accha"
+                r"|kro|kar|karo|do|de)\b",
                 "", clean
             ).strip(" ,.-'\"")
             song_q = re.sub(r"\bka\b|\bki\b|\bke\b|\bne\b", "", song_q).strip(" ,.-")

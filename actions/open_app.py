@@ -267,7 +267,8 @@ def open_app(
     session_memory=None,
 ) -> str:
     params = parameters or {}
-    app_name = params.get("app_name", "").strip()
+    # Support both "app_name" (Gemini Cloud) and "name" (Needle 2) keys
+    app_name = (params.get("app_name") or params.get("name") or "").strip()
     action = params.get("action", "open").strip().lower()
 
     if action in ("list", "list_running", "running_apps") or app_name.lower() in ("list", "running", "all", "all apps", "running apps", "apps"):

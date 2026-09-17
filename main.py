@@ -690,7 +690,7 @@ class JarvisLive:
         # Respect wake-word sleep: a typed command must not be answered while
         # asleep either (the sleep gate is not just for the mic). Wake first with
         # "Hey Jarvis" or the WAKE NOW button.
-        if self._wake_enabled and not self._awake:
+        if getattr(self, "_wake_enabled", False) and not getattr(self, "_awake", True):
             self.ui.write_log("SYS: I'm asleep — say 'Hey Jarvis' or tap WAKE NOW first.")
             return
 
