@@ -27,8 +27,15 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 # Fix Windows aiodns DNS resolution issues in aiohttp / edge_tts
 try:
+    import aiohttp
     import aiohttp.connector
     aiohttp.connector.DefaultResolver = aiohttp.ThreadedResolver
+    _orig_tcp_init = aiohttp.TCPConnector.__init__
+    def _patched_tcp_init(self, *args, **kwargs):
+        if "resolver" not in kwargs or kwargs["resolver"] is None:
+            kwargs["resolver"] = aiohttp.ThreadedResolver()
+        _orig_tcp_init(self, *args, **kwargs)
+    aiohttp.TCPConnector.__init__ = _patched_tcp_init
 except Exception:
     pass
 

@@ -394,12 +394,11 @@ def save_edge_voice(voice: str) -> None:
 
 
 def get_edge_pitch() -> str:
-    """Return configured voice pitch (e.g. '+8Hz', '+14Hz', '-8Hz', '+0Hz').
-    Defaults to '+8Hz' for companion (GF mode) for sweet, warm natural tone, and '+0Hz' otherwise."""
+    """Return configured voice pitch (e.g. '+0Hz', '+5Hz', '-5Hz'). Default is '+0Hz' for natural human tone."""
     cfg_pitch = (load_api_keys().get("edge_pitch") or "").strip()
     if cfg_pitch:
         return cfg_pitch
-    return "+8Hz" if get_persona_mode() == "companion" else "+0Hz"
+    return "+0Hz"
 
 
 def save_edge_pitch(pitch: str) -> None:
