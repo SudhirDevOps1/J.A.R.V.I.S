@@ -2,11 +2,13 @@
 Multi-Provider LLM Engine for SudhirDevOps1 AI.
 
 Supports:
+  0. Gemini Web (FREE, Anonymous) -> free_proxy_enabled: true [NO API KEY NEEDED]
   1. Groq (Ultra-fast Llama 3.3 70B, zero 503s) -> groq_api_key
   2. OpenRouter (DeepSeek R1/V3, Claude 3.5, Llama 3.3) -> openrouter_api_key
   3. DeepSeek Direct API -> deepseek_api_key
   4. Custom OpenAI-Compatible Endpoints (Ollama, LM Studio, vLLM, LocalAI) -> custom_llm_url, custom_llm_api_key, custom_llm_model
-  5. Google Gemini (gemini-2.5-flash with auto-fallback to flash-lite) -> gemini_api_key
+  5. Google Gemini API (with multi-key rotation) -> gemini_api_key / gemini_api_keys[]
+  6. Smart LLM Cache (SQLite) -> llm_cache_enabled: true
 """
 import json
 import os
@@ -15,6 +17,29 @@ import time
 from pathlib import Path
 
 import requests
+
+# ─── Optional free proxy + cache ─────────────────────────────────────────────
+try:
+    from core.gemini_free_proxy import is_running as _proxy_is_running, get_url as _proxy_url
+    _HAS_FREE_PROXY = True
+except ImportError:
+    _HAS_FREE_PROXY = False
+    def _proxy_is_running(): return False
+    def _proxy_url(): return "http://127.0.0.1:8081/v1"
+
+try:
+    from core.llm_cache import get as _cache_get, set as _cache_set, TTL as _TTL
+    _HAS_CACHE = True
+except ImportError:
+    _HAS_CACHE = False
+    def _cache_get(p, prov=""): return None
+    def _cache_set(p, r, ttl, prov=""): pass
+    class _TTL:
+        NO_CACHE = 0; NEWS = 1800; WEATHER = 600; SEARCH = 900; GENERAL = 0; FACTS = 3600
+
+# Round-robin index for multi-key Gemini rotation (module-level, shared across instances)
+_gemini_key_index = 0
+_gemini_key_lock = __import__("threading").Lock()
 
 
 def get_base_dir() -> Path:
@@ -48,16 +73,37 @@ class MultiLLMClient:
         self.groq_key = cfg.get("groq_api_key", "").strip()
         self.openrouter_key = cfg.get("openrouter_api_key", "").strip()
         self.deepseek_key = cfg.get("deepseek_api_key", "").strip()
-        
+
         # Custom endpoint support (e.g. Ollama http://localhost:11434/v1, LM Studio, vLLM)
         self.custom_url = (cfg.get("custom_llm_url") or cfg.get("openai_url") or "").strip()
         self.custom_key = (cfg.get("custom_llm_api_key") or cfg.get("openai_api_key") or "dummy-key").strip()
         self.custom_model = cfg.get("custom_llm_model") or "llama3.2"
 
+        # ── Free proxy (gemini-web anonymous mode) ────────────────────────────
+        self.free_proxy_enabled = cfg.get("free_proxy_enabled", True)
+        self.free_proxy_port = int(cfg.get("free_proxy_port", 8081))
+        self.free_proxy_model = cfg.get("free_proxy_model", "gemini-3.7-flash")
+
+        # ── Multi-key Gemini rotation ─────────────────────────────────────────
+        # Supports both single key (gemini_api_key) and key pool (gemini_api_keys: [])
+        _pool = cfg.get("gemini_api_keys", [])
+        if isinstance(_pool, list):
+            _pool = [k.strip() for k in _pool if k.strip()]
+        else:
+            _pool = []
+        if self.gemini_key and self.gemini_key not in _pool:
+            _pool.insert(0, self.gemini_key)
+        self.gemini_key_pool = _pool
+
+        # ── Cache settings ────────────────────────────────────────────────────
+        self.cache_enabled = _HAS_CACHE and cfg.get("llm_cache_enabled", True)
+
         # Determine active provider
         self.provider = (preferred_provider or cfg.get("preferred_llm_provider", "")).lower().strip()
         if not self.provider:
-            if self.groq_key:
+            if self.free_proxy_enabled and _proxy_is_running():
+                self.provider = "gemini-web"
+            elif self.groq_key:
                 self.provider = "groq"
             elif self.openrouter_key:
                 self.provider = "openrouter"
@@ -70,9 +116,61 @@ class MultiLLMClient:
 
         self.model = model
 
-    def generate_content(self, prompt: str) -> LLMResponse:
-        """Universal generate_content interface matching Gemini / OpenAI API."""
+    def _next_gemini_key(self) -> str:
+        """Round-robin through the Gemini API key pool. Returns empty string if pool empty."""
+        global _gemini_key_index
+        if not self.gemini_key_pool:
+            return ""
+        with _gemini_key_lock:
+            key = self.gemini_key_pool[_gemini_key_index % len(self.gemini_key_pool)]
+            _gemini_key_index += 1
+        return key
+
+    def generate_content(self, prompt: str, cache_ttl: int = 0) -> LLMResponse:
+        """
+        Universal generate_content interface matching Gemini / OpenAI API.
+
+        Args:
+            prompt: Text prompt to send to the LLM.
+            cache_ttl: Cache time-to-live in seconds. 0 = no cache.
+                       Use TTL constants from core.llm_cache: TTL.NEWS, TTL.WEATHER, etc.
+        """
         prompt = str(prompt)
+
+        # ── Cache check (before any API call) ─────────────────────────────────
+        if self.cache_enabled and cache_ttl > 0:
+            cached = _cache_get(prompt, self.provider)
+            if cached is not None:
+                return LLMResponse(cached)
+
+        # ── Helper to save result to cache ────────────────────────────────────
+        def _maybe_cache(result: LLMResponse) -> LLMResponse:
+            if self.cache_enabled and cache_ttl > 0 and result.text:
+                _cache_set(prompt, result.text, cache_ttl, self.provider)
+            return result
+
+        # ── 0. Gemini-Web Free Proxy (Anonymous, no API key needed) ───────────
+        if self.free_proxy_enabled and _proxy_is_running():
+            model = self.model or self.free_proxy_model
+            endpoint = f"http://127.0.0.1:{self.free_proxy_port}/v1/chat/completions"
+            try:
+                res = requests.post(
+                    endpoint,
+                    headers={"Authorization": "Bearer none", "Content-Type": "application/json"},
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.3,
+                    },
+                    timeout=90,
+                )
+                if res.status_code == 200:
+                    out = res.json()["choices"][0]["message"]["content"]
+                    return _maybe_cache(LLMResponse(out))
+                else:
+                    print(f"[MultiLLM] GeminiWeb HTTP {res.status_code}: {res.text[:120]} — falling back")
+            except Exception as e:
+                print(f"[MultiLLM] GeminiWeb proxy error: {e} — falling back")
 
         # 1. Custom Provider (Ollama / LM Studio / LocalAI / Private Endpoints)
         if (self.provider in ("custom", "openai", "local", "ollama")) and self.custom_url:
@@ -80,6 +178,7 @@ class MultiLLMClient:
             endpoint = self.custom_url.rstrip("/")
             if not endpoint.endswith("/chat/completions"):
                 endpoint = f"{endpoint}/chat/completions" if endpoint.endswith("/v1") else f"{endpoint}/v1/chat/completions"
+
             try:
                 res = requests.post(
                     endpoint,
@@ -93,7 +192,7 @@ class MultiLLMClient:
                 )
                 if res.status_code == 200:
                     out = res.json()["choices"][0]["message"]["content"]
-                    return LLMResponse(out)
+                    return _maybe_cache(LLMResponse(out))
                 else:
                     print(f"[MultiLLM] Custom Provider HTTP {res.status_code}: {res.text[:180]} — falling back to Gemini")
             except Exception as e:
@@ -115,7 +214,7 @@ class MultiLLMClient:
                 )
                 if res.status_code == 200:
                     out = res.json()["choices"][0]["message"]["content"]
-                    return LLMResponse(out)
+                    return _maybe_cache(LLMResponse(out))
                 else:
                     print(f"[MultiLLM] Groq HTTP {res.status_code}: {res.text[:180]} — falling back to Gemini")
             except Exception as e:
@@ -142,7 +241,7 @@ class MultiLLMClient:
                 )
                 if res.status_code == 200:
                     out = res.json()["choices"][0]["message"]["content"]
-                    return LLMResponse(out)
+                    return _maybe_cache(LLMResponse(out))
                 else:
                     print(f"[MultiLLM] OpenRouter HTTP {res.status_code}: {res.text[:180]} — falling back to Gemini")
             except Exception as e:
@@ -164,42 +263,51 @@ class MultiLLMClient:
                 )
                 if res.status_code == 200:
                     out = res.json()["choices"][0]["message"]["content"]
-                    return LLMResponse(out)
+                    return _maybe_cache(LLMResponse(out))
                 else:
                     print(f"[MultiLLM] DeepSeek HTTP {res.status_code}: {res.text[:180]} — falling back to Gemini")
             except Exception as e:
                 print(f"[MultiLLM] DeepSeek request failed: {e} — falling back to Gemini")
 
-        # 5. Google Gemini (Default / Fallback) with resilience
-        if self.gemini_key:
+        # 5. Google Gemini (Default / Fallback) with multi-key rotation + resilience
+        if self.gemini_key_pool:
             from google import genai
-            client = genai.Client(api_key=self.gemini_key)
-            
-            # Try gemini-2.5-flash first, then gemini-flash-latest, then gemini-2.5-flash-lite
+
             candidate_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
             if self.model and self.model not in candidate_models:
                 candidate_models.insert(0, self.model)
 
             last_err = None
-            for m in candidate_models:
-                for attempt in range(2):
-                    try:
-                        resp = client.models.generate_content(model=m, contents=prompt)
-                        return LLMResponse(resp.text or "")
-                    except Exception as e:
-                        err_str = str(e).lower()
-                        last_err = e
-                        if "503" in err_str or "unavailable" in err_str or "high demand" in err_str:
-                            time.sleep(1.5)
-                            continue
-                        elif "404" in err_str:
-                            break  # Model not found, try next candidate
-                        else:
-                            time.sleep(1.0)
-            
+            # Try each key in pool with round-robin
+            keys_to_try = list(self.gemini_key_pool)
+            for api_key in keys_to_try:
+                client = genai.Client(api_key=api_key)
+                for m in candidate_models:
+                    for attempt in range(2):
+                        try:
+                            resp = client.models.generate_content(model=m, contents=prompt)
+                            return _maybe_cache(LLMResponse(resp.text or ""))
+                        except Exception as e:
+                            err_str = str(e).lower()
+                            last_err = e
+                            if "429" in err_str or "quota" in err_str or "rate" in err_str:
+                                # This key is rate-limited, try next key
+                                print(f"[MultiLLM] Gemini key ...{api_key[-6:]} rate-limited → trying next key")
+                                break
+                            elif "503" in err_str or "unavailable" in err_str or "high demand" in err_str:
+                                time.sleep(1.5)
+                                continue
+                            elif "404" in err_str:
+                                break  # Model not found, try next model
+                            else:
+                                time.sleep(1.0)
+                    else:
+                        continue
+                    break  # Key rate-limited, try next key
+
             raise RuntimeError(f"All LLM providers failed. Last Gemini error: {last_err}")
 
-        raise ValueError("No valid LLM API key configured (Gemini, Groq, OpenRouter, or Custom) in config/api_keys.json.")
+        raise ValueError("No valid LLM provider configured. Set free_proxy_enabled:true or add a gemini_api_key in config/api_keys.json.")
 
 
 def get_llm_model(preferred_provider: str = None, model: str = None) -> MultiLLMClient:
@@ -220,7 +328,19 @@ def test_llm_provider(
     t0 = time.perf_counter()
 
     try:
-        if prov == "groq":
+        if prov in ("gemini-web", "free", "free-proxy"):
+            port = int(cfg.get("free_proxy_port", 8081))
+            try:
+                resp = requests.get(f"http://127.0.0.1:{port}/health", timeout=3.0)
+                lat = (time.perf_counter() - t0) * 1000.0
+                if resp.status_code == 200 and resp.json().get("status") == "ok":
+                    return True, "Gemini Web FREE (Anonymous)", lat
+                return False, f"Proxy not responding (HTTP {resp.status_code})", lat
+            except requests.exceptions.ConnectionError:
+                lat = (time.perf_counter() - t0) * 1000.0
+                return False, "Proxy not running (start_proxy() not called)", lat
+
+        elif prov == "groq":
             key = api_key.strip() or cfg.get("groq_api_key", "").strip()
             if not key:
                 return False, "Missing Groq API Key", 0.0

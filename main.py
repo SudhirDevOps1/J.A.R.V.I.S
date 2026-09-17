@@ -74,6 +74,20 @@ try:
 except Exception:
     pass
 
+# Start Gemini Free Proxy (anonymous mode — no API key needed for flash models)
+try:
+    import json as _json
+    _cfg_path = Path(__file__).resolve().parent / "config" / "api_keys.json"
+    _proxy_cfg = _json.loads(_cfg_path.read_text(encoding="utf-8")) if _cfg_path.exists() else {}
+    if _proxy_cfg.get("free_proxy_enabled", True):
+        from core.gemini_free_proxy import start_proxy as _start_proxy
+        _port = int(_proxy_cfg.get("free_proxy_port", 8081))
+        _started = _start_proxy(port=_port, silent=True)
+        if _started:
+            print(f"[JARVIS] Gemini Free Proxy started on port {_port} (anonymous mode)")
+except Exception as _e:
+    print(f"[JARVIS] Free proxy start skipped: {_e}")
+
 from ui import JarvisUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
@@ -2129,6 +2143,12 @@ def main():
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
+        # Graceful shutdown of free proxy
+        try:
+            from core.gemini_free_proxy import stop_proxy
+            stop_proxy()
+        except Exception:
+            pass
         sys.exit(0)
 
 if __name__ == "__main__":

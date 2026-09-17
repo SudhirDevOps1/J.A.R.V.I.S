@@ -146,6 +146,35 @@ def check_desktop_shortcut(verbose=True):
     except Exception as e:
         pass
 
+def check_free_proxy(verbose=True):
+    """Verify core/gemini_free_proxy.py exists and is importable. No network call needed."""
+    proxy_path = os.path.join(PROJECT_ROOT, 'core', 'gemini_free_proxy.py')
+    if not os.path.exists(proxy_path):
+        if verbose:
+            print('  [!] Gemini Free Proxy: Missing (run setup.py)')
+        return
+    # Verify it's importable (catches syntax errors)
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gemini_free_proxy", proxy_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if verbose:
+            print('  [OK] Gemini Free Proxy: Ready (Anonymous Mode - gemini-3.7-flash FREE)')
+    except Exception as e:
+        if verbose:
+            print(f'  [!] Gemini Free Proxy: Import error: {e}')
+
+def check_llm_cache(verbose=True):
+    """Verify core/llm_cache.py exists."""
+    cache_path = os.path.join(PROJECT_ROOT, 'core', 'llm_cache.py')
+    if os.path.exists(cache_path):
+        if verbose:
+            print('  [OK] Smart LLM Cache: Ready (SQLite, 500-entry LRU)')
+    else:
+        if verbose:
+            print('  [!] Smart LLM Cache: Missing')
+
 def run_preflight(verbose=True):
     """Programmatic entry point for main.py / run_jarvis.pyw."""
     if verbose:
@@ -159,6 +188,8 @@ def run_preflight(verbose=True):
     check_piper_hindi(verbose=verbose)
     check_wakeword(verbose=verbose)
     check_desktop_shortcut(verbose=verbose)
+    check_free_proxy(verbose=verbose)
+    check_llm_cache(verbose=verbose)
     dt = time.monotonic() - t0
     if verbose:
         print(f'Pre-flight complete in {dt:.2f}s. All assets ready.')
