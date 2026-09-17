@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
-os.environ.setdefault("QT_LOGGING_RULES", "qt.text.font.db=false")
+os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false;qt.qpa.mime=false;qt.qpa.clipboard=false;qt.pointer.dispatch=false"
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 # Pre-load onnxruntime before Qt loads its C++ runtime
@@ -443,7 +443,18 @@ class HudCanvas(QWidget):
         self._orb_ang_y = 0.0
         self._orb_ang_z = 0.0
 
-        # ── 3D Orbital Planetary Halo Parameters ──────────────────────────────
+        # Quantum Arc Reactor Particle Embers & Holographic Scanline
+        self._reactor_embers: list[dict] = []
+        for _ in range(54):
+            self._reactor_embers.append({
+                "r": random.uniform(10, 160),
+                "ang": random.uniform(0, math.pi * 2),
+                "spd": random.uniform(0.6, 2.2),
+                "sz": random.uniform(1.2, 3.4),
+                "life": random.uniform(0.1, 1.0),
+                "fade": random.uniform(0.010, 0.022),
+            })
+        self._scanline_y = 0.0
         self._halo_angle = 0.0                      # Main orbital rotation angle in degrees
         self._halo_tilt = math.radians(16.0)        # Perspective tilt angle (~16°)
         self._halo = 60.0                           # Base glow intensity
@@ -705,12 +716,25 @@ class HudCanvas(QWidget):
             for ph in self._photons:
                 ph["angle"] = (ph["angle"] + math.radians(rot_spd * ph["spd"])) % (math.pi * 2)
 
-        # ── Advance Stark Arc Reactor ─────────────────────────────────────────
-        # An Arc Reactor is a living mechanical power core: it maintains an ambient,
-        # humming rotation even while resting, and surges with voice amplitude.
-        reactor_spd = max(0.22 if anim_mode != "kinetic" else 0.55, rot_spd)
+        # ── Advance Stark Arc Reactor & Embers ───────────────────────────────
+        reactor_spd = max(0.28 if anim_mode != "kinetic" else 0.65, rot_spd)
         self._reactor_outer_ang = (self._reactor_outer_ang + reactor_spd * 0.75) % 360.0
         self._reactor_inner_ang = (self._reactor_inner_ang - reactor_spd * 1.35) % 360.0
+
+        # Animate outward drifting quantum fusion embers
+        ember_boost = (1.0 + amp * 3.5) if is_active else 0.85
+        for em in getattr(self, "_reactor_embers", []):
+            em["r"] += em["spd"] * ember_boost
+            em["ang"] += 0.008
+            em["life"] -= em.get("fade", 0.015)
+            if em["life"] <= 0.0 or em["r"] > 240:
+                em["r"] = random.uniform(8, 30)
+                em["ang"] = random.uniform(0, math.pi * 2)
+                em["life"] = random.uniform(0.7, 1.0)
+                em["spd"] = random.uniform(0.6, 2.2)
+
+        # Animate holographic scanline sweep
+        self._scanline_y = (self._scanline_y + 1.8) % max(400, self.height())
 
         # ── Advance Quantum Plasma Orb ────────────────────────────────────────
         orb_drift = max(0.20 if anim_mode != "kinetic" else 0.60, rot_spd)
@@ -867,75 +891,145 @@ class HudCanvas(QWidget):
             # ══════════════════════════════════════════════════════════════════
             R = fw * 0.36
 
-            # Outer targeting ring & tick marks
-            p.setPen(QPen(qcol(C.PRI_DIM, int(120 * glow_mult)), 1))
+            # 1. Ambient Magnetic Flux Glow (Soft Radial Halo Behind Reactor)
+            halo_grad = QRadialGradient(cx, cy, R * 1.15)
+            halo_grad.setColorAt(0.0, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(38 * glow_mult + amp * 55)))
+            halo_grad.setColorAt(0.65, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(16 * glow_mult + amp * 25)))
+            halo_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+            p.setBrush(QBrush(halo_grad))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(cx, cy), R * 1.15, R * 1.15)
+
+            # 2. Outer Titanium Bezel & Concentric Precision Rails
+            p.setPen(QPen(qcol(C.PRI_DIM, int(130 * glow_mult)), 1.2))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawEllipse(QPointF(cx, cy), R, R)
-            p.drawEllipse(QPointF(cx, cy), R * 0.88, R * 0.88)
+            p.drawEllipse(QPointF(cx, cy), R * 0.91, R * 0.91)
+            p.drawEllipse(QPointF(cx, cy), R * 0.85, R * 0.85)
 
-            # Degree ticks
-            p.setPen(QPen(qcol(C.PRI, int(180 * glow_mult)), 1.5))
-            for deg in range(0, 360, 15):
+            # 3. 360-Degree High-Precision Ticks (Major 30° notches, Minor 10° ticks)
+            for deg in range(0, 360, 10):
                 rad = math.radians(deg)
-                t_len = 8 if deg % 45 == 0 else 4
+                is_major = (deg % 30 == 0)
+                t_len = 10 if is_major else 4
+                pen_w = 2.0 if is_major else 1.0
+                p.setPen(QPen(primary_c if is_major else sec_c, pen_w))
                 x1 = cx + math.cos(rad) * (R - t_len)
                 y1 = cy + math.sin(rad) * (R - t_len)
                 x2 = cx + math.cos(rad) * R
                 y2 = cy + math.sin(rad) * R
                 p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
 
-            # 10 Transformer Copper Coils
+            # 4. Outward Drifting Quantum Fusion Embers / Sparks
+            for em in getattr(self, "_reactor_embers", []):
+                er = em.get("r", 20)
+                e_ang = em.get("ang", 0.0)
+                ex = cx + math.cos(e_ang) * er
+                ey = cy + math.sin(e_ang) * er
+                e_alpha = int(255 * em.get("life", 1.0) * glow_mult)
+                if e_alpha > 5:
+                    p.setBrush(QBrush(QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), e_alpha)))
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.drawEllipse(QPointF(ex, ey), em.get("sz", 2.0), em.get("sz", 2.0))
+
+            # 5. 12 Transformer Electromagnetic Copper-Gold Coils (Matching Icon)
             coil_r = R * 0.72
-            for i in range(10):
-                th = math.radians(i * 36 + self._reactor_outer_ang)
+            for i in range(12):
+                coil_ang = i * 30 + self._reactor_outer_ang
+                th = math.radians(coil_ang)
                 ccx = cx + math.cos(th) * coil_r
                 ccy = cy + math.sin(th) * coil_r
 
                 p.save()
                 p.translate(ccx, ccy)
-                p.rotate(i * 36 + self._reactor_outer_ang + 90)
+                p.rotate(coil_ang + 90)
 
-                # Copper block base
-                p.setBrush(QBrush(QColor(240, 140, 30, max(0, min(255, int(210 * glow_mult))))))
+                # Coil core obsidian block
+                p.setBrush(QBrush(QColor(14, 18, 24, 235)))
                 p.setPen(QPen(primary_c, 1.2))
-                p.drawRoundedRect(QRectF(-7, -13, 14, 26), 2, 2)
+                p.drawRoundedRect(QRectF(-8, -14, 16, 28), 2.5, 2.5)
 
-                # Copper wire grooves
-                p.setPen(QPen(QColor(60, 20, 0, 180), 1))
-                for gy in [-8, -4, 0, 4, 8]:
-                    p.drawLine(-5, gy, 5, gy)
+                # Copper wire wraps
+                p.setPen(QPen(QColor(225, 140, 35, int(220 * glow_mult)), 1.5))
+                for gy in [-9, -5, -1, 3, 7]:
+                    p.drawLine(-6, gy, 6, gy)
+
+                # Glowing center filament
+                fil_alpha = max(80, min(255, int((150 + amp * 90) * glow_mult)))
+                p.setPen(QPen(QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), fil_alpha), 1.6))
+                p.drawLine(0, -11, 0, 11)
+
                 p.restore()
 
-            # Mid Counter-Rotating Slotted Ring
-            inner_ring_r = R * 0.50
-            p.setPen(QPen(primary_c, 3.0))
+            # 6. Counter-Rotating Slotted Energy Arc Rails
+            inner_ring_r = R * 0.52
+            p.setPen(QPen(primary_c, 3.2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
             for a_idx in range(6):
                 start_a = int((self._reactor_inner_ang + a_idx * 60) * 16)
                 p.drawArc(QRectF(cx - inner_ring_r, cy - inner_ring_r, inner_ring_r * 2, inner_ring_r * 2),
-                          start_a, 42 * 16)
+                          start_a, 44 * 16)
 
-            # Central Palladium/Vibranium Energy Core
-            idle_pulse = math.sin(self._tick * 0.05) * (R * 0.015)
-            core_r = R * 0.28 + (amp * (R * 0.22) if is_active else idle_pulse)
+            # 7. 6 Inward Magnetic Focus Compression Vanes
+            vane_r_out = R * 0.48
+            vane_r_in = R * 0.34
+            for vi in range(6):
+                v_ang = math.radians(vi * 60 + self._reactor_inner_ang * 0.8)
+                vx_out = cx + math.cos(v_ang) * vane_r_out
+                vy_out = cy + math.sin(v_ang) * vane_r_out
+                vx_in = cx + math.cos(v_ang) * vane_r_in
+                vy_in = cy + math.sin(v_ang) * vane_r_in
+                p.setPen(QPen(sec_c, 2.2))
+                p.drawLine(QPointF(vx_out, vy_out), QPointF(vx_in, vy_in))
+                p.setBrush(QBrush(white_c))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(vx_in, vy_in), 2.2, 2.2)
+
+            # 8. Central Quantum Fusion Reaction Chamber
+            idle_pulse = math.sin(self._tick * 0.055) * (R * 0.018)
+            core_r = R * 0.29 + (amp * (R * 0.24) if is_active else idle_pulse)
             grad = QRadialGradient(cx, cy, core_r)
             grad.setColorAt(0.0, QColor(255, 255, 255, 255))
-            grad.setColorAt(0.35, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), max(0, min(255, int((190 + amp * 55) * glow_mult)))))
-            grad.setColorAt(0.70, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), max(0, min(255, int((120 + amp * 50) * glow_mult)))))
+            grad.setColorAt(0.28, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), max(0, min(255, int((210 + amp * 45) * glow_mult)))))
+            grad.setColorAt(0.65, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), max(0, min(255, int((130 + amp * 60) * glow_mult)))))
             grad.setColorAt(1.0, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), 0))
             p.setBrush(QBrush(grad))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(QPointF(cx, cy), core_r, core_r)
 
-            # Central Hexagonal Energy Grid
+            # 9. 3D Rotating Geometric Core Matrix (Icosahedron / Octahedron)
             hex_pts = []
-            hex_r = core_r * 0.55
+            hex_r = core_r * 0.58
             for h_i in range(6):
-                h_rad = math.radians(h_i * 60 + self._reactor_outer_ang * 0.5)
+                h_rad = math.radians(h_i * 60 + self._reactor_outer_ang * 0.6)
                 hex_pts.append(QPointF(cx + math.cos(h_rad) * hex_r, cy + math.sin(h_rad) * hex_r))
-            p.setPen(QPen(white_c, 1.5))
+            p.setPen(QPen(white_c, 1.6))
             for h_i in range(6):
                 p.drawLine(hex_pts[h_i], hex_pts[(h_i + 1) % 6])
                 p.drawLine(QPointF(cx, cy), hex_pts[h_i])
+
+            # Inner Tri-axial Cross
+            cross_r = core_r * 0.32
+            for c_i in range(3):
+                c_rad = math.radians(c_i * 120 + self._reactor_inner_ang * 0.5)
+                px1 = cx + math.cos(c_rad) * cross_r
+                py1 = cy + math.sin(c_rad) * cross_r
+                px2 = cx - math.cos(c_rad) * cross_r
+                py2 = cy - math.sin(c_rad) * cross_r
+                p.setPen(QPen(sec_c, 1.2))
+                p.drawLine(QPointF(px1, py1), QPointF(px2, py2))
+
+            # 10. Optical Lens Cross Flare (4-Point Radiant Spike from Core)
+            flare_len = core_r * (1.3 + amp * 0.9 + math.sin(self._tick * 0.08) * 0.12)
+            flare_col = QColor(255, 255, 255, int(180 * glow_mult))
+            p.setPen(QPen(flare_col, 1.8))
+            p.drawLine(QPointF(cx - flare_len, cy), QPointF(cx + flare_len, cy))
+            p.drawLine(QPointF(cx, cy - flare_len), QPointF(cx, cy + flare_len))
+
+            # 11. Subtle Holographic Scanline Pass
+            sc_y = getattr(self, "_scanline_y", 0.0)
+            p.setPen(QPen(QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), 35), 1.2))
+            p.drawLine(QPointF(cx - R * 1.05, sc_y), QPointF(cx + R * 1.05, sc_y))
 
         elif mode == "orb":
             # ══════════════════════════════════════════════════════════════════
@@ -5519,9 +5613,16 @@ class MainWindow(QMainWindow):
             try:
                 from core.system_info import get_free_weather, get_ip_location
                 loc = get_ip_location()
-                city = loc.get("city", "New Delhi")
-                w = get_free_weather(city=city)
+                city = loc.get("city", "Patna")
+                lat = loc.get("lat")
+                lon = loc.get("lon")
+                w = get_free_weather(lat=lat, lon=lon, city=city)
                 if w.get("success"):
+                    try:
+                        c_file = CONFIG_DIR / "weather_cache.json"
+                        c_file.write_text(json.dumps(w, ensure_ascii=False), encoding="utf-8")
+                    except Exception:
+                        pass
                     QTimer.singleShot(0, lambda: self._apply_weather_ui(w))
             except Exception:
                 pass
@@ -5530,7 +5631,7 @@ class MainWindow(QMainWindow):
     def _apply_weather_ui(self, w: dict):
         if hasattr(self, '_w_loc_lbl'):
             self._w_loc_lbl.setText(f"📍 {w.get('city', 'LOCAL').upper()[:12]}")
-            self._w_temp_lbl.setText(f"🌤️ {w.get('temp', '--')}")
+            self._w_temp_lbl.setText(f"{w.get('icon', '🌤️')} {w.get('temp', '--')}")
             self._w_desc_lbl.setText(f"{w.get('desc', '')} · {w.get('wind', '')}")
 
     def _rotate_news_ticker(self):
@@ -5762,6 +5863,18 @@ class MainWindow(QMainWindow):
         self._w_desc_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
         self._w_desc_lbl.setWordWrap(True)
         w_lay.addWidget(self._w_desc_lbl)
+
+        # Populate immediately from weather cache if present
+        try:
+            c_file = CONFIG_DIR / "weather_cache.json"
+            if c_file.exists():
+                _cw = json.loads(c_file.read_text(encoding="utf-8"))
+                if _cw.get("city"):
+                    self._w_loc_lbl.setText(f"📍 {_cw.get('city', 'LOCAL').upper()[:12]}")
+                    self._w_temp_lbl.setText(f"{_cw.get('icon', '🌤️')} {_cw.get('temp', '--')}")
+                    self._w_desc_lbl.setText(f"{_cw.get('desc', '')} · {_cw.get('wind', '')}")
+        except Exception:
+            pass
 
         lay.addWidget(self._weather_card)
         lay.addSpacing(4)

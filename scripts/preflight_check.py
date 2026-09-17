@@ -18,46 +18,56 @@ def check_directories():
     for d in dirs:
         os.makedirs(d, exist_ok=True)
 
-def check_icon():
+def check_icon(verbose=True):
     """Ensure custom Stark Arc Reactor ICO and PNG icons exist."""
     ico_path = os.path.join(PROJECT_ROOT, 'config', 'jarvis.ico')
     png_path = os.path.join(PROJECT_ROOT, 'config', 'jarvis.png')
     if os.path.exists(ico_path) and os.path.exists(png_path) and os.path.getsize(ico_path) > 10000:
-        print('  [OK] Stark Arc Reactor Icons: Ready (Cached)')
+        if verbose:
+            print('  [OK] Stark Arc Reactor Icons: Ready (Cached)')
         return
-    print('  [*] Generating custom Stark Arc Reactor icons...')
+    if verbose:
+        print('  [*] Generating custom Stark Arc Reactor icons...')
     try:
         from scripts.generate_icon import build_assets
         build_assets()
-        print('  [OK] Stark Arc Reactor Icons: Ready')
+        if verbose:
+            print('  [OK] Stark Arc Reactor Icons: Ready')
     except Exception as e:
-        print(f'  [!] Icon generation note: {e}')
+        if verbose:
+            print(f'  [!] Icon generation note: {e}')
 
-def check_sfx():
+def check_sfx(verbose=True):
     sfx_dir = os.path.join(PROJECT_ROOT, 'core', 'assets', 'sfx')
     needed = ['boot.wav', 'wake.wav', 'ack.wav', 'confirm.wav']
     missing = [f for f in needed if not os.path.exists(os.path.join(sfx_dir, f))]
     if not missing:
-        print('  [OK] Stark SFX Assets: Ready (Cached)')
+        if verbose:
+            print('  [OK] Stark SFX Assets: Ready (Cached)')
         return
-    print(f'  [*] Generating procedural SFX ({len(missing)} missing)...')
+    if verbose:
+        print(f'  [*] Generating procedural SFX ({len(missing)} missing)...')
     try:
         from core.sfx import _ensure_sfx_files
         _ensure_sfx_files()
-        print('  [OK] Stark SFX Assets: Successfully generated')
+        if verbose:
+            print('  [OK] Stark SFX Assets: Successfully generated')
     except Exception as e:
-        print(f'  [!] SFX generation note: {e}')
+        if verbose:
+            print(f'  [!] SFX generation note: {e}')
 
-def check_piper_hindi():
+def check_piper_hindi(verbose=True):
     base = os.path.join(PROJECT_ROOT, 'core', 'models', 'piper')
     os.makedirs(base, exist_ok=True)
     m_path = os.path.join(base, 'hi_IN-pratham-medium.onnx')
     j_path = os.path.join(base, 'hi_IN-pratham-medium.onnx.json')
     if os.path.exists(m_path) and os.path.getsize(m_path) > 60000000 and os.path.exists(j_path):
-        print('  [OK] Piper Hindi TTS Model: Ready (Cached locally)')
+        if verbose:
+            print('  [OK] Piper Hindi TTS Model: Ready (Cached locally)')
         return
 
-    print('  [*] Downloading Piper Hindi Model (~60 MB, one-time only)...')
+    if verbose:
+        print('  [*] Downloading Piper Hindi Model (~60 MB, one-time only)...')
     import requests
     urls = {
         j_path: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx.json',
@@ -83,28 +93,35 @@ def check_piper_hindi():
                     if os.path.exists(target):
                         os.remove(target)
                     os.rename(temp, target)
-                    print(f'  [OK] Downloaded {fname}')
+                    if verbose:
+                        print(f'  [OK] Downloaded {fname}')
                     break
             except Exception as e:
-                print(f'  [!] Retry {attempt}/3 for {fname}: {e}')
+                if verbose:
+                    print(f'  [!] Retry {attempt}/3 for {fname}: {e}')
                 time.sleep(1.5)
 
-def check_wakeword():
+def check_wakeword(verbose=True):
     try:
         from core.wake_word import is_ready, install_and_download
         if is_ready():
-            print('  [OK] OpenWakeWord Models: Ready (Cached locally)')
+            if verbose:
+                print('  [OK] OpenWakeWord Models: Ready (Cached locally)')
             return
-        print('  [*] Downloading Wake Word models (one-time setup)...')
+        if verbose:
+            print('  [*] Downloading Wake Word models (one-time setup)...')
         ok, msg = install_and_download()
         if ok:
-            print('  [OK] OpenWakeWord Models: Ready')
+            if verbose:
+                print('  [OK] OpenWakeWord Models: Ready')
         else:
-            print(f'  [!] Wake word note: {msg}')
+            if verbose:
+                print(f'  [!] Wake word note: {msg}')
     except Exception as e:
-        print(f'  [!] Wake word check note: {e}')
+        if verbose:
+            print(f'  [!] Wake word check note: {e}')
 
-def check_desktop_shortcut():
+def check_desktop_shortcut(verbose=True):
     """Ensure Windows desktop shortcut exists pointing to launch_silent.vbs with the Arc Reactor icon."""
     try:
         desktop = Path(os.path.expanduser('~/Desktop'))
@@ -121,9 +138,11 @@ def check_desktop_shortcut():
             MainWindow._create_lnk_windows(
                 str(lnk), target, f'"{vbs}"', str(PROJECT_ROOT), f'{ico_path},0'
             )
-            print('  [OK] Desktop Shortcut: Created on Desktop')
+            if verbose:
+                print('  [OK] Desktop Shortcut: Created on Desktop')
         else:
-            print('  [OK] Desktop Shortcut: Ready (Cached)')
+            if verbose:
+                print('  [OK] Desktop Shortcut: Ready (Cached)')
     except Exception as e:
         pass
 
@@ -135,11 +154,11 @@ def run_preflight(verbose=True):
         print('===================================================')
     t0 = time.monotonic()
     check_directories()
-    check_icon()
-    check_sfx()
-    check_piper_hindi()
-    check_wakeword()
-    check_desktop_shortcut()
+    check_icon(verbose=verbose)
+    check_sfx(verbose=verbose)
+    check_piper_hindi(verbose=verbose)
+    check_wakeword(verbose=verbose)
+    check_desktop_shortcut(verbose=verbose)
     dt = time.monotonic() - t0
     if verbose:
         print(f'Pre-flight complete in {dt:.2f}s. All assets ready.')

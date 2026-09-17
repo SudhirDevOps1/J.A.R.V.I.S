@@ -22,7 +22,7 @@ def _gemini_search(query: str) -> str:
     from google import genai
 
     client = genai.Client(api_key=_get_api_key())
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]
+    models_to_try = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
     last_err = None
     for model_name in models_to_try:
         try:
@@ -129,7 +129,7 @@ def _gemini_headlines(n: int = 5) -> tuple[list[str], str]:
     from google import genai
 
     client = genai.Client(api_key=_get_api_key())
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash"]
+    models_to_try = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
     response = None
     for model_name in models_to_try:
         try:

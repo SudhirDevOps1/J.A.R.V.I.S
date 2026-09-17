@@ -175,8 +175,8 @@ class MultiLLMClient:
             from google import genai
             client = genai.Client(api_key=self.gemini_key)
             
-            # Try gemini-2.5-flash first, then gemini-2.5-flash-lite, then gemini-1.5-flash
-            candidate_models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"]
+            # Try gemini-2.5-flash first, then gemini-flash-latest, then gemini-2.5-flash-lite
+            candidate_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
             if self.model and self.model not in candidate_models:
                 candidate_models.insert(0, self.model)
 
@@ -366,7 +366,7 @@ def fetch_provider_models(
                         return sorted(models)
                 except Exception:
                     pass
-            return ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-1.5-flash"]
+            return ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
 
         elif prov in ("custom", "ollama", "local"):
             url = (custom_url.strip() or cfg.get("custom_llm_url", "")).rstrip("/")

@@ -1,5 +1,5 @@
 import os as _os
-_os.environ.setdefault("QT_LOGGING_RULES", "qt.text.font.db=false")
+_os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false;qt.qpa.mime=false;qt.qpa.clipboard=false;qt.pointer.dispatch=false"
 _os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 # Pre-load onnxruntime before PyQt6/Qt to prevent Windows C++ runtime DLL init conflict (error 1114)
