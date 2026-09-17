@@ -1,11 +1,10 @@
 @echo off
 title SudhirDevOps1 AI Assistant (J.A.R.V.I.S.)
-chcp 65001 >nul
 cd /d "%~dp0"
 color 0B
 
 echo ===================================================
-echo     ✦ SUDHIRDEVOPS1 AI ASSISTANT (J.A.R.V.I.S.) ✦
+echo     * SUDHIRDEVOPS1 AI ASSISTANT (J.A.R.V.I.S.) *
 echo ===================================================
 echo.
 
@@ -47,30 +46,10 @@ if %ERRORLEVEL% NEQ 0 (
     echo.
 )
 
-:: 4. Run Preflight Check (downloads Piper Hindi TTS, SFX assets, icons, openwakeword)
+:: 4. Run Preflight Check (downloads Piper Hindi TTS, SFX assets, icons, desktop shortcut)
 python scripts\preflight_check.py
 
-:: 5. Auto-Create Desktop Shortcut if missing
-python -c "
-import os, sys
-from pathlib import Path
-desktop = Path(os.path.expanduser('~/Desktop'))
-lnk = desktop / 'J.A.R.V.I.S.lnk'
-if not lnk.exists():
-    try:
-        from ui import MainWindow
-        # Invoking desktop shortcut builder via UI helper
-        ico_path = Path('config/jarvis.ico').resolve()
-        vbs = Path('launch_silent.vbs').resolve()
-        wscript = Path(os.environ.get('WINDIR', r'C:\Windows')) / 'System32' / 'wscript.exe'
-        target = str(wscript if wscript.exists() else 'wscript.exe')
-        MainWindow._create_lnk_windows(str(lnk), target, str(vbs), str(Path('.').resolve()), str(ico_path) + ',0')
-        print('  [OK] Desktop Shortcut auto-created on Desktop.')
-    except Exception:
-        pass
-" >nul 2>&1
-
-:: 6. Launch Assistant
+:: 5. Launch Assistant
 echo [*] Launching J.A.R.V.I.S. interface...
 python main.py
 

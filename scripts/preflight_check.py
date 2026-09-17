@@ -104,6 +104,29 @@ def check_wakeword():
     except Exception as e:
         print(f'  [!] Wake word check note: {e}')
 
+def check_desktop_shortcut():
+    """Ensure Windows desktop shortcut exists pointing to launch_silent.vbs with the Arc Reactor icon."""
+    try:
+        desktop = Path(os.path.expanduser('~/Desktop'))
+        if not desktop.exists():
+            return
+        lnk = desktop / 'J.A.R.V.I.S.lnk'
+        vbs = Path(PROJECT_ROOT) / 'launch_silent.vbs'
+        ico_path = Path(PROJECT_ROOT) / 'config' / 'jarvis.ico'
+        wscript = Path(os.environ.get('WINDIR', r'C:\Windows')) / 'System32' / 'wscript.exe'
+        target = str(wscript if wscript.exists() else 'wscript.exe')
+        
+        if not lnk.exists():
+            from ui import MainWindow
+            MainWindow._create_lnk_windows(
+                str(lnk), target, f'"{vbs}"', str(PROJECT_ROOT), f'{ico_path},0'
+            )
+            print('  [OK] Desktop Shortcut: Created on Desktop')
+        else:
+            print('  [OK] Desktop Shortcut: Ready (Cached)')
+    except Exception as e:
+        pass
+
 def run_preflight(verbose=True):
     """Programmatic entry point for main.py / run_jarvis.pyw."""
     if verbose:
@@ -116,6 +139,7 @@ def run_preflight(verbose=True):
     check_sfx()
     check_piper_hindi()
     check_wakeword()
+    check_desktop_shortcut()
     dt = time.monotonic() - t0
     if verbose:
         print(f'Pre-flight complete in {dt:.2f}s. All assets ready.')
