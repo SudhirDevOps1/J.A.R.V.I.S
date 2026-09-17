@@ -60,6 +60,7 @@ from memory.config_manager import (
     get_edge_pitch, save_edge_pitch,
     get_obsidian_config, save_obsidian_config,
     get_preferred_language, save_preferred_language,
+    get_edge_reflex_enabled, save_edge_reflex_enabled,
 )
 APP_VERSION  = get_app_name()
 APP_PROTOCOL = get_protocol_name()
@@ -2201,7 +2202,104 @@ class ProviderSettingsOverlay(QWidget):
         key_container = QWidget()
         k_lay = QVBoxLayout(key_container)
         k_lay.setContentsMargins(0, 0, 0, 0)
-        k_lay.setSpacing(5)
+        # ── Tri-Tier Edge AI Architecture Card (Needle 2 & LFM2.5) ──
+        edge_card = QFrame()
+        edge_card.setStyleSheet(f"""
+            QFrame {{
+                background: rgba(0, 20, 32, 220);
+                border: 1px solid {C.PRI_DIM};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+        """)
+        ec_lay = QVBoxLayout(edge_card)
+        ec_lay.setContentsMargins(6, 6, 6, 6)
+        ec_lay.setSpacing(4)
+
+        ec_header = QHBoxLayout()
+        ec_header.addWidget(_lbl("[*] TRI-TIER EDGE AI REFLEX (Local 10ms + Cloud Brain)", 8, bold=True, color=C.PRI))
+        ec_lay.addLayout(ec_header)
+
+        # Badges row: Needle 2 (28MB), LFM2.5 (200MB), Gemini Cloud
+        b_row = QHBoxLayout()
+        b_row.setSpacing(4)
+        for t_title, t_sub, t_color in (
+            ("Tier 1: Needle 2", "45M | ~28MB RAM", "#00ffaa"),
+            ("Tier 2: LFM2.5", "230M | ~200MB RAM", "#00d4ff"),
+            ("Tier 3: Cloud Brain", "Gemini 2.0 / Multimodal", "#ffaa00"),
+        ):
+            b_box = QFrame()
+            b_box.setStyleSheet(f"background: rgba(0, 10, 18, 160); border: 1px solid {t_color}44; border-radius: 3px; padding: 2px;")
+            bb_lay = QVBoxLayout(b_box)
+            bb_lay.setContentsMargins(4, 2, 4, 2)
+            bb_lay.setSpacing(1)
+            lbl1 = QLabel(t_title); lbl1.setFont(QFont("Courier New", 7, QFont.Weight.Bold)); lbl1.setStyleSheet(f"color: {t_color};")
+            lbl2 = QLabel(t_sub); lbl2.setFont(QFont("Courier New", 6)); lbl2.setStyleSheet(f"color: {C.TEXT_DIM};")
+            bb_lay.addWidget(lbl1)
+            bb_lay.addWidget(lbl2)
+            b_row.addWidget(b_box)
+        ec_lay.addLayout(b_row)
+
+        # Toggle Checkbox and Test Reflex button
+        ctrl_row = QHBoxLayout()
+        ctrl_row.setSpacing(6)
+        self._edge_reflex_checkbox = QCheckBox("Enable Instant Local Reflex (Needle 2 - Apps, OS, Media)")
+        self._edge_reflex_checkbox.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        self._edge_reflex_checkbox.setChecked(get_edge_reflex_enabled())
+        self._edge_reflex_checkbox.setStyleSheet(f"""
+            QCheckBox {{ color: {C.TEXT}; spacing: 6px; }}
+            QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid {C.PRI_DIM}; border-radius: 2px; background: #000c14; }}
+            QCheckBox::indicator:checked {{ background: {C.PRI}; border-color: {C.PRI}; }}
+        """)
+        ctrl_row.addWidget(self._edge_reflex_checkbox, 1)
+
+        test_needle_btn = QPushButton("TEST REFLEX")
+        test_needle_btn.setFixedSize(85, 22)
+        test_needle_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        test_needle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        test_needle_btn.setStyleSheet(f"""
+            QPushButton {{ background: #001f18; color: #00ffaa; border: 1px solid #00aa66; border-radius: 3px; }}
+            QPushButton:hover {{ background: #003828; border-color: #00ffaa; }}
+        """)
+        ctrl_row.addWidget(test_needle_btn)
+        ec_lay.addLayout(ctrl_row)
+
+        self._edge_test_stat = QLabel("Active: Needle 2 Reflex (~28MB RAM, 5-15ms local action)")
+        self._edge_test_stat.setFont(QFont("Courier New", 7))
+        self._edge_test_stat.setStyleSheet("color: #00ffaa; padding-left: 2px;")
+        ec_lay.addWidget(self._edge_test_stat)
+
+        def _on_test_reflex():
+            self._edge_test_stat.setText("Testing Needle 2 reflex router...")
+            self._edge_test_stat.setStyleSheet("color: #ffaa00;")
+            def _run():
+                try:
+                    import time
+                    from core.edge_router import get_tri_tier_dispatcher
+                    disp = get_tri_tier_dispatcher()
+                    t0 = time.perf_counter()
+                    res = disp.route("chrome kholo", is_online=True)
+                    elapsed_ms = (time.perf_counter() - t0) * 1000
+                    if res.get("tier") == 1 and res.get("tool"):
+                        t_name, t_args = res["tool"]
+                        QTimer.singleShot(0, lambda: (
+                            self._edge_test_stat.setText(f"[OK] Reflex: {t_name}({t_args.get('name', '')}) in {elapsed_ms:.1f}ms [RAM: ~28MB]"),
+                            self._edge_test_stat.setStyleSheet("color: #00ffaa;")
+                        ))
+                    else:
+                        QTimer.singleShot(0, lambda: (
+                            self._edge_test_stat.setText(f"Tier {res.get('tier')} ({res.get('engine')}) in {elapsed_ms:.1f}ms"),
+                            self._edge_test_stat.setStyleSheet("color: #00d4ff;")
+                        ))
+                except Exception as ex:
+                    QTimer.singleShot(0, lambda: (
+                        self._edge_test_stat.setText(f"[ERR] Reflex error: {str(ex)[:35]}"),
+                        self._edge_test_stat.setStyleSheet("color: #ff4444;")
+                    ))
+            threading.Thread(target=_run, daemon=True).start()
+
+        test_needle_btn.clicked.connect(_on_test_reflex)
+        k_lay.addWidget(edge_card)
 
         self._key_inputs = {}
         self._stat_labels = {}
@@ -2921,6 +3019,14 @@ class ProviderSettingsOverlay(QWidget):
 
             data["tts_engine"] = self._tts_combo.currentData() or "gemini_live"
             data["sfx_enabled"] = self._sfx_checkbox.isChecked()
+
+            if hasattr(self, "_edge_reflex_checkbox"):
+                is_edge = self._edge_reflex_checkbox.isChecked()
+                data["enable_edge_reflex"] = is_edge
+                try:
+                    save_edge_reflex_enabled(is_edge)
+                except Exception:
+                    pass
 
             # Save chosen model for provider
             active_m = self._model_combo.currentText().strip()

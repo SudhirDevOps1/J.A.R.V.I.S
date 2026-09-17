@@ -515,4 +515,14 @@ def save_selected_model(provider: str, model: str) -> None:
     models = get_all_selected_models()
     models[provider.lower().strip()] = model.strip()
     _patch_config(selected_models=models, custom_llm_model=model.strip())
+
+
+def get_edge_reflex_enabled() -> bool:
+    """Return whether Tier 1 Needle 2 Edge Reflex is enabled (default True)."""
+    return bool(load_api_keys().get("enable_edge_reflex", True))
+
+
+def save_edge_reflex_enabled(enabled: bool) -> None:
+    """Persist Edge Reflex toggle state."""
+    _patch_config(enable_edge_reflex=bool(enabled))
 

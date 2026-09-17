@@ -709,6 +709,37 @@ class JarvisLive:
         except Exception:
             pass
 
+        # Tier 1 & 2: Needle 2 (28MB RAM) & LFM2.5 Edge AI Reflex (Instant local tool execution)
+        try:
+            from memory.config_manager import get_edge_reflex_enabled
+            if get_edge_reflex_enabled():
+                from core.edge_router import get_tri_tier_dispatcher
+                dispatcher = get_tri_tier_dispatcher()
+                routing = dispatcher.route(text, is_online=bool(_get_api_key().strip()))
+
+                if routing.get("tier") == 1 and routing.get("tool"):
+                    t_name, t_args = routing["tool"]
+                    if self._action_registry.has(t_name):
+                        self.ui.write_log(f"⚡ [Needle 2 Reflex (28MB)]: {t_name} {t_args}")
+                        _ctx = {"player": self.ui, "speak": self.speak, "response": None, "session_memory": None}
+                        t_res = self._action_registry.run(t_name, t_args, _ctx)
+                        if t_res:
+                            self.ui.write_log(f"{self._asst_name}: {t_res}")
+                            self.speak(t_res)
+                        return
+
+                elif routing.get("tier") == 2:
+                    self.ui.set_state("THINKING")
+                    from core.persona_manager import build_persona_system_prompt
+                    lfm_ans = dispatcher.lfm.generate(text, system_prompt=build_persona_system_prompt(self._asst_name))
+                    if lfm_ans:
+                        self.ui.write_log(f"⚡ [LFM2.5-230M (Offline)]: {lfm_ans}")
+                        self.speak(lfm_ans)
+                        self.ui.set_state("LISTENING")
+                        return
+        except Exception as _edge_err:
+            print(f"[EdgeRouter Error] {_edge_err}")
+
         # Direct Avatar Emotion / Expression Voice & Text commands
         t_low = text.lower()
         if any(w in t_low for w in ("expression", "mood", "react", "chehre ke bhav", "bhav dikhao")):
