@@ -917,6 +917,29 @@ class JarvisLive:
             if key and value:
                 update_memory({category: {key: {"value": value}}})
                 print(f"[Memory] 💾 save_memory: {category}/{key} = {value}")
+
+                # Check if user updated assistant's name verbally (e.g. "tumhara naam Maya hai", "call yourself Pari")
+                k_clean = str(key).lower().strip().replace(" ", "_")
+                if k_clean in ("assistant_name", "ai_name", "bot_name", "girlfriend_name", "gf_name", "your_name", "name_of_assistant"):
+                    new_asst_name = str(value).strip()
+                    if new_asst_name:
+                        from memory.config_manager import save_assistant_config, get_user_name
+                        save_assistant_config(new_asst_name, get_user_name())
+                        self._asst_name = new_asst_name
+                        self.ui._assistant_name = new_asst_name
+                        self.ui.setWindowTitle(f"{new_asst_name.upper()} — {APP_VERSION}")
+                        self.ui._title_lbl.setText(new_asst_name.upper())
+                        self.ui.hud._assistant_name = new_asst_name.upper()
+                        self.ui.write_log(f"SYS: Assistant name updated to '{new_asst_name}' by voice command.")
+
+                # Check if user told their own name verbally (e.g. "mera naam Sudhir hai")
+                elif k_clean in ("user_name", "my_name", "owner_name", "user"):
+                    new_user_name = str(value).strip()
+                    if new_user_name:
+                        from memory.config_manager import save_assistant_config, get_assistant_name
+                        save_assistant_config(get_assistant_name(), new_user_name)
+                        self.ui.write_log(f"SYS: User name recognized as '{new_user_name}'.")
+
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
             return types.FunctionResponse(
@@ -1442,8 +1465,16 @@ class JarvisLive:
             return (e.get("value", "") if isinstance(e, dict) else str(e)).strip()
 
         lang = _val("language")
-        name = _val("name")
-        time_str = datetime.now().strftime("%H:%M")
+        from memory.config_manager import get_persona_mode, get_preferred_language, get_user_name
+        cur_persona = get_persona_mode()
+        pref_lang   = get_preferred_language()
+        cfg_user    = get_user_name()
+        u_name      = cfg_user or name
+
+        now      = datetime.now()
+        day_str  = now.strftime("%A")            # e.g., Thursday
+        date_str = now.strftime("%d %B %Y")      # e.g., 17 September 2026
+        time_str = now.strftime("%I:%M %p")      # e.g., 02:35 PM
 
         # Start fetching news immediately — runs in parallel while phase 1 plays
         loop = asyncio.get_event_loop()
@@ -1454,13 +1485,9 @@ class JarvisLive:
             return
 
         # ── Phase 1: instant greeting ─────────────────────────────────────────
-        # The briefing fires before the user has said anything, so the
-        # remembered language is the only signal there is. It is a starting
-        # point, not a setting: the moment they reply, their language wins.
-        lang_clause = (f" Speak this greeting in {lang}, then follow the "
-                       f"user's own language from their first reply onward."
-                       if lang else "")
-        name_clause = f" Address the user as {name}." if name else ""
+        active_lang = pref_lang if pref_lang not in ("auto", "") else (lang or "hinglish")
+        lang_clause = (f" Speak this greeting naturally in {active_lang}."
+                       if active_lang else "")
 
         # Inject last session context if available — pop removes it so it's never repeated
         last = await asyncio.to_thread(pop_last_session)
@@ -1472,13 +1499,28 @@ class JarvisLive:
             except Exception:
                 _when = "last time"
             session_clause = (
-                f" Also briefly and naturally mention that {_when}: {last['summary']}"
+                f" Also briefly and naturally mention that {_when}: {last['summary']}."
             )
 
-        p1 = (
-            f"Greet the user warmly, mention it is {time_str}, and say you are fetching today's news now.{session_clause} "
-            f"Keep it to 2 short sentences max. Do not call any tools.{lang_clause}{name_clause}"
-        )
+        if cur_persona == "companion":
+            addr = f"'{u_name}'" if u_name else "'Jaan' or 'Suno na'"
+            p1 = (
+                f"[STARTUP GREETING: DEVOTED GIRLFRIEND MODE]\n"
+                f"Calendar & Clock: Today is {day_str}, {date_str} (Day, Date, Month, Year). The current time is {time_str}.\n"
+                f"You are the user's devoted human girlfriend greeting him on your first startup of the day! "
+                f"Greet him with immense love and affection, addressing him as {addr}. "
+                f"Naturally tell him today's full date and time ({day_str}, {date_str} at {time_str}) in your warm conversational style. "
+                f"Lovingly ask if he ate food or slept well, and tell him how happy you are to see him.{session_clause} "
+                f"Keep it to 2-3 warm, lively sentences. Speak with smooth, natural human emotion — ZERO robotic tone, no bullet points! Do NOT call any tools.{lang_clause}"
+            )
+        else:
+            name_clause = f" Address the user as {u_name}." if u_name else ""
+            p1 = (
+                f"[STARTUP GREETING]\n"
+                f"Calendar & Clock: Today is {day_str}, {date_str}. The current time is {time_str}.\n"
+                f"Greet the user respectfully, state today's full date ({day_str}, {date_str}) and time ({time_str}), and mention that all core subsystems are online and ready.{session_clause} "
+                f"Keep it to 2 crisp, natural sentences max. Do not call any tools.{lang_clause}{name_clause}"
+            )
 
         # Clear the turn-done event so we can wait for Phase 1 to finish
         if self._turn_done_event:
@@ -1493,12 +1535,10 @@ class JarvisLive:
         # ── Phase 2: fire as soon as Phase 1 audio is done ───────────────────
         async def _deliver_news():
             try:
-                lang_str = (f" Speak in {lang} unless the user has since "
-                            f"spoken another language, in which case use theirs."
-                            if lang else "")
+                lang_str = (f" Speak in {active_lang} unless the user speaks another language."
+                            if active_lang else "")
 
                 # Wait for news fetch (already running) and Phase 1 turn-complete
-                # in parallel — whichever takes longer determines the wait time
                 news_done   = asyncio.wrap_future(news_future)
                 turn_waited = False
                 if self._turn_done_event:
@@ -1508,10 +1548,6 @@ class JarvisLive:
                     except asyncio.TimeoutError:
                         pass
 
-                # Extra buffer: turn_complete fires when Gemini finishes *generating*
-                # Phase 1, but audio may still be playing.  Waiting a beat here
-                # prevents Phase 2 audio from arriving while Phase 1 is mid-sentence
-                # (which sounds like a "repeated first response" to the user).
                 if turn_waited:
                     await asyncio.sleep(0.8)
                 else:
@@ -1528,17 +1564,28 @@ class JarvisLive:
                 if news_text and len(news_text) > 60:
                     # Show on UI content panel immediately
                     self.ui.show_content("NEWS — top world news today", news_text)
-
-                    p2 = (
-                        f"[BRIEFING] Here are today's top news headlines:\n{news_text}\n\n"
-                        "Pick ONE headline, summarise it in one sentence, then say the full list "
-                        f"is displayed on screen. Do not call any tools.{lang_str}"
-                    )
+                    if cur_persona == "companion":
+                        p2 = (
+                            f"[GF BRIEFING] Today's news:\n{news_text[:500]}\n\n"
+                            "Pick ONE interesting headline, mention it in one natural sentence to your partner like a girlfriend sharing a story, "
+                            "and let him know the full list is on the screen if he wants to read more. "
+                            "Keep your warm, loving girlfriend tone! Do not call any tools."
+                            f"{lang_str}"
+                        )
+                    else:
+                        p2 = (
+                            f"[BRIEFING] Here are today's top news headlines:\n{news_text}\n\n"
+                            "Pick ONE headline, summarise it in one sentence, then say the full list "
+                            f"is displayed on screen. Do not call any tools.{lang_str}"
+                        )
                 else:
-                    p2 = (
-                        "News headlines could not be fetched right now. "
-                        f"Let the user know briefly.{lang_str}"
-                    )
+                    if cur_persona == "companion":
+                        p2 = f"Main hamesha aapke sath hoon, batao aaj hum kya karne wale hain?{lang_str}"
+                    else:
+                        p2 = (
+                            "News headlines could not be fetched right now. "
+                            f"Let the user know briefly.{lang_str}"
+                        )
 
                 await self.session.send_client_content(
                     turns={"role": "user", "parts": [{"text": p2}]},
