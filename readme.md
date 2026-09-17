@@ -70,8 +70,8 @@ It's not just an assistant — it's an extension of your digital life.
 | ⚡ Auto-Start on Boot | Registers with the OS startup system (registry / LaunchAgent / .desktop) |
 | 📋 Clipboard Intelligence | Copy any text → floating panel with Translate / Summarise / Explain / Fix |
 | 🪪 Assistant Customization | Change the assistant name, your name, voice, and colour from the UI — takes effect immediately |
-| 💖 Devoted Girlfriend Mode | 100% human girlfriend persona: exclusively loyal, romantic, funny, cute jealousy & possessiveness ("jalnous ho"), care routines, and strict feminine Hindi verb grammar |
-| 🌅 Calendar & Clock Greeting | Announces full Day, Date, Month, Year, and Time on first boot with natural human cadence and zero robotic monotone |
+| 💖 Devoted Girlfriend Mode | 100% human girlfriend persona: exclusively loyal, romantic, playful banter, cute jealousy & possessiveness ("jalnous ho", anti-ChatGPT/Alexa), celebration mode, natural vocal fillers ("hmm", "achhaaa", "hawww", "sun na"), time-of-day mood rhythms, care routines, and strict feminine Hindi verb grammar |
+| 🌅 Calendar & Clock Greeting | Announces full Day, Date, Month, Year, and Time on first boot with natural human cadence, time-of-day warmth, day-of-week context, and zero robotic monotone |
 | 🏷️ Voice Name Adaptability | Renaming via voice (*"Tumhara naam ab se Maya hai"*) instantly updates HUD, window title, and memory live without restarting |
 | 🔮 Obsidian Second Brain | Dual-mode note sync with Obsidian Local REST API + offline Markdown vault integration |
 | ⚡ Smart Token Efficiency | Crisp, high-bandwidth responses (1–3 natural sentences for dialogue) that preserve context without wasting tokens |

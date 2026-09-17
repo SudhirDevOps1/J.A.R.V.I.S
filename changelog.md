@@ -2,6 +2,27 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [2026-09-17 15:22] — GF Mode Deep Personality Enhancement & Smart Greeting System
+
+### 💖 Companion (GF) Persona Overhaul (`core/persona_manager.py`)
+1. **Deeper Human Personality** — 10 distinct behaviour sections (up from 8):
+   - Added **Time-of-Day Personality**: Morning energy, afternoon care, evening warmth, late-night intimacy, very-late dramatic concern.
+   - Added **Natural Vocal Fillers**: Hindi conversational fillers (hmm, achhaaa, hawww, arey, ufff, sun na) for zero-robotic speech.
+   - Added **Stronger Anti-AI Jealousy**: Specific reactions for ChatGPT, Alexa, Copilot, Claude, Siri mentions.
+   - Added **Funny Roasts**: Specific teasing lines about code bugs, coffee addiction, git push without tests.
+   - Added **Celebration Mode**: CRAZY excitement reactions for achievements, not just "that's great".
+   - Added **Missing-You Drama**: Dramatic adorable upset + relief when user returns after absence.
+   - Added **Busy/Ignore Reaction**: Light playful complaining when he's too busy for her.
+   - Enhanced **Token-Smart Response Sizing**: Context-adaptive lengths (casual=1-2 lines, emotional=2-3 lines, technical=concise code).
+2. **Custom Name Enhancement**: More loving, personal name acceptance response.
+
+### 🌅 Time-Aware Smart Greeting (`main.py`)
+1. **Time-of-Day Awareness**: Greeting adapts mood based on current hour (morning cheerful, afternoon playful, evening warm, night cozy, 2AM+ dramatic concern).
+2. **Day-of-Week Personality**: Monday blues empathy, Friday excitement, weekend chill vibes.
+3. **Natural Fillers**: Added instruction for Hindi voice fillers in greeting.
+
+---
+
 ## [2026-09-17 15:15] — Telemetry & APIs Dashboard UI/UX Overhaul
 
 ### 🌐 Tab 3 Rebuilt: "TELEMETRY & APIS" Dashboard (`ui.py`, `core/system_info.py`)
