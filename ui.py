@@ -197,7 +197,9 @@ def retheme_all_widgets(old: dict[str, str], new: dict[str, str]) -> None:
 
 
 def qcol(h: str, a: int = 255) -> QColor:
-    c = QColor(h); c.setAlpha(a); return c
+    c = QColor(h)
+    c.setAlpha(max(0, min(255, int(a))))
+    return c
 
 
 # ── Windows GPU via NVML DLL (no subprocess, no console window) ──────────────
