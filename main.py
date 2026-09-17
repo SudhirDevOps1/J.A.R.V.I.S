@@ -765,7 +765,6 @@ class JarvisLive:
                         import base64
                         import requests
                         b64 = base64.b64encode(img_b).decode("ascii")
-                        v_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={g_key}"
                         v_payload = {
                             "contents": [{
                                 "parts": [
@@ -774,16 +773,24 @@ class JarvisLive:
                                 ]
                             }]
                         }
-                        v_resp = requests.post(v_url, json=v_payload, timeout=25)
-                        if v_resp.status_code == 200:
-                            v_data = v_resp.json()
-                            cands = v_data.get("candidates", [])
-                            if cands and "content" in cands[0]:
-                                ans = cands[0]["content"]["parts"][0].get("text", "").strip()
-                                self.ui.write_log(f"{self._asst_name}: {ans}")
-                                self.speak(ans)
-                                self.ui.set_state("LISTENING")
-                                return
+                        for v_model in ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"]:
+                            try:
+                                v_url = f"https://generativelanguage.googleapis.com/v1beta/models/{v_model}:generateContent?key={g_key}"
+                                v_resp = requests.post(v_url, json=v_payload, timeout=25)
+                                if v_resp.status_code == 200:
+                                    v_data = v_resp.json()
+                                    cands = v_data.get("candidates", [])
+                                    if cands and "content" in cands[0]:
+                                        parts = cands[0]["content"].get("parts", [])
+                                        if parts and "text" in parts[0]:
+                                            ans = parts[0]["text"].strip()
+                                            if ans:
+                                                self.ui.write_log(f"{self._asst_name}: {ans}")
+                                                self.speak(ans)
+                                                self.ui.set_state("LISTENING")
+                                                return
+                            except Exception as _ve:
+                                print(f"[Vision] {v_model} attempt: {_ve}")
                     # Free Mode / Anonymous Proxy fallback:
                     self.ui.write_log(f"SYS: {target_label} कैप्चर सक्रिय है। HUD पर लाइव स्ट्रीम चालू है।")
                     self.speak(f"{target_label} मैंने देख लिया है और HUD पर लाइव स्ट्रीम चालू कर दी है।")

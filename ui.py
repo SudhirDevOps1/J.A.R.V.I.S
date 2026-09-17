@@ -2017,9 +2017,23 @@ class ProviderSettingsOverlay(QWidget):
             w.setStyleSheet(f"color: {color}; background: transparent;")
             return w
 
-        self._fs = (f"QLineEdit, QComboBox {{ background: #000d12; color: {C.TEXT}; "
-                    f"border: 1px solid {C.BORDER}; border-radius: 3px; padding: 3px 8px; }}"
-                    f"QLineEdit:focus, QComboBox:focus {{ border: 1px solid {C.PRI}; }}")
+        self._fs = (
+            f"QLineEdit, QComboBox {{ background: #000d12; color: {C.TEXT}; "
+            f"border: 1px solid {C.BORDER}; border-radius: 3px; padding: 3px 8px; }}"
+            f"QLineEdit:focus, QComboBox:focus {{ border: 1px solid {C.PRI}; }}"
+            f"QComboBox QAbstractItemView {{ "
+            f"background: #000c14; color: {C.TEXT}; border: 1px solid {C.BORDER_B}; "
+            f"selection-background-color: #002233; selection-color: {C.PRI}; "
+            f"padding: 2px; outline: none; }}"
+            f"QComboBox QAbstractItemView QScrollBar:vertical {{ "
+            f"background: #000810; width: 8px; border: none; margin: 0px; }}"
+            f"QComboBox QAbstractItemView QScrollBar::handle:vertical {{ "
+            f"background: {C.BORDER_B}; min-height: 20px; border-radius: 3px; }}"
+            f"QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {{ "
+            f"background: {C.PRI}; }}"
+            f"QComboBox QAbstractItemView QScrollBar::add-line:vertical, "
+            f"QComboBox QAbstractItemView QScrollBar::sub-line:vertical {{ height: 0px; }}"
+        )
 
         # Header
         main_lay.addWidget(_lbl("⚡  STARK NEURAL CONFIG & LAB", 11, True, color=C.PRI, align=Qt.AlignmentFlag.AlignCenter))
@@ -2060,6 +2074,8 @@ class ProviderSettingsOverlay(QWidget):
         self._provider_combo = QComboBox()
         self._provider_combo.setFont(QFont("Courier New", 9))
         self._provider_combo.setStyleSheet(self._fs)
+        self._provider_combo.setMaxVisibleItems(10)
+        self._provider_combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         from core.multi_llm import PROVIDER_REGISTRY
 
@@ -2078,6 +2094,8 @@ class ProviderSettingsOverlay(QWidget):
         self._model_combo.setEditable(True)
         self._model_combo.setFont(QFont("Courier New", 8))
         self._model_combo.setStyleSheet(self._fs)
+        self._model_combo.setMaxVisibleItems(10)
+        self._model_combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         lay_ai.addWidget(self._model_combo)
 
         # Scrollable Key and Test Row
@@ -2373,6 +2391,8 @@ class ProviderSettingsOverlay(QWidget):
         self._tts_combo = QComboBox()
         self._tts_combo.setFont(QFont("Courier New", 9))
         self._tts_combo.setStyleSheet(self._fs)
+        self._tts_combo.setMaxVisibleItems(10)
+        self._tts_combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tts_options = [
             ("gemini_live", "Google Gemini Live (Multilingual Realtime Voice)"),
             ("piper_hindi", "Piper Offline Hindi (Devanagari - hi_IN Pratham)"),
@@ -2608,6 +2628,12 @@ class ProviderSettingsOverlay(QWidget):
 
         main_lay.addLayout(btn_row)
 
+    def keyPressEvent(self, e):
+        if e.key() == Qt.Key.Key_Escape:
+            self.hide()
+        else:
+            super().keyPressEvent(e)
+
     def _on_voice_tested(self, ok: bool, msg: str):
         self._voice_test_btn.setEnabled(True)
         if ok:
@@ -2752,7 +2778,21 @@ class ProviderSettingsOverlay(QWidget):
         try:
             from core.multi_llm import PROVIDER_REGISTRY
             data = _read_full_config()
-            data["preferred_llm_provider"] = prov_id
+
+            # Preserve core legacy inputs
+            gem_key = ""
+            if hasattr(self, "_gemini_input"):
+                gem_key = self._gemini_input.text().strip()
+                if gem_key:
+                    data["gemini_api_key"] = gem_key
+
+            # Auto-activate Gemini Live WebSocket Stream if Gemini key is provided
+            if gem_key and (prov_id in ("gemini", "gemini-web") or not prov_id):
+                prov_id = "gemini"
+                data["preferred_llm_provider"] = "gemini"
+            else:
+                data["preferred_llm_provider"] = prov_id
+
             data["tts_engine"] = self._tts_combo.currentData() or "gemini_live"
             data["sfx_enabled"] = self._sfx_checkbox.isChecked()
 
@@ -2764,9 +2804,6 @@ class ProviderSettingsOverlay(QWidget):
                 data["selected_models"][prov_id] = active_m
                 data["custom_llm_model"] = active_m
 
-            # Preserve core legacy inputs
-            if hasattr(self, "_gemini_input") and self._gemini_input.text().strip():
-                data["gemini_api_key"] = self._gemini_input.text().strip()
             if hasattr(self, "_groq_input"):
                 data["groq_api_key"] = self._groq_input.text().strip()
             if hasattr(self, "_openrouter_input"):
@@ -6899,6 +6936,9 @@ class MainWindow(QMainWindow):
         self._customize_overlay = ov
 
     def _open_providers(self):
+        if self._provider_overlay and self._provider_overlay.isVisible():
+            self._provider_overlay.hide()
+            return
         cfg = _read_full_config()
         if self._provider_overlay:
             self._provider_overlay.hide()
@@ -6917,6 +6957,11 @@ class MainWindow(QMainWindow):
 
     def _on_providers_saved(self, prov: str):
         self._log.append_log(f"SYS: Active LLM Provider set to: {prov.upper()}")
+        if self.on_voice_change:
+            try:
+                self.on_voice_change()
+            except Exception:
+                pass
 
     def _preview_ui_color(self, hex_color: str):
         """Live preview — paints the whole interface the new colour (does NOT write to config)."""
