@@ -25,6 +25,13 @@ import sounddevice as sd
 os.environ.setdefault("USE_TF",                 "0")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
+# Fix Windows aiodns DNS resolution issues in aiohttp / edge_tts
+try:
+    import aiohttp.connector
+    aiohttp.connector.DefaultResolver = aiohttp.ThreadedResolver
+except Exception:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Audio playback helpers
@@ -146,8 +153,18 @@ class EdgeTTSEngine:
 
     def speak(self, text: str) -> None:
         loop = asyncio.new_event_loop()
+        audio_bytes = None
         try:
             audio_bytes = loop.run_until_complete(self._synth(text))
+        except Exception as e:
+            print(f"[EdgeTTS] Synthesis failed ({e}). Falling back to Piper Hindi...")
+            try:
+                engine = PiperHindiTTSEngine()
+                engine.speak(text)
+                return
+            except Exception as e_pipe:
+                print(f"[TTS Fallback] Piper Hindi also failed: {e_pipe}")
+                return
         finally:
             loop.close()
         if audio_bytes:

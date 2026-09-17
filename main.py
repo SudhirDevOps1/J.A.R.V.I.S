@@ -610,21 +610,6 @@ class JarvisLive:
         except Exception as e:
             print(f"[PluginSay] {e}")
 
-    def speak(self, text: str):
-        """Thread-safe speech synthesis for Multi-Provider and local responses."""
-        if not text:
-            return
-        def _synth():
-            try:
-                self.set_speaking(True)
-                from core.tts import speak_text
-                speak_text(text)
-            except Exception as e:
-                print(f"[TTS Error] {e}")
-            finally:
-                self.set_speaking(False)
-        threading.Thread(target=_synth, daemon=True).start()
-
     def request_reconnect(self, keep_context: bool = True, reason: str = ""):
         """Thread-safe: ask the run loop to tear down and rebuild the Live
         session. Called from the Qt thread. No-op until the async loop and
@@ -840,14 +825,8 @@ class JarvisLive:
         from memory.config_manager import get_tts_engine, get_edge_voice
         eng = get_tts_engine()
         if eng in ("piper_hindi", "piper", "piper_hi"):
-            try:
-                from core.tts import PiperHindiTTSEngine
-                if not hasattr(self, "_piper_engine") or self._piper_engine is None:
-                    self._piper_engine = PiperHindiTTSEngine()
-                threading.Thread(target=self._piper_engine.speak, args=(text,), daemon=True).start()
-                return
-            except Exception as e:
-                print(f"[PiperTTS] Fallback error: {e}")
+            self._speak_with_piper(text)
+            return
         elif eng in ("edge_tts", "edge", "neural"):
             try:
                 from core.tts import EdgeTTSEngine
@@ -860,20 +839,34 @@ class JarvisLive:
                         or getattr(self._edge_engine, "pitch", "") != p
                         or getattr(self._edge_engine, "rate", "") != r):
                     self._edge_engine = EdgeTTSEngine(voice=v, pitch=p, rate=r)
-                threading.Thread(target=self._edge_engine.speak, args=(text,), daemon=True).start()
+                
+                def _edge_run():
+                    self.set_speaking(True)
+                    try:
+                        self._edge_engine.speak(text)
+                    except Exception as e:
+                        print(f"[EdgeTTS] Fallback error: {e}")
+                        self._speak_with_piper(text)
+                    finally:
+                        self.set_speaking(False)
+                threading.Thread(target=_edge_run, daemon=True).start()
                 return
             except Exception as e:
-                print(f"[EdgeTTS] Fallback error: {e}")
+                print(f"[EdgeTTS] Initialization error: {e}")
+                self._speak_with_piper(text)
+                return
 
-        if not self._loop or not self.session:
-            return
-        asyncio.run_coroutine_threadsafe(
-            self.session.send_client_content(
-                turns={"role": "user", "parts": [{"text": text}]},
-                turn_complete=True
-            ),
-            self._loop
-        )
+        if self._loop and self.session:
+            asyncio.run_coroutine_threadsafe(
+                self.session.send_client_content(
+                    turns={"role": "user", "parts": [{"text": text}]},
+                    turn_complete=True
+                ),
+                self._loop
+            )
+        else:
+            # In Free Mode or when session is not connected, speak using local voice
+            self._speak_with_piper(text)
 
     def speak_error(self, tool_name: str, error: str):
         short = str(error)[:120]
