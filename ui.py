@@ -38,14 +38,21 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
-    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
+    QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSlider, QSplitter,
+    QStackedWidget, QTabWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
 )
 
 # ── Application Identity & Protocol ──────────────────────────────────────────
 # Dynamic application identity and protocol derivation managed centrally
 # via config_manager.
-from memory.config_manager import get_app_name, get_protocol_name
+from memory.config_manager import (
+    get_app_name, get_protocol_name,
+    get_avatar_mode, save_avatar_mode,
+    get_particle_density, save_particle_density,
+    get_hud_fx, save_hud_fx,
+    get_sfx_enabled, save_sfx_enabled,
+    get_tts_engine, save_tts_engine,
+)
 APP_VERSION  = get_app_name()
 APP_PROTOCOL = get_protocol_name()
 
@@ -406,6 +413,18 @@ class HudCanvas(QWidget):
         self._paint_tick = 0
         self._last_t = time.time()
 
+        # ── Visual Customization & Multi-Mode HUD ─────────────────────────────
+        self._avatar_mode = get_avatar_mode()
+        self._particle_density = get_particle_density()
+        self._hud_fx = get_hud_fx()
+
+        # Multi-mode state trackers
+        self._reactor_outer_ang = 0.0
+        self._reactor_inner_ang = 0.0
+        self._orb_ang_x = 0.0
+        self._orb_ang_y = 0.0
+        self._orb_ang_z = 0.0
+
         # ── 3D Orbital Planetary Halo Parameters ──────────────────────────────
         self._halo_angle = 0.0                      # Main orbital rotation angle in degrees
         self._halo_tilt = math.radians(16.0)        # Perspective tilt angle (~16°)
@@ -427,24 +446,13 @@ class HudCanvas(QWidget):
                 "strand": random.choice([0, 1, 2]),
             })
 
-        # ── Cosmic Stardust Swarm (220 particles) ─────────────────────────────
+        # Cosmic Stardust Swarm
         self._stardust: list[dict] = []
-        for _ in range(220):
-            ny = random.uniform(-0.85, 0.85)
-            max_w = 0.38 if ny < -0.2 else (0.50 if ny < 0.2 else 0.82)
-            nx = random.gauss(0, max_w * 0.42)
-            nx = max(-max_w, min(max_w, nx))
-            self._stardust.append({
-                "x": nx,
-                "y": ny,
-                "sz": random.uniform(1.1, 3.0),
-                "phase": random.uniform(0, math.pi * 2),
-                "spd": random.uniform(0.65, 1.45),
-                "col": random.choice(["gold", "amber", "white", "cyan"]),
-                "base_a": random.uniform(130, 240),
-                "dx": 0.0,
-                "dy": 0.0,
-            })
+        self._init_stardust()
+
+        # Matrix Rain Streams
+        self._matrix_cols: list[dict] = []
+        self._init_matrix()
 
         # ── Vocal Shockwaves ──────────────────────────────────────────────────
         self._shockwaves: list[dict] = []
@@ -472,6 +480,59 @@ class HudCanvas(QWidget):
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._tmr.start(16)
+
+    def _init_stardust(self):
+        """Initialize stardust particles based on configured density."""
+        self._stardust = []
+        count = getattr(self, "_particle_density", 200)
+        for _ in range(count):
+            ny = random.uniform(-0.85, 0.85)
+            max_w = 0.38 if ny < -0.2 else (0.50 if ny < 0.2 else 0.82)
+            nx = random.gauss(0, max_w * 0.42)
+            nx = max(-max_w, min(max_w, nx))
+            self._stardust.append({
+                "x": nx,
+                "y": ny,
+                "sz": random.uniform(1.1, 3.0),
+                "phase": random.uniform(0, math.pi * 2),
+                "spd": random.uniform(0.65, 1.45),
+                "col": random.choice(["gold", "amber", "white", "cyan"]),
+                "base_a": random.uniform(130, 240),
+                "dx": 0.0,
+                "dy": 0.0,
+            })
+
+    def _init_matrix(self):
+        """Initialize digital rain columns for Cyber Matrix mode."""
+        self._matrix_cols = []
+        chars = "0123456789ABCDEFJARVISSTARK"
+        for i in range(40):
+            self._matrix_cols.append({
+                "col_x": i / 40.0,
+                "y": random.uniform(-0.6, 1.0),
+                "spd": random.uniform(0.006, 0.020),
+                "length": random.randint(8, 18),
+                "chars": [random.choice(chars) for _ in range(20)],
+            })
+
+    def set_avatar_mode(self, mode: str) -> None:
+        """Switch active avatar mode ('celestial', 'reactor', 'orb', 'matrix')."""
+        m = (mode or "celestial").lower().strip()
+        if m in ("celestial", "reactor", "orb", "matrix"):
+            self._avatar_mode = m
+            self.update()
+
+    def set_particle_density(self, count: int) -> None:
+        """Update particle density in real time."""
+        self._particle_density = max(50, min(350, int(count)))
+        self._init_stardust()
+        self.update()
+
+    def set_hud_fx(self, fx: dict) -> None:
+        """Update HUD visual effects in real time."""
+        if isinstance(fx, dict):
+            self._hud_fx.update(fx)
+            self.update()
 
     def set_audio_level(self, level: float) -> None:
         """Thread-safe entry point for audio amplitude from mic/TTS."""
@@ -568,7 +629,7 @@ class HudCanvas(QWidget):
         # Organic breathing scale
         self._scale = 1.0 + math.sin(self._tick * 0.035) * 0.012 + amp * 0.03
 
-        # Orbital halo rotation speed based on state and sound
+        # Orbital rotation speed based on state and sound
         if self.speaking:
             rot_spd = 1.8 + amp * 5.2
         elif self.state == "LISTENING" and amp > 0.03:
@@ -580,11 +641,30 @@ class HudCanvas(QWidget):
         else:
             rot_spd = 0.80
 
+        # Advance celestial halo angle
         self._halo_angle = (self._halo_angle + rot_spd) % 360.0
 
         # Advance orbiting photons
         for ph in self._photons:
             ph["angle"] = (ph["angle"] + math.radians(rot_spd * ph["spd"])) % (math.pi * 2)
+
+        # Advance Arc Reactor angles
+        self._reactor_outer_ang = (self._reactor_outer_ang + rot_spd * 0.75) % 360.0
+        self._reactor_inner_ang = (self._reactor_inner_ang - rot_spd * 1.35) % 360.0
+
+        # Advance Quantum Orb 3D angles
+        self._orb_ang_x = (self._orb_ang_x + 0.9 + amp * 2.8) % 360.0
+        self._orb_ang_y = (self._orb_ang_y + 1.3 + amp * 3.4) % 360.0
+        self._orb_ang_z = (self._orb_ang_z + 0.6 + amp * 1.8) % 360.0
+
+        # Advance Matrix Rain columns
+        for mc in getattr(self, "_matrix_cols", []):
+            mc["y"] += mc["spd"] * (1.0 + amp * 2.5)
+            if mc["y"] > 1.3:
+                mc["y"] = -0.3
+                if random.random() < 0.35:
+                    chars = "0123456789ABCDEFJARVISSTARK"
+                    mc["chars"] = [random.choice(chars) for _ in range(20)]
 
         # Update stardust particles
         for p in self._stardust:
@@ -606,14 +686,15 @@ class HudCanvas(QWidget):
                 max_w = 0.80
                 p["x"] = random.gauss(0, max_w * 0.42)
 
-        # Trigger energy shockwaves on vocal onset bursts
-        if (self.speaking or (self.state == "LISTENING" and amp > 0.15)) and amp > 0.16 and random.random() < 0.22:
-            self._shockwaves.append({
-                "r": 12.0,
-                "max_r": 180.0 + amp * 120.0,
-                "alpha": 220,
-                "spd": 4.5 + amp * 6.5,
-            })
+        # Trigger energy shockwaves on vocal onset bursts (if enabled)
+        if self._hud_fx.get("shockwaves", True):
+            if (self.speaking or (self.state == "LISTENING" and amp > 0.15)) and amp > 0.16 and random.random() < 0.22:
+                self._shockwaves.append({
+                    "r": 12.0,
+                    "max_r": 180.0 + amp * 120.0,
+                    "alpha": 220,
+                    "spd": 4.5 + amp * 6.5,
+                })
 
         active_sw = []
         for sw in self._shockwaves:
@@ -652,12 +733,13 @@ class HudCanvas(QWidget):
         # Fill deep space void
         p.fillRect(self.rect(), qcol(C.BG))
 
-        # Ambient starlight grid
-        _gkey = (W, H, C.PRI_GHO)
-        if self._grid_cache is None or self._grid_key != _gkey:
-            self._grid_cache = self._make_grid(W, H)
-            self._grid_key = _gkey
-        p.drawPixmap(0, 0, self._grid_cache)
+        # Ambient starlight grid (if starfield enabled)
+        if self._hud_fx.get("starfield", True):
+            _gkey = (W, H, C.PRI_GHO)
+            if self._grid_cache is None or self._grid_key != _gkey:
+                self._grid_cache = self._make_grid(W, H)
+                self._grid_key = _gkey
+            p.drawPixmap(0, 0, self._grid_cache)
 
         # ── Determine Color Palette Based on State ────────────────────────────
         if self.speaking:
@@ -692,158 +774,274 @@ class HudCanvas(QWidget):
             bloom_c   = QColor(255, 180, 50)
             status_txt, status_col = ("●  READY" if self._blink else "○  READY"), qcol(C.PRI)
 
-        # ── Avatar Coordinates & Sizing ───────────────────────────────────────
-        av_h = min(int(H * 0.76), int(W * 1.32))
-        av_w = int(av_h * getattr(self, "_face_aspect", 0.62))
-        av_x = int(cx - av_w / 2.0)
-        av_y = int(cy - av_h * 0.50)
+        mode = getattr(self, "_avatar_mode", "celestial")
 
-        # Center of the celestial head/temples where the halo orbits
-        head_cx = cx
-        head_cy = av_y + av_h * 0.355
+        # ── MODE RENDERING ────────────────────────────────────────────────────
+        if mode == "reactor":
+            # ══════════════════════════════════════════════════════════════════
+            # MODE: STARK ARC REACTOR (Mechanical Concentric Rings & Core)
+            # ══════════════════════════════════════════════════════════════════
+            R = fw * 0.36
 
-        # 3D Elliptical Halo Radii
-        r_x = av_w * 0.72 + amp * 38.0
-        r_y = r_x * math.sin(self._halo_tilt) * 1.15
-
-        # ──────────────────────────────────────────────────────────────────────
-        # LAYER 1: Back Half of the 3D Planetary Orbital Halo (z < 0)
-        # ──────────────────────────────────────────────────────────────────────
-        # Angles from 180° to 360° pass BEHIND the head
-        halo_rot_rad = math.radians(self._halo_angle)
-        rect_halo = QRectF(head_cx - r_x, head_cy - r_y, r_x * 2.0, r_y * 2.0)
-
-        # Draw smooth back-half glowing arcs (0..180 deg in Qt drawArc is upper/back half)
-        for w_pen, a_mult in [(5.5, 35), (3.0, 75), (1.5, 140)]:
-            c = QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(a_mult * (0.8 + amp * 0.5)))
-            p.setPen(QPen(c, w_pen))
+            # Outer targeting ring & tick marks
+            p.setPen(QPen(qcol(C.PRI_DIM, 120), 1))
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawArc(rect_halo, 0 * 16, 180 * 16)
+            p.drawEllipse(QPointF(cx, cy), R, R)
+            p.drawEllipse(QPointF(cx, cy), R * 0.88, R * 0.88)
 
-        # Draw back photons (z < 0)
-        for ph in self._photons:
-            ang = (ph["angle"] + halo_rot_rad) % (math.pi * 2)
-            z_depth = -math.sin(ang)
-            if z_depth < 0:  # Back half
-                px = head_cx + (r_x + ph["rad_jit"]) * math.cos(ang)
-                py = head_cy - (r_y + ph["rad_jit"] * 0.28) * math.sin(ang)
-                alpha = int(ph["alpha"] * 0.45)
-                p.setBrush(QBrush(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), alpha)))
-                p.setPen(Qt.PenStyle.NoPen)
-                p.drawEllipse(QPointF(px, py), ph["sz"] * 0.8, ph["sz"] * 0.8)
+            # Degree ticks
+            p.setPen(QPen(qcol(C.PRI, 180), 1.5))
+            for deg in range(0, 360, 15):
+                rad = math.radians(deg)
+                t_len = 8 if deg % 45 == 0 else 4
+                x1 = cx + math.cos(rad) * (R - t_len)
+                y1 = cy + math.sin(rad) * (R - t_len)
+                x2 = cx + math.cos(rad) * R
+                y2 = cy + math.sin(rad) * R
+                p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
 
-        # ──────────────────────────────────────────────────────────────────────
-        # LAYER 2: Celestial Silhouette & Connective Neural Filaments
-        # ──────────────────────────────────────────────────────────────────────
-        # Ambient halo aura behind head
-        aura_r = av_w * 0.55 + amp * 30.0
-        aura_grad = QRadialGradient(head_cx, head_cy, aura_r)
-        aura_grad.setColorAt(0.0, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(50 + amp * 90)))
-        aura_grad.setColorAt(0.5, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), int(25 + amp * 40)))
-        aura_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
-        p.setBrush(QBrush(aura_grad))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawEllipse(QPointF(head_cx, head_cy), aura_r, aura_r)
+            # 10 Transformer Copper Coils
+            coil_r = R * 0.72
+            for i in range(10):
+                th = math.radians(i * 36 + self._reactor_outer_ang)
+                ccx = cx + math.cos(th) * coil_r
+                ccy = cy + math.sin(th) * coil_r
 
-        # Draw Avatar Pixmap (feathered silhouette)
-        if self._face_px:
-            q_sz = (max(1, (av_w // 4) * 4), max(1, (av_h // 4) * 4))
-            if self._face_cache is None or self._face_cache_sz != q_sz:
-                self._face_cache = self._face_px.scaled(
-                    q_sz[0], q_sz[1],
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-                self._face_cache_sz = q_sz
-            scaled = self._face_cache
-            draw_w = int(scaled.width() * self._scale)
-            draw_h = int(scaled.height() * self._scale)
-            dx = int(head_cx - draw_w / 2.0)
-            dy = int(av_y + (av_h - draw_h) / 2.0)
-            p.drawPixmap(dx, dy, draw_w, draw_h, scaled)
-        else:
-            # Fallback pure procedural celestial orb if image missing
-            orb_r = int(fw * 0.26 * self._scale)
-            for i in range(8, 0, -1):
-                r2 = int(orb_r * i / 8)
-                frc = i / 8.0
-                a = max(0, min(255, int(self._halo * 1.2 * frc)))
-                p.setBrush(QBrush(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), a)))
-                p.setPen(Qt.PenStyle.NoPen)
-                p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
+                p.save()
+                p.translate(ccx, ccy)
+                p.rotate(i * 36 + self._reactor_outer_ang + 90)
 
-        # Draw Constellation Neural Filaments between close stardust particles
-        fil_pts = []
-        for s in self._stardust:
-            px = head_cx + (s["x"] + s["dx"]) * (av_w * 0.55)
-            py = head_cy + (s["y"] + s["dy"]) * (av_h * 0.48)
-            fil_pts.append((px, py, s))
+                # Copper block base
+                p.setBrush(QBrush(QColor(240, 140, 30, 210)))
+                p.setPen(QPen(primary_c, 1.2))
+                p.drawRoundedRect(QRectF(-7, -13, 14, 26), 2, 2)
 
-        # Connect near-neighbors
-        p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(35 + amp * 40)), 1))
-        for i in range(0, len(fil_pts), 3):
-            x1, y1, _ = fil_pts[i]
-            for j in range(i + 1, min(i + 5, len(fil_pts))):
-                x2, y2, _ = fil_pts[j]
-                if abs(x1 - x2) < 32 and abs(y1 - y2) < 32:
-                    p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+                # Copper wire grooves
+                p.setPen(QPen(QColor(60, 20, 0, 180), 1))
+                for gy in [-8, -4, 0, 4, 8]:
+                    p.drawLine(-5, gy, 5, gy)
+                p.restore()
 
-        # ──────────────────────────────────────────────────────────────────────
-        # LAYER 3: Front Half of the 3D Planetary Orbital Halo (z >= 0)
-        # ──────────────────────────────────────────────────────────────────────
-        # Angles passing IN FRONT of the forehead and temples!
-        for w_pen, a_mult in [(7.0, 50), (4.0, 110), (2.0, 210), (1.0, 255)]:
-            alpha_v = max(0, min(255, int(a_mult * (0.85 + amp * 0.45))))
-            col = white_c if w_pen <= 1.5 else primary_c
-            p.setPen(QPen(QColor(col.red(), col.green(), col.blue(), alpha_v), w_pen))
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawArc(rect_halo, 180 * 16, 180 * 16)
+            # Mid Counter-Rotating Slotted Ring
+            inner_ring_r = R * 0.50
+            p.setPen(QPen(primary_c, 3.5))
+            for a_idx in range(6):
+                start_a = int((self._reactor_inner_ang + a_idx * 60) * 16)
+                p.drawArc(QRectF(cx - inner_ring_r, cy - inner_ring_r, inner_ring_r * 2, inner_ring_r * 2),
+                          start_a, 42 * 16)
 
-        # Draw front photons with intense diamond starlight
-        for ph in self._photons:
-            ang = (ph["angle"] + halo_rot_rad) % (math.pi * 2)
-            z_depth = -math.sin(ang)
-            if z_depth >= 0:  # Front half
-                px = head_cx + (r_x + ph["rad_jit"]) * math.cos(ang)
-                py = head_cy - (r_y + ph["rad_jit"] * 0.28) * math.sin(ang)
-                alpha = max(0, min(255, int(ph["alpha"] * (0.85 + amp * 0.35))))
-                p.setBrush(QBrush(QColor(white_c.red(), white_c.green(), white_c.blue(), alpha)))
-                p.setPen(Qt.PenStyle.NoPen)
-                sz = ph["sz"] * (1.1 + amp * 0.4)
-                p.drawEllipse(QPointF(px, py), sz, sz)
-
-        # ── Twin Lateral Focal Blooms (Left & Right Limb Flares) ───────────────
-        flare_r = 16.0 + amp * 32.0
-        for fx, fy in [(head_cx - r_x, head_cy), (head_cx + r_x, head_cy)]:
-            rad = QRadialGradient(fx, fy, flare_r)
-            rad.setColorAt(0.0, QColor(255, 255, 255, 255))
-            rad.setColorAt(0.22, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(210 + amp * 45)))
-            rad.setColorAt(0.65, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), int(80 + amp * 40)))
-            rad.setColorAt(1.0, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), 0))
-            p.setBrush(QBrush(rad))
+            # Central Palladium/Vibranium Energy Core
+            core_r = R * 0.28 + amp * (R * 0.22)
+            grad = QRadialGradient(cx, cy, core_r)
+            grad.setColorAt(0.0, QColor(255, 255, 255, 255))
+            grad.setColorAt(0.35, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(220 + amp * 35)))
+            grad.setColorAt(0.70, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(140 + amp * 50)))
+            grad.setColorAt(1.0, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), 0))
+            p.setBrush(QBrush(grad))
             p.setPen(Qt.PenStyle.NoPen)
-            p.drawEllipse(QPointF(fx, fy), flare_r, flare_r)
+            p.drawEllipse(QPointF(cx, cy), core_r, core_r)
 
-            # Brilliant horizontal starlight diffraction spikes
-            p.setPen(QPen(QColor(255, 255, 255, int(180 + amp * 70)), 1.5))
-            sp_len = 24.0 + amp * 38.0
-            p.drawLine(QPointF(fx - sp_len, fy), QPointF(fx + sp_len, fy))
-            p.drawLine(QPointF(fx, fy - sp_len * 0.35), QPointF(fx, fy + sp_len * 0.35))
+            # Central Hexagonal Energy Grid
+            hex_pts = []
+            hex_r = core_r * 0.55
+            for h_i in range(6):
+                h_rad = math.radians(h_i * 60 + self._reactor_outer_ang * 0.5)
+                hex_pts.append(QPointF(cx + math.cos(h_rad) * hex_r, cy + math.sin(h_rad) * hex_r))
+            p.setPen(QPen(white_c, 1.5))
+            for h_i in range(6):
+                p.drawLine(hex_pts[h_i], hex_pts[(h_i + 1) % 6])
+                p.drawLine(QPointF(cx, cy), hex_pts[h_i])
 
-        # ──────────────────────────────────────────────────────────────────────
-        # LAYER 4: Floating Cosmic Stardust & Expanding Shockwaves
-        # ──────────────────────────────────────────────────────────────────────
-        # Expanding voice shockwaves
-        for sw in self._shockwaves:
-            col_sw = QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), sw["alpha"])
-            p.setPen(QPen(col_sw, 1.5))
+        elif mode == "orb":
+            # ══════════════════════════════════════════════════════════════════
+            # MODE: QUANTUM PLASMA ORB (3D Gyroscopic Rings & Energy Sphere)
+            # ══════════════════════════════════════════════════════════════════
+            orb_r = fw * 0.32
+
+            # 3D Gyro Orbital Rings with perspective depth
+            ring_confs = [
+                (orb_r * 0.95, 0.42, self._orb_ang_x, primary_c),
+                (orb_r * 0.82, 0.65, self._orb_ang_y, sec_c),
+                (orb_r * 0.70, 0.35, self._orb_ang_z, bloom_c),
+            ]
+
+            for r_rad, tilt_factor, rot_deg, col in ring_confs:
+                p.save()
+                p.translate(cx, cy)
+                p.rotate(rot_deg)
+                p.setPen(QPen(QColor(col.red(), col.green(), col.blue(), int(160 + amp * 70)), 2.0))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawEllipse(QPointF(0, 0), r_rad, r_rad * tilt_factor)
+
+                # Orbiting quantum node on ring
+                node_rad = math.radians(rot_deg * 2.2)
+                nx = math.cos(node_rad) * r_rad
+                ny = math.sin(node_rad) * (r_rad * tilt_factor)
+                p.setBrush(QBrush(white_c))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(nx, ny), 3.5 + amp * 3.0, 3.5 + amp * 3.0)
+                p.restore()
+
+            # Central Pulsing Plasma Sphere
+            core_r = orb_r * 0.40 + amp * (orb_r * 0.28)
+            grad = QRadialGradient(cx, cy, core_r)
+            grad.setColorAt(0.0, QColor(255, 255, 255, 255))
+            grad.setColorAt(0.3, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(210 + amp * 45)))
+            grad.setColorAt(0.7, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(120 + amp * 60)))
+            grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+            p.setBrush(QBrush(grad))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(cx, cy), core_r, core_r)
+
+            # Electrical discharge arcs on voice burst
+            if amp > 0.08:
+                p.setPen(QPen(white_c, 1.2))
+                for _ in range(4):
+                    ang_arc = random.uniform(0, math.pi * 2)
+                    d_len = core_r + random.uniform(10, 45)
+                    mid_x = cx + math.cos(ang_arc) * (core_r + 10) + random.uniform(-6, 6)
+                    mid_y = cy + math.sin(ang_arc) * (core_r + 10) + random.uniform(-6, 6)
+                    end_x = cx + math.cos(ang_arc) * d_len
+                    end_y = cy + math.sin(ang_arc) * d_len
+                    p.drawLine(QPointF(cx, cy), QPointF(mid_x, mid_y))
+                    p.drawLine(QPointF(mid_x, mid_y), QPointF(end_x, end_y))
+
+        elif mode == "matrix":
+            # ══════════════════════════════════════════════════════════════════
+            # MODE: CYBER MATRIX RAIN & HOLOGRAPHIC GRID
+            # ══════════════════════════════════════════════════════════════════
+            p.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+            for mc in getattr(self, "_matrix_cols", []):
+                col_x = mc["col_x"] * W
+                y_base = mc["y"] * H
+                for ci, ch in enumerate(mc["chars"][:mc["length"]]):
+                    py = y_base + ci * 14
+                    if -10 <= py <= H + 10:
+                        if ci == 0:
+                            p.setPen(QPen(white_c, 1))
+                        else:
+                            alpha = max(10, min(240, int(220 * (1.0 - ci / mc["length"]))))
+                            p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), alpha), 1))
+                        p.drawText(QPointF(col_x, py), ch)
+
+            # Center Hologram Cyber Shield & Ring
+            hex_r = fw * 0.22 + amp * 20.0
             p.setBrush(Qt.BrushStyle.NoBrush)
-            rx_sw = sw["r"]
-            ry_sw = sw["r"] * math.sin(self._halo_tilt) * 1.15
-            p.drawEllipse(QRectF(head_cx - rx_sw, head_cy - ry_sw, rx_sw * 2.0, ry_sw * 2.0))
+            p.setPen(QPen(primary_c, 1.5))
+            hex_pts = []
+            for h_i in range(6):
+                h_rad = math.radians(h_i * 60 + self._tick * 0.8)
+                hex_pts.append(QPointF(cx + math.cos(h_rad) * hex_r, cy + math.sin(h_rad) * hex_r))
+            for h_i in range(6):
+                p.drawLine(hex_pts[h_i], hex_pts[(h_i + 1) % 6])
 
-        # Floating stardust points
-        for px, py, s in fil_pts:
+            # Center Oscilloscope Circle
+            p.setPen(QPen(QColor(white_c.red(), white_c.green(), white_c.blue(), int(180 + amp * 75)), 2))
+            p.drawEllipse(QPointF(cx, cy), hex_r * 0.55 + amp * 18.0, hex_r * 0.55 + amp * 18.0)
+
+        else:
+            # ══════════════════════════════════════════════════════════════════
+            # MODE: CELESTIAL AVATAR (Harmonized with Artwork)
+            # ══════════════════════════════════════════════════════════════════
+            # Avatar Coordinates & Sizing
+            av_h = min(int(H * 0.76), int(W * 1.32))
+            av_w = int(av_h * getattr(self, "_face_aspect", 0.62))
+            av_x = int(cx - av_w / 2.0)
+            av_y = int(cy - av_h * 0.50)
+
+            # Center of the celestial head/temples
+            head_cx = cx
+            head_cy = av_y + av_h * 0.355
+
+            # 3D Elliptical Halo Radii
+            r_x = av_w * 0.72 + amp * 38.0
+            r_y = r_x * math.sin(self._halo_tilt) * 1.15
+
+            # Ambient halo aura behind head
+            aura_r = av_w * 0.55 + amp * 30.0
+            aura_grad = QRadialGradient(head_cx, head_cy, aura_r)
+            aura_grad.setColorAt(0.0, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(50 + amp * 90)))
+            aura_grad.setColorAt(0.5, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), int(25 + amp * 40)))
+            aura_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+            p.setBrush(QBrush(aura_grad))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(head_cx, head_cy), aura_r, aura_r)
+
+            # Draw Avatar Pixmap (smooth feathered vignette)
+            if self._face_px:
+                q_sz = (max(1, (av_w // 4) * 4), max(1, (av_h // 4) * 4))
+                if self._face_cache is None or self._face_cache_sz != q_sz:
+                    self._face_cache = self._face_px.scaled(
+                        q_sz[0], q_sz[1],
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    self._face_cache_sz = q_sz
+                scaled = self._face_cache
+                draw_w = int(scaled.width() * self._scale)
+                draw_h = int(scaled.height() * self._scale)
+                dx = int(head_cx - draw_w / 2.0)
+                dy = int(av_y + (av_h - draw_h) / 2.0)
+                p.drawPixmap(dx, dy, draw_w, draw_h, scaled)
+            else:
+                orb_r = int(fw * 0.26 * self._scale)
+                for i in range(8, 0, -1):
+                    r2 = int(orb_r * i / 8)
+                    frc = i / 8.0
+                    a = max(0, min(255, int(self._halo * 1.2 * frc)))
+                    p.setBrush(QBrush(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), a)))
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
+
+            # Orbiting Stardust Photons along the outer halo path
+            # NOTE: We do NOT draw artificial wireframe lines over her face!
+            # Photons orbit naturally around the outer periphery, complementing the artwork.
+            halo_rot_rad = math.radians(self._halo_angle)
+            for ph in self._photons:
+                ang = (ph["angle"] + halo_rot_rad) % (math.pi * 2)
+                px = head_cx + (r_x + ph["rad_jit"]) * math.cos(ang)
+                py = head_cy - (r_y + ph["rad_jit"] * 0.28) * math.sin(ang)
+
+                # Avoid drawing directly over facial features
+                if abs(px - head_cx) > av_w * 0.26 or py < head_cy - av_h * 0.12 or py > head_cy + av_h * 0.18:
+                    alpha = max(0, min(255, int(ph["alpha"] * (0.80 + amp * 0.40))))
+                    sz = ph["sz"] * (1.1 + amp * 0.4)
+                    p.setBrush(QBrush(QColor(255, 235, 175, alpha)))
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.drawEllipse(QPointF(px, py), sz, sz)
+
+            # Twin Lateral Focal Blooms (Left & Right Limb Solar Flares)
+            flare_r = 16.0 + amp * 32.0
+            for fx, fy in [(head_cx - r_x, head_cy), (head_cx + r_x, head_cy)]:
+                rad = QRadialGradient(fx, fy, flare_r)
+                rad.setColorAt(0.0, QColor(255, 255, 255, 255))
+                rad.setColorAt(0.22, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(210 + amp * 45)))
+                rad.setColorAt(0.65, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), int(80 + amp * 40)))
+                rad.setColorAt(1.0, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), 0))
+                p.setBrush(QBrush(rad))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(fx, fy), flare_r, flare_r)
+
+                # Brilliant horizontal starlight diffraction spikes
+                p.setPen(QPen(QColor(255, 255, 255, int(180 + amp * 70)), 1.5))
+                sp_len = 24.0 + amp * 38.0
+                p.drawLine(QPointF(fx - sp_len, fy), QPointF(fx + sp_len, fy))
+                p.drawLine(QPointF(fx, fy - sp_len * 0.35), QPointF(fx, fy + sp_len * 0.35))
+
+        # ── GLOBAL FX: Shockwaves (if enabled) ────────────────────────────────
+        if self._hud_fx.get("shockwaves", True):
+            for sw in self._shockwaves:
+                col_sw = QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), sw["alpha"])
+                p.setPen(QPen(col_sw, 1.5))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                rx_sw = sw["r"]
+                ry_sw = sw["r"] * math.sin(self._halo_tilt) * 1.15
+                p.drawEllipse(QRectF(cx - rx_sw, cy - ry_sw, rx_sw * 2.0, ry_sw * 2.0))
+
+        # ── GLOBAL FX: Floating Stardust Particle Swarm ───────────────────────
+        for s in self._stardust:
+            px = cx + (s["x"] + s["dx"]) * (fw * 0.52)
+            py = cy + (s["y"] + s["dy"]) * (fw * 0.48)
             twinkle = 0.65 + 0.35 * math.sin(self._tick * 0.08 + s["phase"])
             cur_a = max(0, min(255, int(s["base_a"] * twinkle * (0.85 + amp * 0.35))))
             if s["col"] == "white":
@@ -859,9 +1057,13 @@ class HudCanvas(QWidget):
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(QPointF(px, py), s["sz"], s["sz"])
 
-        # ──────────────────────────────────────────────────────────────────────
-        # LAYER 5: Modern HUD Frame, Status Indicators & Voice Waveform
-        # ──────────────────────────────────────────────────────────────────────
+        # ── GLOBAL FX: Retro CRT Scanlines (if enabled) ───────────────────────
+        if self._hud_fx.get("scanlines", False):
+            p.setPen(QPen(qcol(C.PRI_GHO, 36), 1))
+            for sl_y in range(0, H, 3):
+                p.drawLine(0, sl_y, W, sl_y)
+
+        # ── HUD Frame, Status Indicators & Voice Waveform ─────────────────────
         # Corner brackets
         bl = 22
         bc = qcol(C.PRI, 180)
@@ -870,10 +1072,10 @@ class HudCanvas(QWidget):
         p.setPen(QPen(bc, 1.5))
         for bx, by, dx, dy in [(hl, ht, 1, 1), (hr, ht, -1, 1), (hl, hb, 1, -1), (hr, hb, -1, -1)]:
             p.drawLine(QPointF(bx, by), QPointF(bx + dx * bl, by))
-            p.drawLine(QPointF(bx, by), QPointF(bx, by + dy * bl))
+            p.drawLine(QPointF(bx, by), QPointF(bx + dy * bl))
 
         # Status text below avatar
-        sy = cy + av_h * 0.44
+        sy = cy + fw * 0.38
         p.setPen(QPen(status_col, 1))
         p.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
         p.drawText(QRectF(0, sy, W, 22), Qt.AlignmentFlag.AlignCenter, status_txt)
@@ -2092,10 +2294,17 @@ class ProviderSettingsOverlay(QWidget):
 
 
 class CustomizeOverlay(QWidget):
-    """Floating overlay — change assistant name, user name, UI colour and voice."""
+    """
+    Next-Gen HUD Studio & Customisation Overlay.
+    Tabs:
+      1. 🎭 AVATAR & VISUALS: Multi-mode avatar switcher (Celestial, Reactor, Orb, Matrix),
+         theme presets (1-click color palettes), particle density slider (50-350), and HUD FX toggles.
+      2. 🎨 COLOR WHEEL: Hue wheel + custom hex input + default palette reset.
+      3. ⚙ IDENTITY & VOICE: Assistant name, user name, Gemini voice pills, and Stark SFX toggle.
+    """
 
-    saved = pyqtSignal(str, str, str, str)   # assistant_name, user_name, ui_color, voice
-    _OW, _OH = 400, 588
+    saved = pyqtSignal(str, str, str, str, str, int, dict, bool)
+    _OW, _OH = 520, 600
 
     def __init__(self, assistant_name="JARVIS", user_name="",
                  ui_color=DEFAULT_UI_COLOR, voice="", parent=None):
@@ -2103,14 +2312,14 @@ class CustomizeOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f"""
             CustomizeOverlay {{
-                background: rgba(0, 6, 10, 245);
+                background: rgba(0, 6, 12, 248);
                 border: 1px solid {C.BORDER_B};
                 border-radius: 6px;
             }}
         """)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(24, 18, 24, 18)
-        lay.setSpacing(8)
+        main_lay = QVBoxLayout(self)
+        main_lay.setContentsMargins(18, 14, 18, 14)
+        main_lay.setSpacing(8)
 
         def _lbl(txt, fs=9, bold=False, color=C.PRI, align=Qt.AlignmentFlag.AlignCenter):
             w = QLabel(txt); w.setAlignment(align)
@@ -2123,61 +2332,165 @@ class CustomizeOverlay(QWidget):
                f"border: 1px solid {C.BORDER}; border-radius: 3px; padding: 4px 8px; }}"
                f"QLineEdit:focus {{ border: 1px solid {C.PRI}; }}")
 
-        lay.addWidget(_lbl("⚙  CUSTOMISE ASSISTANT", 12, True))
+        # Initial Values
+        self._initial_color = (ui_color or DEFAULT_UI_COLOR).strip().lower()
+        self._sel_color     = self._initial_color
+        self._initial_avatar_mode = get_avatar_mode()
+        self._sel_avatar_mode     = self._initial_avatar_mode
+        self._initial_density     = get_particle_density()
+        self._sel_density         = self._initial_density
+        self._initial_hud_fx      = dict(get_hud_fx())
+        self._sel_hud_fx          = dict(self._initial_hud_fx)
+        self._initial_sfx         = get_sfx_enabled()
+
+        # Preview Callbacks
+        self.on_preview                  = None   # callable(hex)
+        self.on_avatar_mode_preview      = None   # callable(mode)
+        self.on_particle_density_preview = None   # callable(density)
+        self.on_hud_fx_preview           = None   # callable(fx_dict)
+
+        # Header Title
+        main_lay.addWidget(_lbl("⚙  HUD STUDIO & CUSTOMISATION", 11, True))
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
-        lay.addWidget(sep)
+        main_lay.addWidget(sep)
 
-        lay.addWidget(_lbl("ASSISTANT NAME", 8, color=C.TEXT_DIM,
-                            align=Qt.AlignmentFlag.AlignLeft))
-        self._name_input = QLineEdit(assistant_name)
-        self._name_input.setFont(QFont("Courier New", 10))
-        self._name_input.setFixedHeight(32)
-        self._name_input.setStyleSheet(_fs)
-        lay.addWidget(self._name_input)
+        # Tab Buttons
+        tab_bar = QHBoxLayout(); tab_bar.setSpacing(4)
+        self._tab_btn_avatar = QPushButton("🎭 VISUALS & HUD")
+        self._tab_btn_color  = QPushButton("🎨 COLOR WHEEL")
+        self._tab_btn_ident  = QPushButton("⚙ IDENTITY & VOICE")
 
-        lay.addSpacing(4)
-        lay.addWidget(_lbl("YOUR NAME  (leave blank for default sir / efendim)", 8,
-                            color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
-        self._user_input = QLineEdit(user_name)
-        self._user_input.setPlaceholderText("e.g.  Tony   (leave blank for auto)")
-        self._user_input.setFont(QFont("Courier New", 10))
-        self._user_input.setFixedHeight(32)
-        self._user_input.setStyleSheet(_fs)
-        lay.addWidget(self._user_input)
-
-        # ── Assistant voice — Gemini prebuilt voices ─────────────────────────
-        # Names are language-neutral proper nouns, so the row reads the same in
-        # every locale. Selecting one and applying rebuilds the Live session.
-        from memory.config_manager import AVAILABLE_VOICES, DEFAULT_VOICE
-        lay.addSpacing(4)
-        lay.addWidget(_lbl("ASSISTANT VOICE", 8, color=C.TEXT_DIM,
-                            align=Qt.AlignmentFlag.AlignLeft))
-        self._sel_voice   = (voice or DEFAULT_VOICE)
-        if self._sel_voice not in AVAILABLE_VOICES:
-            self._sel_voice = DEFAULT_VOICE
-        self._voice_btns: dict[str, QPushButton] = {}
-        voice_row = QHBoxLayout(); voice_row.setSpacing(4)
-        for _v in AVAILABLE_VOICES:
-            b = QPushButton(_v)
-            b.setCheckable(True)
-            b.setFixedHeight(28)
+        for b in (self._tab_btn_avatar, self._tab_btn_color, self._tab_btn_ident):
+            b.setFixedHeight(26)
             b.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.clicked.connect(lambda _=False, name=_v: self._on_voice_pick(name))
-            self._voice_btns[_v] = b
-            voice_row.addWidget(b)
-        lay.addLayout(voice_row)
-        self._refresh_voice_btns()
+            tab_bar.addWidget(b)
+        main_lay.addLayout(tab_bar)
 
-        # ── UI colour — colour wheel ─────────────────────────────────────────
-        lay.addSpacing(4)
+        self._stack = QStackedWidget()
+        main_lay.addWidget(self._stack, 1)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # TAB 1: 🎭 VISUALS & HUD (Avatar Mode, Theme Presets, Particles, FX)
+        # ══════════════════════════════════════════════════════════════════════
+        page_vis = QWidget()
+        lay_vis = QVBoxLayout(page_vis)
+        lay_vis.setContentsMargins(4, 4, 4, 4)
+        lay_vis.setSpacing(6)
+
+        # 1. Avatar Core Engine
+        lay_vis.addWidget(_lbl("AVATAR CORE ENGINE", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        av_row = QHBoxLayout(); av_row.setSpacing(4)
+        self._av_btns = {}
+        av_modes = [
+            ("celestial", "🌌 CELESTIAL"),
+            ("reactor",   "⚛ ARC REACTOR"),
+            ("orb",       "🔮 QUANTUM ORB"),
+            ("matrix",    "🟢 MATRIX RAIN"),
+        ]
+        for mode_key, label in av_modes:
+            b = QPushButton(label)
+            b.setFixedHeight(28)
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _=False, mk=mode_key: self._on_avatar_mode_pick(mk))
+            self._av_btns[mode_key] = b
+            av_row.addWidget(b)
+        lay_vis.addLayout(av_row)
+        self._refresh_avatar_btns()
+
+        # 2. Theme Presets (1-Click)
+        lay_vis.addSpacing(2)
+        lay_vis.addWidget(_lbl("THEME PRESETS (1-CLICK COLOR SYNC)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        theme_row = QHBoxLayout(); theme_row.setSpacing(4)
+        presets = [
+            ("☀️ Gold",    "#ffcc33"),
+            ("⚡ Cyan",    "#00e5ff"),
+            ("🌿 Emerald", "#00ffaa"),
+            ("🔮 Violet",  "#b366ff"),
+            ("🔥 Crimson", "#ff3355"),
+        ]
+        for t_name, t_hex in presets:
+            tb = QPushButton(t_name)
+            tb.setFixedHeight(24)
+            tb.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            tb.setCursor(Qt.CursorShape.PointingHandCursor)
+            tb.setStyleSheet(f"""
+                QPushButton {{
+                    background: #00121a; color: {t_hex};
+                    border: 1px solid {t_hex}; border-radius: 3px;
+                }}
+                QPushButton:hover {{ background: {t_hex}; color: #000; }}
+            """)
+            tb.clicked.connect(lambda _=False, hx=t_hex: self._set_color(hx))
+            theme_row.addWidget(tb)
+        lay_vis.addLayout(theme_row)
+
+        # 3. Particle Density Slider
+        lay_vis.addSpacing(2)
+        self._density_lbl = _lbl(f"PARTICLE DENSITY: {self._sel_density} PARTICLES", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft)
+        lay_vis.addWidget(self._density_lbl)
+
+        self._density_slider = QSlider(Qt.Orientation.Horizontal)
+        self._density_slider.setRange(50, 350)
+        self._density_slider.setSingleStep(10)
+        self._density_slider.setValue(self._sel_density)
+        self._density_slider.setFixedHeight(22)
+        self._density_slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 4px; background: #001520; border: 1px solid {C.BORDER}; border-radius: 2px;
+            }}
+            QSlider::sub-page:horizontal {{ background: {C.PRI}; border-radius: 2px; }}
+            QSlider::handle:horizontal {{
+                background: {C.WHITE}; border: 1px solid {C.PRI}; width: 14px; margin: -5px 0; border-radius: 7px;
+            }}
+        """)
+        self._density_slider.valueChanged.connect(self._on_density_changed)
+        lay_vis.addWidget(self._density_slider)
+
+        # 4. HUD Visual FX Toggles
+        lay_vis.addSpacing(2)
+        lay_vis.addWidget(_lbl("HUD VISUAL FX TOGGLES", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+
+        chk_box = QVBoxLayout(); chk_box.setSpacing(4)
+        _chk_style = f"QCheckBox {{ color: {C.TEXT}; font-family: 'Courier New'; font-size: 8pt; }} QCheckBox::indicator:checked {{ background: {C.PRI}; border: 1px solid {C.PRI}; }}"
+
+        self._chk_shockwaves = QCheckBox("Vocal Energy Shockwaves (sound burst ripples)")
+        self._chk_shockwaves.setChecked(self._sel_hud_fx.get("shockwaves", True))
+        self._chk_shockwaves.setStyleSheet(_chk_style)
+        self._chk_shockwaves.stateChanged.connect(self._on_fx_toggle)
+        chk_box.addWidget(self._chk_shockwaves)
+
+        self._chk_starfield = QCheckBox("Deep Space Starfield Ambient Grid")
+        self._chk_starfield.setChecked(self._sel_hud_fx.get("starfield", True))
+        self._chk_starfield.setStyleSheet(_chk_style)
+        self._chk_starfield.stateChanged.connect(self._on_fx_toggle)
+        chk_box.addWidget(self._chk_starfield)
+
+        self._chk_scanlines = QCheckBox("Retro CRT Holographic Scanlines")
+        self._chk_scanlines.setChecked(self._sel_hud_fx.get("scanlines", False))
+        self._chk_scanlines.setStyleSheet(_chk_style)
+        self._chk_scanlines.stateChanged.connect(self._on_fx_toggle)
+        chk_box.addWidget(self._chk_scanlines)
+
+        lay_vis.addLayout(chk_box)
+        lay_vis.addStretch(1)
+        self._stack.addWidget(page_vis)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # TAB 2: 🎨 COLOR WHEEL (Custom Hue Wheel + Hex Input)
+        # ══════════════════════════════════════════════════════════════════════
+        page_col = QWidget()
+        lay_col = QVBoxLayout(page_col)
+        lay_col.setContentsMargins(4, 4, 4, 4)
+        lay_col.setSpacing(8)
+
         clr_hdr = QHBoxLayout()
-        clr_hdr.addWidget(_lbl("UI COLOUR  —  drag the handle", 8,
-                               color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        clr_hdr.addWidget(_lbl("DRAG WHEEL HANDLE OR ENTER HEX CODE", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
         clr_hdr.addStretch()
-        df_btn = QPushButton("DEFAULT")
-        df_btn.setFixedSize(64, 20)
+        df_btn = QPushButton("RESET DEFAULT")
+        df_btn.setFixedSize(96, 20)
         df_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
         df_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         df_btn.setStyleSheet(f"""
@@ -2189,16 +2502,12 @@ class CustomizeOverlay(QWidget):
         """)
         df_btn.clicked.connect(lambda: self._set_color(DEFAULT_UI_COLOR))
         clr_hdr.addWidget(df_btn)
-        lay.addLayout(clr_hdr)
-
-        self._initial_color = (ui_color or DEFAULT_UI_COLOR).strip().lower()
-        self._sel_color     = self._initial_color
-        self.on_preview     = None   # callable(hex) — live preview; MainWindow wires it
+        lay_col.addLayout(clr_hdr)
 
         self._wheel = HueWheel(self._sel_color)
         wheel_row = QHBoxLayout()
         wheel_row.addStretch(); wheel_row.addWidget(self._wheel); wheel_row.addStretch()
-        lay.addLayout(wheel_row)
+        lay_col.addLayout(wheel_row)
         self._wheel.hue_picked.connect(self._on_wheel_pick)
         self._wheel.hue_committed.connect(self._on_wheel_commit)
 
@@ -2208,21 +2517,91 @@ class CustomizeOverlay(QWidget):
         self._hex_input.setFixedHeight(28)
         self._hex_input.setStyleSheet(_fs)
         self._hex_input.textEdited.connect(self._on_hex_edited)
-        lay.addWidget(self._hex_input)
+        lay_col.addWidget(self._hex_input)
 
-        lay.addSpacing(6)
+        lay_col.addStretch(1)
+        self._stack.addWidget(page_col)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # TAB 3: ⚙ IDENTITY & VOICE (Assistant Name, User Name, Voices, SFX)
+        # ══════════════════════════════════════════════════════════════════════
+        page_id = QWidget()
+        lay_id = QVBoxLayout(page_id)
+        lay_id.setContentsMargins(4, 4, 4, 4)
+        lay_id.setSpacing(6)
+
+        lay_id.addWidget(_lbl("ASSISTANT NAME", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._name_input = QLineEdit(assistant_name)
+        self._name_input.setFont(QFont("Courier New", 10))
+        self._name_input.setFixedHeight(30)
+        self._name_input.setStyleSheet(_fs)
+        lay_id.addWidget(self._name_input)
+
+        lay_id.addWidget(_lbl("YOUR NAME (for personalized salutation)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._user_input = QLineEdit(user_name)
+        self._user_input.setPlaceholderText("e.g. Tony (leave blank for auto)")
+        self._user_input.setFont(QFont("Courier New", 10))
+        self._user_input.setFixedHeight(30)
+        self._user_input.setStyleSheet(_fs)
+        lay_id.addWidget(self._user_input)
+
+        # Gemini Voices
+        from memory.config_manager import AVAILABLE_VOICES, DEFAULT_VOICE
+        lay_id.addWidget(_lbl("ASSISTANT VOICE (Gemini Neural Voices)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._sel_voice = (voice or DEFAULT_VOICE)
+        if self._sel_voice not in AVAILABLE_VOICES:
+            self._sel_voice = DEFAULT_VOICE
+        self._voice_btns = {}
+        voice_row = QHBoxLayout(); voice_row.setSpacing(4)
+        for _v in AVAILABLE_VOICES:
+            b = QPushButton(_v)
+            b.setCheckable(True)
+            b.setFixedHeight(26)
+            b.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _=False, name=_v: self._on_voice_pick(name))
+            self._voice_btns[_v] = b
+            voice_row.addWidget(b)
+        lay_id.addLayout(voice_row)
+        self._refresh_voice_btns()
+
+        # Stark SFX Checkbox
+        self._chk_sfx = QCheckBox("Enable Stark Tactical Audio Feedback (SFX)")
+        self._chk_sfx.setChecked(self._initial_sfx)
+        self._chk_sfx.setStyleSheet(_chk_style)
+        lay_id.addWidget(self._chk_sfx)
+
+        lay_id.addStretch(1)
+        self._stack.addWidget(page_id)
+
+        # Tab Switching Handler
+        def _set_tab(idx: int):
+            self._stack.setCurrentIndex(idx)
+            for i, b in enumerate((self._tab_btn_avatar, self._tab_btn_color, self._tab_btn_ident)):
+                if i == idx:
+                    b.setStyleSheet(f"background: {C.PRI_DIM}; color: #000; border: 1px solid {C.PRI}; border-radius: 3px;")
+                else:
+                    b.setStyleSheet(f"background: #00121a; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
+
+        self._tab_btn_avatar.clicked.connect(lambda: _set_tab(0))
+        self._tab_btn_color.clicked.connect(lambda: _set_tab(1))
+        self._tab_btn_ident.clicked.connect(lambda: _set_tab(2))
+        _set_tab(0)
+
+        # Bottom Actions
+        main_lay.addSpacing(4)
         btn_row = QHBoxLayout(); btn_row.setSpacing(8)
 
-        save_btn = QPushButton("▸  APPLY CHANGES")
+        save_btn = QPushButton("▸  APPLY & SAVE ALL")
         save_btn.setFixedHeight(34)
         save_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         save_btn.setStyleSheet(f"""
             QPushButton {{
-                background: transparent; color: {C.PRI};
-                border: 1px solid {C.PRI_DIM}; border-radius: 3px;
+                background: #001f2e; color: {C.PRI};
+                border: 1px solid {C.PRI}; border-radius: 3px;
             }}
-            QPushButton:hover {{ background: {C.PRI_GHO}; border: 1px solid {C.PRI}; }}
+            QPushButton:hover {{ background: {C.PRI}; color: #000; }}
         """)
         save_btn.clicked.connect(self._save)
         btn_row.addWidget(save_btn)
@@ -2240,33 +2619,55 @@ class CustomizeOverlay(QWidget):
         """)
         cancel_btn.clicked.connect(self._cancel)
         btn_row.addWidget(cancel_btn)
-        lay.addLayout(btn_row)
+        main_lay.addLayout(btn_row)
 
-    # ── voice selection ──────────────────────────────────────────────────────
+    # ── Avatar mode pick & refresh ───────────────────────────────────────────
+    def _on_avatar_mode_pick(self, mode: str):
+        self._sel_avatar_mode = mode
+        self._refresh_avatar_btns()
+        if self.on_avatar_mode_preview:
+            self.on_avatar_mode_preview(mode)
+
+    def _refresh_avatar_btns(self):
+        for mode, b in self._av_btns.items():
+            on = (mode == self._sel_avatar_mode)
+            if on:
+                b.setStyleSheet(f"background: {C.PRI_DIM}; color: #000; border: 1px solid {C.PRI}; border-radius: 3px;")
+            else:
+                b.setStyleSheet(f"background: #00121a; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
+
+    # ── Density & FX handlers ────────────────────────────────────────────────
+    def _on_density_changed(self, val: int):
+        self._sel_density = val
+        self._density_lbl.setText(f"PARTICLE DENSITY: {val} PARTICLES")
+        if self.on_particle_density_preview:
+            self.on_particle_density_preview(val)
+
+    def _on_fx_toggle(self):
+        self._sel_hud_fx = {
+            "shockwaves": self._chk_shockwaves.isChecked(),
+            "starfield": self._chk_starfield.isChecked(),
+            "scanlines": self._chk_scanlines.isChecked(),
+        }
+        if self.on_hud_fx_preview:
+            self.on_hud_fx_preview(self._sel_hud_fx)
+
+    # ── Voice selection ──────────────────────────────────────────────────────
     def _on_voice_pick(self, name: str):
         self._sel_voice = name
         self._refresh_voice_btns()
 
     def _refresh_voice_btns(self):
-        """Highlight the selected voice pill; dim the rest."""
         for name, b in self._voice_btns.items():
             on = (name == self._sel_voice)
             b.setChecked(on)
             if on:
-                b.setStyleSheet(f"""
-                    QPushButton {{ background: {C.PRI_GHO}; color: {C.PRI};
-                        border: 1px solid {C.PRI}; border-radius: 3px; }}
-                """)
+                b.setStyleSheet(f"background: {C.PRI_GHO}; color: {C.PRI}; border: 1px solid {C.PRI}; border-radius: 3px;")
             else:
-                b.setStyleSheet(f"""
-                    QPushButton {{ background: transparent; color: {C.TEXT_MED};
-                        border: 1px solid {C.BORDER}; border-radius: 3px; }}
-                    QPushButton:hover {{ color: {C.TEXT}; border-color: {C.BORDER_B}; }}
-                """)
+                b.setStyleSheet(f"background: transparent; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
 
-    # ── colour flow ──────────────────────────────────────────────────────────
+    # ── Color flow ───────────────────────────────────────────────────────────
     def _set_color(self, hx: str, update_wheel: bool = True, preview: bool = True):
-        """Updates the selected colour; hex box + wheel stay in sync, theme is live-previewed."""
         self._sel_color = hx.strip().lower()
         self._hex_input.blockSignals(True)
         self._hex_input.setText(self._sel_color)
@@ -2277,14 +2678,12 @@ class CustomizeOverlay(QWidget):
             self.on_preview(self._sel_color)
 
     def _on_wheel_pick(self, hx: str):
-        # While dragging: update the hex box, don't apply the theme yet
         self._sel_color = hx
         self._hex_input.blockSignals(True)
         self._hex_input.setText(hx)
         self._hex_input.blockSignals(False)
 
     def _on_wheel_commit(self, hx: str):
-        # Handle released → live-preview the whole interface
         self._set_color(hx, update_wheel=False)
 
     def _on_hex_edited(self, text: str):
@@ -2297,15 +2696,31 @@ class CustomizeOverlay(QWidget):
             self._set_color(t, update_wheel=True, preview=True)
 
     def _cancel(self):
-        # If a preview was applied, revert to the colour from launch
+        # Revert all live previews back to initial state
         if self.on_preview and self._sel_color != self._initial_color:
             self.on_preview(self._initial_color)
+        if self.on_avatar_mode_preview and self._sel_avatar_mode != self._initial_avatar_mode:
+            self.on_avatar_mode_preview(self._initial_avatar_mode)
+        if self.on_particle_density_preview and self._sel_density != self._initial_density:
+            self.on_particle_density_preview(self._initial_density)
+        if self.on_hud_fx_preview and self._sel_hud_fx != self._initial_hud_fx:
+            self.on_hud_fx_preview(self._initial_hud_fx)
         self.hide()
 
     def _save(self):
         name = self._name_input.text().strip() or "JARVIS"
         user = self._user_input.text().strip()
-        self.saved.emit(name, user, self._sel_color or DEFAULT_UI_COLOR, self._sel_voice)
+
+        # Persist visual settings immediately
+        save_avatar_mode(self._sel_avatar_mode)
+        save_particle_density(self._sel_density)
+        save_hud_fx(self._sel_hud_fx)
+        save_sfx_enabled(self._chk_sfx.isChecked())
+
+        self.saved.emit(
+            name, user, self._sel_color or DEFAULT_UI_COLOR, self._sel_voice,
+            self._sel_avatar_mode, self._sel_density, self._sel_hud_fx, self._chk_sfx.isChecked()
+        )
         self.hide()
 
 
@@ -4559,6 +4974,14 @@ class MainWindow(QMainWindow):
         btn_clr.clicked.connect(self._quick_clear_log)
         q_row.addWidget(btn_clr)
 
+        btn_studio = QPushButton("🎨 HUD")
+        btn_studio.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        btn_studio.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_studio.setStyleSheet(_Q_BTN_STYLE)
+        btn_studio.setToolTip("Open HUD Customization Studio")
+        btn_studio.clicked.connect(self._open_customize)
+        q_row.addWidget(btn_studio)
+
         lay.addLayout(q_row)
 
         sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
@@ -4669,7 +5092,7 @@ class MainWindow(QMainWindow):
         self._autostart_btn.clicked.connect(self._toggle_autostart)
         lay.addWidget(self._autostart_btn)
 
-        cust_btn = QPushButton("⚙  CUSTOMISE ASSISTANT")
+        cust_btn = QPushButton("⚙  HUD STUDIO & CUSTOMISE")
         cust_btn.setFixedHeight(26)
         cust_btn.setFont(QFont("Courier New", 7))
         cust_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -5223,6 +5646,9 @@ class MainWindow(QMainWindow):
             ow, oh,
         )
         ov.on_preview = self._preview_ui_color
+        ov.on_avatar_mode_preview = lambda m: self.hud.set_avatar_mode(m)
+        ov.on_particle_density_preview = lambda d: self.hud.set_particle_density(d)
+        ov.on_hud_fx_preview = lambda fx: self.hud.set_hud_fx(fx)
         ov.saved.connect(self._apply_name_update)
         ov.show()
         self._customize_overlay = ov
@@ -5254,8 +5680,10 @@ class MainWindow(QMainWindow):
             retheme_all_widgets(old, current_palette())
 
     def _apply_name_update(self, name: str, user_name: str, ui_color: str = "",
-                           voice: str = ""):
-        """Update all name/theme-dependent UI elements and persist to config."""
+                           voice: str = "", avatar_mode: str = "celestial",
+                           particle_density: int = 200, hud_fx: dict = None,
+                           sfx_enabled: bool = True):
+        """Update all name/theme/visual-dependent UI elements and persist to config."""
         self._assistant_name = name.strip() or "JARVIS"
         display = self._assistant_name.upper()
         self.setWindowTitle(f"{display} — {APP_VERSION}")
@@ -5266,6 +5694,14 @@ class MainWindow(QMainWindow):
             self._sub_lbl.setText("Personal AI Assistant")
         self._log._ai_name_lc = self._assistant_name.lower()
         self.hud._assistant_name = display
+
+        # Visual HUD Engine Updates
+        if avatar_mode:
+            self.hud.set_avatar_mode(avatar_mode)
+        if particle_density:
+            self.hud.set_particle_density(particle_density)
+        if hud_fx:
+            self.hud.set_hud_fx(hud_fx)
 
         color_changed = False
         if ui_color:
@@ -5290,8 +5726,13 @@ class MainWindow(QMainWindow):
             data["user_name"] = user_name.strip()
             if ui_color:
                 data["ui_color"] = ui_color.strip().lower()
+            data["avatar_mode"] = avatar_mode
+            data["particle_density"] = particle_density
+            if hud_fx is not None:
+                data["hud_fx"] = hud_fx
+            data["sfx_enabled"] = sfx_enabled
             API_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
-            self._log.append_log(f"SYS: Identity updated — {display}")
+            self._log.append_log(f"SYS: Identity updated — {display} ({avatar_mode.upper()} mode)")
             if color_changed:
                 self._log.append_log(f"SYS: UI colour applied — {ui_color}")
             if voice_changed:

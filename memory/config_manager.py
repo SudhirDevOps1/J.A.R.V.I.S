@@ -276,4 +276,45 @@ def get_tts_engine() -> str:
 
 def save_tts_engine(engine_name: str) -> None:
     """Persist chosen TTS engine."""
-    _patch_config(tts_engine=(engine_name or "gemini_live").strip().lower())
+    _patch_config(tts_engine=(engine_name or "gemini_live").strip().lower())
+
+
+def get_avatar_mode() -> str:
+    """Return chosen avatar mode ('celestial', 'reactor', 'orb', 'matrix'). Default: 'celestial'."""
+    mode = (load_api_keys().get("avatar_mode", "celestial") or "celestial").lower().strip()
+    return mode if mode in ("celestial", "reactor", "orb", "matrix") else "celestial"
+
+
+def save_avatar_mode(mode: str) -> None:
+    """Persist chosen avatar mode."""
+    _patch_config(avatar_mode=(mode or "celestial").strip().lower())
+
+
+def get_particle_density() -> int:
+    """Return configured particle count (default: 200, range: 50-350)."""
+    try:
+        val = int(load_api_keys().get("particle_density", 200))
+        return max(50, min(350, val))
+    except (ValueError, TypeError):
+        return 200
+
+
+def save_particle_density(count: int) -> None:
+    """Persist configured particle density."""
+    _patch_config(particle_density=max(50, min(350, int(count))))
+
+
+def get_hud_fx() -> dict:
+    """Return HUD visual effect toggles."""
+    default_fx = {"scanlines": False, "shockwaves": True, "starfield": True}
+    cfg = load_api_keys().get("hud_fx")
+    if isinstance(cfg, dict):
+        default_fx.update(cfg)
+    return default_fx
+
+
+def save_hud_fx(fx: dict) -> None:
+    """Persist HUD visual effect toggles."""
+    cur = get_hud_fx()
+    cur.update(fx)
+    _patch_config(hud_fx=cur)

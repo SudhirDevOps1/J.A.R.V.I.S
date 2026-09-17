@@ -4,6 +4,29 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ---
 
+## [2026-09-17 13:10] — Multi-Mode Avatar HUD Engine, HUD Customization Studio & Harmonized Visuals
+
+### 🎭 Visual & Customization Suite Overhaul
+
+1. **Multi-Mode Avatar Engine (`ui.py`)**
+   - **Celestial Mode (Harmonized)**: Eliminated artificial wireframe ellipse overlap across the face, allowing the artwork's natural golden halo to shine. Stardust photons orbit naturally on the outer halo plane with twin lateral solar diffraction flares and radiant ambient aura.
+   - **Stark Arc Reactor Mode**: Precision mechanical concentric rings with 10 copper transformer coils, mid counter-rotating slotted ring, and pulsing central palladium/vibranium core.
+   - **Quantum Plasma Orb Mode**: 3D gyroscopic rotating rings with depth perspective, electrical discharge arcs, and radiant energy sphere.
+   - **Cyber Matrix Rain Mode**: Real-time cascading digital green/cyan code glyph rain streams with central holographic hexagonal shield and audio oscilloscope.
+
+2. **Next-Gen HUD Customization Studio (`ui.py` - `CustomizeOverlay`)**
+   - **Tab 1 (🎭 Visuals & HUD)**: 4-way avatar switcher with 1-click preview, 5 instant theme presets (Solar Gold, Stark Cyan, Cyber Emerald, Quantum Violet, Stealth Crimson), real-time particle density slider (50–350), and HUD FX checkboxes (vocal shockwaves, starfield grid, CRT scanlines).
+   - **Tab 2 (🎨 Color Wheel)**: Custom interactive HueWheel with hex code input and default reset.
+   - **Tab 3 (⚙ Identity & Voice)**: Assistant name, personalized user salutation, Gemini neural voice selector, and Stark tactical audio SFX toggle.
+   - **Live Preview Architecture**: Changes to avatar mode, color palette, particle density, and visual FX apply instantly on the canvas before saving, with full revert on cancel.
+
+3. **Quick Studio Access (`ui.py` - `MainWindow`)**
+   - Added `🎨 HUD` quick button directly in the Quick Actions panel alongside Voice, Cam, Ping, and Clear.
+   - Enhanced Settings Drawer button to `⚙ HUD STUDIO & CUSTOMISE`.
+   - Thread-safe configuration persistence in `memory/config_manager.py` with getters/setters for avatar mode, particle density, and HUD visual FX.
+
+---
+
 ## [2026-09-17 12:50] — Celestial Particle Avatar HUD with 3D Swirling Orbital Halo & Live Voice Reactivity
 
 ### 🌟 UI/UX & Visual Experience Overhaul
