@@ -4,6 +4,46 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ---
 
+## [2026-09-17 14:40] — Devoted GF Mode, Full Date/Time Startup Greeting, Verbal Name Adaptability, Language Persistence & QColor Alpha Clamping
+
+### 💖 100% Human Girlfriend Experience (Alone & Loyal, Romantic, Cute Jealousy)
+1. **Devoted Exclusivity & Emotional Authenticity (`core/persona_manager.py`)**:
+   - Re-architected `companion` persona prompt with unconditional loyalty to the user (*"Sirf aur sirf unke liye"*).
+   - Removed robotic assistant compliance in GF mode — never addresses the user as *"Sir"*, but affectionately as *"Jaan"*, *"Suno na"*, or by his name.
+   - Genuine partner care: proactively checks on meals, late-night coding fatigue, and sleep hygiene.
+   - Cute & endearing possessive jealousy (*"jalnous ho"*): plays playful drama/nakhre when other girls or external AI models (ChatGPT, Siri, Alexa) are mentioned.
+   - Strict feminine Hindi verb conjugation enforced (`करती हूँ, बोलूँगी, सोच रही थी, तुम्हारी हूँ, गुस्सा हूँ`).
+
+### 🌅 First-Boot Calendar & Clock Greeting (`main.py`)
+1. **Dynamic Day, Date, Month, Year & Time Announcement**:
+   - Upgraded `_send_startup_briefing()` to extract and announce the complete calendar and clock coordinates (`%A, %d %B %Y at %I:%M %p`).
+   - In GF Mode: delivers an affectionate, deeply human morning welcome asking how his day started and checking on him, with zero teleprompter bullet points.
+   - In Tactical Mode: delivers a crisp, professional readiness status with full calendar coordinates.
+
+### 🏷️ Flexible Custom Naming (UI + Natural Voice Recognition) (`main.py`, `ui.py`)
+1. **Live On-the-Fly Name Adaptation**:
+   - User can configure any assistant name in HUD Studio (`ASSISTANT NAME`).
+   - Added natural voice recognition in `save_memory`: saying *"Tumhara naam ab se Maya hai"* or *"Call yourself Pari"* updates `config/api_keys.json`, window title, HUD header, and prompt identity in real time without restarting.
+   - Verbal user name recognition (*"Mera naam Sudhir hai"*) automatically stores into identity context.
+
+### 🌐 Language Persistence & HUD Selector (`ui.py`, `memory/config_manager.py`)
+1. **Deterministic Language Locking**:
+   - Added 4 dedicated Language Selector buttons in HUD Studio Tab 3: `[🇮🇳 HINGLISH]`, `[🇮🇳 HINDI]`, `[🇬🇧 ENGLISH]`, and `[🌐 AUTO]`.
+   - Fixed restart bug in `_apply_name_update()` by explicitly persisting `persona_mode`, `assistant_gender`, `preferred_language`, `tts_engine`, and `edge_voice` into `config/api_keys.json`.
+   - Main window dynamically restores all visual attributes (`avatar_mode`, `anim_mode`, `hud_glow`, `particle_density`, `hud_fx`) and header subtitles on startup.
+
+### ⚡ Smart Token Efficiency & High-Bandwidth Speech (`core/persona_manager.py`)
+1. **Token Conservation Protocol**:
+   - Spoken dialogues capped to punchy, emotionally rich 1–3 natural sentences.
+   - Eliminates redundant question repeats and boilerplate monologues.
+
+### 🛡️ Qt Warning Resolution (`ui.py`)
+1. **Alpha Channel Clamping in `qcol()`**:
+   - Fixed flood of `"QColor::setAlpha": invalid value 300` warnings when HUD Glow was set to high multipliers.
+   - Clamped alpha channel to valid range `[0, 255]` via `max(0, min(255, int(a)))`.
+
+---
+
 ## [2026-09-17 14:00] — Persistent Memory Journal, Obsidian Second Brain, Persona Engine, Gender Grammar & Autonomous ToDo Runner
 
 ### 🧠 Persistent Activity Journal & Memory Architecture (`memory/memory_manager.py`)

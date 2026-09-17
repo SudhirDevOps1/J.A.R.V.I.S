@@ -280,7 +280,7 @@ This document outlines the **architectural blueprint, dependency requirements, t
 | **Phase 1** | 🎙️ **Piper Offline Hindi TTS (Devanagari)** + 🔊 **Stark SFX** | 🟢 Low | ✅ **Done (2026-09-14)** | `core/tts.py`, `core/models/piper/`, `core/sfx.py` |
 | **Phase 1.5**| ⚡ **Pikachu HUD, Voice Lab & Multi-Provider Health Ping** | 🟡 Medium | ✅ **Done (2026-09-15)** | `ui.py`, `core/tts.py`, `core/multi_llm.py`, `core/system_info.py` |
 | **Phase 1.6**| 🌐 **Free Open APIs, Storage Gauges, Log Deduplication & News Ticker** | 🟡 Medium | ✅ **Done (2026-09-15)** | `ui.py`, `core/system_info.py`, `core/tts.py` |
-| **Phase 2** | 🧠 **Hermes Persona Engine & Self-Improvement** + 🧭 **Smart Model Router** | 🟡 High Value | 🔄 **In Progress** | `memory/persona_engine.py`, `core/multi_llm.py` |
+| **Phase 2** | 🧠 **Persona Engine & Devoted GF Mode** + 🔮 **Obsidian Dual-Sync** + 🌅 **Calendar Startup Greeting** | 🟢 High Value | ✅ **Done (2026-09-17)** | `core/persona_manager.py`, `actions/obsidian_brain.py`, `main.py`, `ui.py` |
 | **Phase 3** | 🏠 **Tuya Smart Lighting Plugin** + 📅 **Workspace Bundle (Spotify/Cal)** | 🟡 Medium | ⏳ Scheduled | `plugins/smart_home.py`, `plugins/spotify.py` |
 | **Phase 4** | 🛡️ **Sentry Mode & Telegram Alerts** + 🎮 **OBS "Clip That"** | 🟡 Medium | ⏳ Scheduled | `actions/sentry.py`, `plugins/gaming.py` |
 | **Phase 5** | 👁️ **MediaPipe Gesture Control** + 💻 **Ollama Full Offline Stack** | 🔴 Advanced | ⏳ Scheduled | `actions/gesture_engine.py`, `core/llm_client.py` |
