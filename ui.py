@@ -1826,9 +1826,9 @@ class SetupOverlay(QWidget):
         self._sel(detected)
         layout.addSpacing(12)
 
-        init_btn = QPushButton("▸  INITIALISE SYSTEMS")
-        init_btn.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
-        init_btn.setFixedHeight(36)
+        init_btn = QPushButton("▸  INITIALISE SYSTEMS WITH API KEY")
+        init_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        init_btn.setFixedHeight(34)
         init_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         init_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1841,6 +1841,22 @@ class SetupOverlay(QWidget):
         """)
         init_btn.clicked.connect(self._submit)
         layout.addWidget(init_btn)
+
+        free_btn = QPushButton("⚡ START 100% FREE (BUILT-IN GEMINI WEB PROXY)")
+        free_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        free_btn.setFixedHeight(34)
+        free_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        free_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #002211; color: #00ffaa;
+                border: 1px solid #00aa66; border-radius: 3px;
+            }}
+            QPushButton:hover {{
+                background: #00331a; border-color: #00ffaa;
+            }}
+        """)
+        free_btn.clicked.connect(lambda: self.done.emit("", self._sel_os))
+        layout.addWidget(free_btn)
 
     def _sel(self, key: str):
         self._sel_os = key
@@ -7039,7 +7055,17 @@ class MainWindow(QMainWindow):
         if not API_FILE.exists(): return False
         try:
             d = json.loads(API_FILE.read_text(encoding="utf-8"))
-            return bool(d.get("gemini_api_key")) and bool(d.get("os_system"))
+            has_os = bool(d.get("os_system"))
+            # If free proxy is enabled, or gemini/groq/openrouter/deepseek/custom is configured, it's ready!
+            has_ai = bool(
+                d.get("free_proxy_enabled", True) or
+                d.get("gemini_api_key") or
+                d.get("groq_api_key") or
+                d.get("openrouter_api_key") or
+                d.get("deepseek_api_key") or
+                d.get("custom_llm_url")
+            )
+            return has_os and has_ai
         except Exception:
             return False
 
@@ -7058,17 +7084,23 @@ class MainWindow(QMainWindow):
 
     def _on_setup_done(self, key: str, os_name: str):
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        API_FILE.write_text(
-            json.dumps({"gemini_api_key": key, "os_system": os_name}, indent=4),
-            encoding="utf-8",
-        )
+        data = _read_full_config()
+        data["os_system"] = os_name
+        if key:
+            data["gemini_api_key"] = key
+            data["preferred_llm_provider"] = "gemini"
+        else:
+            data["free_proxy_enabled"] = True
+            data["preferred_llm_provider"] = "gemini-web"
+        API_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
         self._ready = True
         if self._overlay:
             self._overlay.hide()
             self._overlay = None
         self._apply_state("LISTENING")
         self._assistant_name = _read_full_config().get("assistant_name", "JARVIS") or "JARVIS"
-        self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online.")
+        prov_info = "Gemini API" if key else "Gemini Web FREE (Built-in Proxy)"
+        self._log.append_log(f"SYS: Initialised. Provider={prov_info}. {self._assistant_name} online.")
 
 
 class _RootShim:

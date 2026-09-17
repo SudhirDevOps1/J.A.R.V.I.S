@@ -18,6 +18,36 @@ def check_directories():
     for d in dirs:
         os.makedirs(d, exist_ok=True)
 
+def check_config_init(verbose=True):
+    """Ensure config/api_keys.json exists; create from template if missing on first run."""
+    cfg_file = os.path.join(PROJECT_ROOT, 'config', 'api_keys.json')
+    tpl_file = os.path.join(PROJECT_ROOT, 'config', 'api_keys.example.json')
+    if not os.path.exists(cfg_file):
+        import shutil
+        if os.path.exists(tpl_file):
+            shutil.copyfile(tpl_file, cfg_file)
+            if verbose:
+                print('  [OK] Configuration: Initialized api_keys.json from template (safe mode)')
+        else:
+            # Fallback safe minimal JSON
+            import json
+            safe_cfg = {
+                "preferred_llm_provider": "gemini-web",
+                "free_proxy_enabled": True,
+                "free_proxy_port": 8081,
+                "free_proxy_model": "gemini-3.7-flash",
+                "llm_cache_enabled": True,
+                "tts_engine": "edge",
+                "sfx_enabled": True
+            }
+            with open(cfg_file, 'w', encoding='utf-8') as f:
+                json.dump(safe_cfg, f, indent=4)
+            if verbose:
+                print('  [OK] Configuration: Created fresh api_keys.json (safe mode)')
+    else:
+        if verbose:
+            print('  [OK] Configuration: api_keys.json Active (Protected from Git)')
+
 def check_icon(verbose=True):
     """Ensure custom Stark Arc Reactor ICO and PNG icons exist."""
     ico_path = os.path.join(PROJECT_ROOT, 'config', 'jarvis.ico')
@@ -202,6 +232,7 @@ def run_preflight(verbose=True):
         print('===================================================')
     t0 = time.monotonic()
     check_directories()
+    check_config_init(verbose=verbose)
     check_icon(verbose=verbose)
     check_sfx(verbose=verbose)
     check_piper_hindi(verbose=verbose)

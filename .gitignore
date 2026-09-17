@@ -7,6 +7,7 @@
 # ── Secrets. Committing any of these publishes them. ──────────────────────────
 # Gemini API key and per-plugin credentials
 config/api_keys.json
+!config/api_keys.example.json
 # Gemini web session cookies (optional, for Pro model access — never commit!)
 config/gemini_cookies.json
 # LLM response cache (SQLite, regenerated automatically)
@@ -21,6 +22,8 @@ config/whatsapp_web/
 *credentials*.json
 .env
 .env.*
+*.pem
+*.key
 
 # ── Personal data the assistant accumulates about you ─────────────────────────
 memory/long_term.json
@@ -29,6 +32,8 @@ memory/reflections.json
 memory/journals/
 memory/obsidian_vault/
 memory/*.db
+memory/*.sqlite*
+config/weather_cache.json
 
 # ── Large Neural Models & Voice Weights ────────────────────────────────────────
 *.onnx

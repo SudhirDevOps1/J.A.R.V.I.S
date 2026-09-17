@@ -3,6 +3,8 @@ PyQt6
 sounddevice
 numpy
 google-genai>=2.8.0
+edge-tts
+piper-tts
 
 # ── Web search & browser control ──────────────────────────────────────────────
 requests
