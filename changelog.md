@@ -4,6 +4,23 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ---
 
+## [2026-09-17 12:40] — Release v1.0.0 & Automated GitHub Actions Release Workflow
+
+### 🚀 Release Automation & Versioning
+
+1. **Semantic Versioning v1.0.0 (`core/version.py`)**
+   - Formalized semantic versioning: Version `1.0.0` defined centrally in `core/version.py` and exported through `memory.config_manager.get_version()`.
+
+2. **Automated GitHub Release Workflow (`.github/workflows/release.yml`)**
+   - Configured GitHub Actions release pipeline triggered on version tags (`v*.*.*`) or manual dispatch.
+   - Automatically executes security audits, full module syntax validation, and distribution bundling.
+   - Builds clean release archives (`JARVIS-v*.zip`) with SHA-256 checksums and automatically publishes GitHub releases with changelog release notes.
+
+3. **Release & Quality Badges (`readme.md`)**
+   - Added live GitHub release, CI/CD workflow status, MIT license, and Python 3.11/3.12 compatibility badges.
+
+---
+
 ## [2026-09-17 12:30] — Thread-Safe Qt Metric Dispatch & Persistent Drive Cache
 
 ### 🐛 Bug Fixes & Stability Hardening

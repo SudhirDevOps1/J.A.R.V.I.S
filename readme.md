@@ -1,6 +1,11 @@
 # ⚙️ J.A.R.V.I.S. (SudhirDevOps1 AI)
 ### The Ultimate Cross-Platform Personal AI Assistant — By SudhirDevOps1
 
+[![GitHub Release](https://img.shields.io/github/v/release/SudhirDevOps1/J.A.R.V.I.S?color=00ffff&label=release)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/releases)
+[![CI/CD](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions/workflows/ci.yml/badge.svg)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+
 A real-time voice AI that can hear, see, understand, and control your computer — on any OS. Supports Windows, macOS, and Linux. Built on the Gemini Live API for native audio streaming, delivering zero subscriptions and total digital autonomy.
 
 ---

@@ -1,0 +1,95 @@
+name: Release & Publish J.A.R.V.I.S.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build, Package & Publish Release (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install Packaging Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests psutil zipfile36 || true
+
+      - name: 🔒 Security & Credential Audit
+        shell: bash
+        run: |
+          echo "Scanning for accidental secrets before release packaging..."
+          if [ -f config/api_keys.json ]; then
+            echo "CRITICAL: config/api_keys.json found! Aborting release build."
+            exit 1
+          fi
+          if [ -f .env ]; then
+            echo "CRITICAL: .env file found! Aborting release build."
+            exit 1
+          fi
+          echo "Security audit passed: Clean repository."
+
+      - name: ⚙️ Python Syntax Compilation Validation
+        shell: bash
+        run: |
+          echo "Validating syntax across all modules..."
+          python -m py_compile main.py ui.py setup.py
+          python -m compileall actions/ core/ dashboard/ memory/ scripts/
+
+      - name: 📦 Package Release Distribution
+        shell: bash
+        run: |
+          VERSION_TAG="${{ github.ref_name }}"
+          if [ -z "$VERSION_TAG" ] || [ "$VERSION_TAG" = "main" ]; then
+            VERSION_TAG="v1.0.0"
+          fi
+          echo "Packaging distribution for ${VERSION_TAG}..."
+          mkdir -p dist
+
+          # Create a clean release zip excluding git internals, pycache, temporary files
+          zip -r "dist/JARVIS-${VERSION_TAG}.zip" . \
+            -x "*.git*" \
+            -x "*__pycache__*" \
+            -x "*.pytest_cache*" \
+            -x "*.venv*" \
+            -x "*dist/*" \
+            -x "*build/*" \
+            -x "*.tmp*" \
+            -x "*.log" \
+            -x "config/api_keys.json" \
+            -x ".env*"
+
+          cd dist
+          sha256sum "JARVIS-${VERSION_TAG}.zip" > checksums-sha256.txt
+          echo "Checksum generated:"
+          cat checksums-sha256.txt
+          cd ..
+
+      - name: 🚀 Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "J.A.R.V.I.S. Release ${{ github.ref_name }}"
+          files: |
+            dist/JARVIS-*.zip
+            dist/checksums-sha256.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

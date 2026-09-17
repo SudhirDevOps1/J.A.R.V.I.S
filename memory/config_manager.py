@@ -66,6 +66,15 @@ def get_protocol_name() -> str:
     return load_api_keys().get("app_protocol", "DevOps") or "DevOps"
 
 
+def get_version() -> str:
+    """Return the application version string."""
+    try:
+        from core.version import __version__
+        return __version__
+    except Exception:
+        return "1.0.0"
+
+
 def get_user_name() -> str:
     """Return the configured user name for addressing."""
     return load_api_keys().get("user_name", "")
