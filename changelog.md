@@ -4,6 +4,59 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ---
 
+## [2026-09-17 14:00] — Persistent Memory Journal, Obsidian Second Brain, Persona Engine, Gender Grammar & Autonomous ToDo Runner
+
+### 🧠 Persistent Activity Journal & Memory Architecture (`memory/memory_manager.py`)
+1. **Permanent Daily Activity Journaling (`memory/journals/YYYY-MM-DD.md`)**:
+   - Fixed the issue where the assistant replied *"kuch bhi yaad nahi hai"* when asked *"kal maine kya kya kiya tha"*.
+   - Automatically logs all conversations, user queries, assistant replies, and executed actions with chronological timestamps to immutable Markdown journal files.
+   - Preserves complete context across sessions without deleting past summaries (fixed destructive `pop_last_session()` behavior).
+   - Injected yesterday's activity summary into system prompt context automatically, saving tokens while maintaining perfect memory.
+   - Added new `recall_past_activities` tool for instant chronological retrieval of past days ("today", "yesterday", or specific dates).
+
+### 🔮 Obsidian Second-Brain Integration (`actions/obsidian_brain.py`)
+1. **Dual-Mode Obsidian Resilience**:
+   - **Local REST API**: Direct integration with Obsidian's Local REST API (`https://127.0.0.1:27124`) using Bearer token authentication and self-signed certificate handling.
+   - **Local Vault Markdown Fallback**: Seamless local folder fallback (`memory/obsidian_vault` or user custom path) when Obsidian is closed.
+   - Operations supported: `search_notes`, `read_note`, `write_note`, `append_daily_note`, and `status`.
+   - Built-in connection tester in HUD Studio (`⚡ TEST OBSIDIAN CONNECTION`) with instant visual status feedback.
+
+### 🎭 AI Persona Engine & Strict Anti-Corporate Guardrail (`core/persona_manager.py`)
+1. **4 Specialized Character Modes**:
+   - `🛡️ J.A.R.V.I.S`: Tactical, loyal, respectful Stark-style AI.
+   - `🎓 MENTOR / TEACHER`: Patient, structured, educational guide with step-by-step clarity.
+   - `💖 COMPANION / GF`: Warm, affectionate, friendly, and emotionally attuned.
+   - `⚡ DEVOPS BEAST`: Direct, cloud-native shell, CI/CD, and Kubernetes command specialist.
+2. **Anti-Corporate Persona Guardrail**:
+   - Strictly forbids identifying as a generic Google AI or saying *"मैं एक बड़ा लैंग्वेज मॉडल हूँ, जिसे Google ने ट्रेन किया है"*.
+   - Always proudly identifies as an autonomous AI engineered by `SudhirDevOps1`.
+3. **Strict Hindi/Hinglish Grammatical Gender Directives**:
+   - **Male Mode**: Strictly conjugates masculine verbs (`करता हूँ, बोलूँगा, आया हूँ, सोच रहा हूँ`).
+   - **Female Mode**: Strictly conjugates feminine verbs (`करती हूँ, बोलूँगी, आई हूँ, सोच रही हूँ`).
+
+### 🎙️ Ultra-Realistic Neural Speech Engine (`core/tts.py`)
+1. **Free High-Fidelity Edge-TTS Integration**:
+   - Integrated Microsoft Edge Neural voices for studio-grade conversational audio without API costs:
+     - `hi-IN-MadhurNeural` (Hindi Male)
+     - `hi-IN-SwaraNeural` (Hindi Female)
+     - `en-US-ChristopherNeural` (English US Male)
+     - `en-US-JennyNeural` (English US Female)
+   - Robust `pygame.mixer` and `soundfile` audio playback pipeline resilient to missing `miniaudio`.
+   - Multi-engine switching between `Edge-TTS (Neural)`, `Piper (Local Offline)`, and `Gemini Live Voice`.
+
+### ⚡ Autonomous Background ToDo Task Runner (`actions/todo_agent.py`)
+1. **Asynchronous Multi-Step Task Execution**:
+   - Breaks down complex, difficult, or long user tasks into sequential ToDo steps.
+   - Spawns background worker threads to execute each milestone asynchronously without freezing the UI or blocking voice conversations.
+   - Emits real-time progress to HUD log, logs completion into the daily activity journal, and delivers audio notification upon finish.
+
+### ⚙️ HUD Studio Tab 3 Expansion (`ui.py`)
+1. **Complete Persona & Brain Control Center**:
+   - Full scrollable settings panel with 1-click selectors for Personas, Assistant Gender, Speech Engines, Edge-TTS Voices, Gemini Voices, and Obsidian API/Vault configurations.
+   - Thread-safe persistence in `memory/config_manager.py`.
+
+---
+
 ## [2026-09-17 13:25] — Reactive Sleep-on-Idle HUD Dynamics, Glow Controls & Polished HUD Studio
 
 ### 🌙 Calm Standby & Reactive Dynamics (`ui.py`)

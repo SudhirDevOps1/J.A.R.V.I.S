@@ -350,4 +350,64 @@ def get_hud_glow() -> int:
 
 def save_hud_glow(intensity: int) -> None:
     """Persist HUD glow intensity."""
-    _patch_config(hud_glow=max(10, min(100, int(intensity))))
+    _patch_config(hud_glow=max(10, min(100, int(intensity))))
+
+
+def get_persona_mode() -> str:
+    """Return active persona mode ('jarvis', 'teacher', 'companion', 'devops'). Default: 'jarvis'."""
+    val = (load_api_keys().get("persona_mode", "jarvis") or "jarvis").lower().strip()
+    return val if val in ("jarvis", "teacher", "companion", "devops") else "jarvis"
+
+
+def save_persona_mode(mode: str) -> None:
+    """Persist active persona mode."""
+    _patch_config(persona_mode=(mode or "jarvis").strip().lower())
+
+
+def get_assistant_gender() -> str:
+    """Return assistant grammatical/voice gender ('male', 'female'). Default: 'male'."""
+    val = (load_api_keys().get("assistant_gender", "") or "").lower().strip()
+    if val in ("male", "female"):
+        return val
+    # If companion persona, default to female, otherwise male
+    return "female" if get_persona_mode() == "companion" else "male"
+
+
+def save_assistant_gender(gender: str) -> None:
+    """Persist assistant gender ('male', 'female')."""
+    _patch_config(assistant_gender=(gender or "male").strip().lower())
+
+
+def get_edge_voice() -> str:
+    """Return selected Edge-TTS neural voice."""
+    cfg_voice = load_api_keys().get("edge_voice", "")
+    if cfg_voice:
+        return cfg_voice.strip()
+    # Default based on gender
+    return "hi-IN-SwaraNeural" if get_assistant_gender() == "female" else "hi-IN-MadhurNeural"
+
+
+def save_edge_voice(voice: str) -> None:
+    """Persist Edge-TTS neural voice."""
+    _patch_config(edge_voice=(voice or "").strip())
+
+
+def get_obsidian_config() -> dict:
+    """Return Obsidian Local REST API and local vault configuration."""
+    default_cfg = {
+        "api_key": "",
+        "port": 27124,
+        "vault_path": "",
+        "use_https": True,
+    }
+    cur = load_api_keys().get("obsidian_config")
+    if isinstance(cur, dict):
+        default_cfg.update(cur)
+    return default_cfg
+
+
+def save_obsidian_config(cfg: dict) -> None:
+    """Persist Obsidian configuration."""
+    cur = get_obsidian_config()
+    cur.update(cfg)
+    _patch_config(obsidian_config=cur)

@@ -456,8 +456,7 @@ def save_session_summary(summary: str, language: str = "") -> None:
 
 def pop_last_session() -> dict | None:
     """
-    Return AND remove the most recent session entry.
-    Calling this consumes the entry so it is never repeated in future briefings.
+    Return the most recent session entry without destroying it.
     """
     with _lock:
         if not MEMORY_PATH.exists():
@@ -467,13 +466,85 @@ def pop_last_session() -> dict | None:
             sessions = memory.get("sessions", [])
             if not isinstance(sessions, list) or not sessions:
                 return None
-            entry = sessions.pop()          # remove the last entry
-            memory["sessions"] = sessions
-            MEMORY_PATH.write_text(
-                json.dumps(memory, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            return entry
+            return sessions[-1]
         except Exception as e:
-            print(f"[Memory] ⚠️ pop_last_session error: {e}")
+            print(f"[Memory] ⚠️ get_last_session error: {e}")
             return None
+
+
+# ── Daily Activity Journaling (Permanent Second Brain) ─────────────────────────
+
+JOURNALS_DIR = BASE_DIR / "memory" / "journals"
+
+
+def log_daily_activity(user_text: str, ai_response: str = "", action_name: str = "") -> None:
+    """
+    Log an interaction or action to today's daily journal (memory/journals/YYYY-MM-DD.md).
+    This creates an immutable second-brain activity record for remembering past days.
+    """
+    user_text = (user_text or "").strip()
+    if not user_text:
+        return
+    # Ignore pure internal protocol tags
+    if user_text.startswith("[STARTUP_BRIEFING]") or user_text.startswith("[PROACTIVE_CHECK]"):
+        return
+
+    now = datetime.now()
+    date_str = now.strftime("%Y-%m-%d")
+    time_str = now.strftime("%I:%M %p")
+    target_file = JOURNALS_DIR / f"{date_str}.md"
+
+    with _lock:
+        try:
+            JOURNALS_DIR.mkdir(parents=True, exist_ok=True)
+            if not target_file.exists():
+                target_file.write_text(f"# 📅 Daily Activity Journal — {date_str}\n\n", encoding="utf-8")
+
+            entry = f"### [{time_str}]\n"
+            if action_name:
+                entry += f"- **Action/Tool**: `{action_name}`\n"
+            entry += f"- **User**: {user_text}\n"
+            if ai_response:
+                ai_clean = ai_response.replace("\n", " ").strip()[:240]
+                entry += f"- **Assistant**: {ai_clean}\n"
+            entry += "\n"
+
+            with open(target_file, "a", encoding="utf-8") as f:
+                f.write(entry)
+        except Exception as e:
+            print(f"[Journal] Error writing daily log: {e}")
+
+
+def get_daily_journal(day_query: str = "yesterday") -> str:
+    """
+    Read the markdown journal for a given day ('today', 'yesterday', or a specific YYYY-MM-DD).
+    """
+    from datetime import timedelta
+    now = datetime.now()
+    q = (day_query or "yesterday").lower().strip()
+
+    if q in ("yesterday", "kal", "prev", "-1"):
+        target_date = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    elif q in ("today", "aaj", "current", "0"):
+        target_date = now.strftime("%Y-%m-%d")
+    else:
+        # Check if user provided an ISO date format
+        m = re.search(r"\d{4}-\d{2}-\d{2}", q)
+        target_date = m.group(0) if m else (now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    target_file = JOURNALS_DIR / f"{target_date}.md"
+    if not target_file.exists():
+        return f"No activity log found for {target_date} ({q}). The assistant was either not active or nothing was recorded."
+
+    try:
+        content = target_file.read_text(encoding="utf-8")
+        return f"--- Activity Log for {target_date} ---\n{content}"
+    except Exception as e:
+        return f"Error reading journal for {target_date}: {e}"
+
+
+def recall_past_activities(day: str = "yesterday") -> str:
+    """
+    Tool called by the model to look up what the user or assistant did yesterday or on a past day.
+    """
+    return get_daily_journal(day)

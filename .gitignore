@@ -22,6 +22,8 @@ config/whatsapp_web/
 memory/long_term.json
 memory/user_persona.json
 memory/reflections.json
+memory/journals/
+memory/obsidian_vault/
 memory/*.db
 
 # ── Large Neural Models & Voice Weights ────────────────────────────────────────

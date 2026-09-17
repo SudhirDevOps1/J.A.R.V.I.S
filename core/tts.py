@@ -86,16 +86,45 @@ def _play_np(samples, sample_rate: int) -> None:
 
 
 def _play_audio_bytes(audio_bytes: bytes) -> None:
-    """Decode MP3/WAV/OGG bytes and play via sounddevice (uses miniaudio)."""
-    import miniaudio
-    decoded = miniaudio.decode(
-        audio_bytes,
-        output_format=miniaudio.SampleFormat.FLOAT32,
-        nchannels=1,
-    )
-    samples = np.array(decoded.samples, dtype=np.float32)
-    sd.play(samples, decoded.sample_rate)
-    sd.wait()
+    """Decode MP3/WAV/OGG bytes and play via pygame.mixer, soundfile, or miniaudio."""
+    try:
+        import io
+        import pygame
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        bio = io.BytesIO(audio_bytes)
+        pygame.mixer.music.load(bio)
+        pygame.mixer.music.play()
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(25)
+        return
+    except Exception:
+        pass
+
+    try:
+        import io
+        import soundfile as sf
+        bio = io.BytesIO(audio_bytes)
+        data, samplerate = sf.read(bio)
+        sd.play(data, samplerate)
+        sd.wait()
+        return
+    except Exception:
+        pass
+
+    try:
+        import miniaudio
+        decoded = miniaudio.decode(
+            audio_bytes,
+            output_format=miniaudio.SampleFormat.FLOAT32,
+            nchannels=1,
+        )
+        samples = np.array(decoded.samples, dtype=np.float32)
+        sd.play(samples, decoded.sample_rate)
+        sd.wait()
+    except Exception as e:
+        print(f"[TTS] Audio playback error: {e}")
+
 
 
 # ---------------------------------------------------------------------------

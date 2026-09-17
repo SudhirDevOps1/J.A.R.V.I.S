@@ -54,6 +54,10 @@ from memory.config_manager import (
     get_tts_engine, save_tts_engine,
     get_anim_mode, save_anim_mode,
     get_hud_glow, save_hud_glow,
+    get_persona_mode, save_persona_mode,
+    get_assistant_gender, save_assistant_gender,
+    get_edge_voice, save_edge_voice,
+    get_obsidian_config, save_obsidian_config,
 )
 APP_VERSION  = get_app_name()
 APP_PROTOCOL = get_protocol_name()
@@ -2327,8 +2331,8 @@ class CustomizeOverlay(QWidget):
       3. ⚙ IDENTITY & VOICE: Assistant name, user name, Gemini voice pills, and Stark SFX toggle.
     """
 
-    saved = pyqtSignal(str, str, str, str, str, int, dict, bool, str, int)
-    _OW, _OH = 560, 620
+    saved = pyqtSignal(str, str, str, str, str, int, dict, bool, str, int, str, str, str, str, dict)
+    _OW, _OH = 580, 640
 
     def __init__(self, assistant_name="JARVIS", user_name="",
                  ui_color=DEFAULT_UI_COLOR, voice="", parent=None):
@@ -2370,6 +2374,15 @@ class CustomizeOverlay(QWidget):
         self._initial_hud_fx      = dict(get_hud_fx())
         self._sel_hud_fx          = dict(self._initial_hud_fx)
         self._initial_sfx         = get_sfx_enabled()
+        self._initial_persona     = get_persona_mode()
+        self._sel_persona         = self._initial_persona
+        self._initial_gender      = get_assistant_gender()
+        self._sel_gender          = self._initial_gender
+        self._initial_tts_engine  = get_tts_engine()
+        self._sel_tts_engine      = self._initial_tts_engine
+        self._initial_edge_voice  = get_edge_voice()
+        self._sel_edge_voice      = self._initial_edge_voice
+        self._obsidian_cfg        = dict(get_obsidian_config())
 
         # Preview Callbacks
         self.on_preview                  = None   # callable(hex)
@@ -2642,17 +2655,37 @@ class CustomizeOverlay(QWidget):
         self._stack.addWidget(page_col)
 
         # ══════════════════════════════════════════════════════════════════════
-        # TAB 3: ⚙ IDENTITY && VOICE (Assistant Name, User Name, Voices, SFX)
+        # TAB 3: ⚙ IDENTITY && VOICE (Persona, Gender, Audio Engines, Obsidian)
         # ══════════════════════════════════════════════════════════════════════
+        scroll_id = QScrollArea()
+        scroll_id.setWidgetResizable(True)
+        scroll_id.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_id.setStyleSheet("""
+            QScrollArea { background: transparent; border: none; }
+            QScrollBar:vertical {
+                background: #000d14; width: 6px; margin: 0px; border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(0, 212, 255, 0.35); min-height: 20px; border-radius: 3px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(0, 212, 255, 0.75);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+
         page_id = QWidget()
         lay_id = QVBoxLayout(page_id)
-        lay_id.setContentsMargins(4, 4, 4, 4)
-        lay_id.setSpacing(6)
+        lay_id.setContentsMargins(4, 4, 8, 4)
+        lay_id.setSpacing(7)
 
+        # 1. Identity Names
         lay_id.addWidget(_lbl("ASSISTANT NAME", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
         self._name_input = QLineEdit(assistant_name)
         self._name_input.setFont(QFont("Courier New", 10))
-        self._name_input.setFixedHeight(30)
+        self._name_input.setFixedHeight(28)
         self._name_input.setStyleSheet(_fs)
         lay_id.addWidget(self._name_input)
 
@@ -2660,13 +2693,93 @@ class CustomizeOverlay(QWidget):
         self._user_input = QLineEdit(user_name)
         self._user_input.setPlaceholderText("e.g. Tony (leave blank for auto)")
         self._user_input.setFont(QFont("Courier New", 10))
-        self._user_input.setFixedHeight(30)
+        self._user_input.setFixedHeight(28)
         self._user_input.setStyleSheet(_fs)
         lay_id.addWidget(self._user_input)
 
-        # Gemini Voices
+        # 2. AI Persona Selector
+        lay_id.addWidget(_lbl("AI PERSONA && CHARACTER MODE", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        p_row1 = QHBoxLayout(); p_row1.setSpacing(4)
+        p_row2 = QHBoxLayout(); p_row2.setSpacing(4)
+        self._persona_btns = {}
+        personas = [
+            ("jarvis", "🛡️ JARVIS (Tactical AI)", p_row1),
+            ("teacher", "🎓 TEACHER (Mentor)", p_row1),
+            ("companion", "💖 COMPANION (GF)", p_row2),
+            ("devops", "⚡ DEVOPS (Cloud)", p_row2),
+        ]
+        for p_key, p_label, target_row in personas:
+            b = QPushButton(p_label)
+            b.setFixedHeight(26)
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _=False, pk=p_key: self._on_persona_pick(pk))
+            self._persona_btns[p_key] = b
+            target_row.addWidget(b)
+        lay_id.addLayout(p_row1)
+        lay_id.addLayout(p_row2)
+        self._refresh_persona_btns()
+
+        # 3. Assistant Gender & Hindi Grammar
+        lay_id.addWidget(_lbl("ASSISTANT GENDER && GRAMMAR (Verb Conjugation)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        lay_id.addWidget(_lbl("• Male: करता हूँ, बोलूँगा, आया हूँ   |   • Female: करती हूँ, बोलूँगी, आई हूँ", 7, color=C.TEXT_MED, align=Qt.AlignmentFlag.AlignLeft))
+        gen_row = QHBoxLayout(); gen_row.setSpacing(4)
+        self._gender_btns = {}
+        for g_key, g_label in [("male", "♂️ MALE ASSISTANT"), ("female", "♀️ FEMALE ASSISTANT")]:
+            b = QPushButton(g_label)
+            b.setFixedHeight(26)
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _=False, gk=g_key: self._on_gender_pick(gk))
+            self._gender_btns[g_key] = b
+            gen_row.addWidget(b)
+        lay_id.addLayout(gen_row)
+        self._refresh_gender_btns()
+
+        # 4. Speech Engine Selector
+        lay_id.addWidget(_lbl("SPEECH AUDIO ENGINE", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        tts_row = QHBoxLayout(); tts_row.setSpacing(4)
+        self._tts_btns = {}
+        tts_engines = [
+            ("edge_tts", "⚡ EDGE-TTS (Neural)"),
+            ("piper", "🎙️ PIPER (Offline)"),
+            ("gemini", "🌐 GEMINI LIVE"),
+        ]
+        for eng_key, eng_label in tts_engines:
+            b = QPushButton(eng_label)
+            b.setFixedHeight(26)
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _=False, ek=eng_key: self._on_tts_engine_pick(ek))
+            self._tts_btns[eng_key] = b
+            tts_row.addWidget(b)
+        lay_id.addLayout(tts_row)
+        self._refresh_tts_engine_btns()
+
+        # 5. Edge-TTS Voices
+        lay_id.addWidget(_lbl("EDGE-TTS VOICES (Free, Ultra-Realistic & Expressive)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        ev_row = QHBoxLayout(); ev_row.setSpacing(4)
+        self._edge_voice_btns = {}
+        edge_voices = [
+            ("hi-IN-MadhurNeural", "Madhur (Hi ♂)"),
+            ("hi-IN-SwaraNeural", "Swara (Hi ♀)"),
+            ("en-US-ChristopherNeural", "Chris (US ♂)"),
+            ("en-US-JennyNeural", "Jenny (US ♀)"),
+        ]
+        for ev_key, ev_label in edge_voices:
+            b = QPushButton(ev_label)
+            b.setFixedHeight(24)
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(lambda _=False, vk=ev_key: self._on_edge_voice_pick(vk))
+            self._edge_voice_btns[ev_key] = b
+            ev_row.addWidget(b)
+        lay_id.addLayout(ev_row)
+        self._refresh_edge_voice_btns()
+
+        # 6. Gemini Voices
         from memory.config_manager import AVAILABLE_VOICES, DEFAULT_VOICE
-        lay_id.addWidget(_lbl("ASSISTANT VOICE (Gemini Neural Voices)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        lay_id.addWidget(_lbl("GEMINI LIVE VOICES (When using Gemini Live audio)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
         self._sel_voice = (voice or DEFAULT_VOICE)
         if self._sel_voice not in AVAILABLE_VOICES:
             self._sel_voice = DEFAULT_VOICE
@@ -2675,8 +2788,8 @@ class CustomizeOverlay(QWidget):
         for _v in AVAILABLE_VOICES:
             b = QPushButton(_v)
             b.setCheckable(True)
-            b.setFixedHeight(26)
-            b.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            b.setFixedHeight(24)
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.clicked.connect(lambda _=False, name=_v: self._on_voice_pick(name))
             self._voice_btns[_v] = b
@@ -2684,14 +2797,76 @@ class CustomizeOverlay(QWidget):
         lay_id.addLayout(voice_row)
         self._refresh_voice_btns()
 
-        # Stark SFX Checkbox
+        # 7. Stark SFX Checkbox
         self._chk_sfx = QCheckBox("Enable Stark Tactical Audio Feedback (SFX)")
         self._chk_sfx.setChecked(self._initial_sfx)
         self._chk_sfx.setStyleSheet(_chk_style)
         lay_id.addWidget(self._chk_sfx)
 
+        # 8. Obsidian Second-Brain Integration
+        sep_obs = QFrame(); sep_obs.setFrameShape(QFrame.Shape.HLine)
+        sep_obs.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;"); lay_id.addWidget(sep_obs)
+
+        lay_id.addWidget(_lbl("OBSIDIAN SECOND BRAIN INTEGRATION (Local REST API && Vault)", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._chk_obsidian = QCheckBox("Enable Obsidian Second Brain Dual-Sync")
+        self._chk_obsidian.setChecked(self._obsidian_cfg.get("enabled", True))
+        self._chk_obsidian.setStyleSheet(_chk_style)
+        lay_id.addWidget(self._chk_obsidian)
+
+        obs_row1 = QHBoxLayout(); obs_row1.setSpacing(6)
+        obs_row1.addWidget(_lbl("PORT:", 7, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._obs_port_input = QLineEdit(str(self._obsidian_cfg.get("port", 27124)))
+        self._obs_port_input.setFixedWidth(64)
+        self._obs_port_input.setFixedHeight(24)
+        self._obs_port_input.setStyleSheet(_fs)
+        obs_row1.addWidget(self._obs_port_input)
+
+        self._chk_obs_https = QCheckBox("Use HTTPS")
+        self._chk_obs_https.setChecked(self._obsidian_cfg.get("use_https", True))
+        self._chk_obs_https.setStyleSheet(_chk_style)
+        obs_row1.addWidget(self._chk_obs_https)
+        obs_row1.addStretch()
+        lay_id.addLayout(obs_row1)
+
+        lay_id.addWidget(_lbl("OBSIDIAN REST API BEARER TOKEN", 7, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._obs_key_input = QLineEdit(self._obsidian_cfg.get("api_key", ""))
+        self._obs_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self._obs_key_input.setPlaceholderText("Paste Bearer Token from Obsidian Local REST API...")
+        self._obs_key_input.setFixedHeight(26)
+        self._obs_key_input.setStyleSheet(_fs)
+        lay_id.addWidget(self._obs_key_input)
+
+        lay_id.addWidget(_lbl("LOCAL VAULT FOLDER PATH (Fallback)", 7, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        self._obs_vault_input = QLineEdit(self._obsidian_cfg.get("vault_path", ""))
+        self._obs_vault_input.setPlaceholderText("e.g. C:/Users/Documents/ObsidianVault")
+        self._obs_vault_input.setFixedHeight(26)
+        self._obs_vault_input.setStyleSheet(_fs)
+        lay_id.addWidget(self._obs_vault_input)
+
+        obs_test_row = QHBoxLayout(); obs_test_row.setSpacing(6)
+        self._obs_test_btn = QPushButton("⚡ TEST OBSIDIAN CONNECTION")
+        self._obs_test_btn.setFixedHeight(26)
+        self._obs_test_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        self._obs_test_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._obs_test_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {C.PRI};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 8px;
+            }}
+            QPushButton:hover {{ background: {C.PRI_GHO}; border-color: {C.PRI}; }}
+        """)
+        self._obs_test_btn.clicked.connect(self._test_obsidian)
+        obs_test_row.addWidget(self._obs_test_btn)
+
+        self._obs_status_lbl = QLabel("")
+        self._obs_status_lbl.setFont(QFont("Courier New", 7))
+        self._obs_status_lbl.setStyleSheet(f"color: {C.TEXT_DIM};")
+        obs_test_row.addWidget(self._obs_status_lbl, 1)
+        lay_id.addLayout(obs_test_row)
+
         lay_id.addStretch(1)
-        self._stack.addWidget(page_id)
+        scroll_id.setWidget(page_id)
+        self._stack.addWidget(scroll_id)
 
         # Tab Switching Handler
         def _set_tab(idx: int):
@@ -2810,6 +2985,84 @@ class CustomizeOverlay(QWidget):
             else:
                 b.setStyleSheet(f"background: transparent; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
 
+    # ── Persona selection ──────────────────────────────────────────────────
+    def _on_persona_pick(self, mode: str):
+        self._sel_persona = mode
+        self._refresh_persona_btns()
+
+    def _refresh_persona_btns(self):
+        for mode, b in self._persona_btns.items():
+            on = (mode == self._sel_persona)
+            if on:
+                b.setStyleSheet(f"background: {C.PRI_DIM}; color: #000; border: 1px solid {C.PRI}; border-radius: 3px;")
+            else:
+                b.setStyleSheet(f"background: #00121a; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
+
+    # ── Gender selection ───────────────────────────────────────────────────
+    def _on_gender_pick(self, g: str):
+        self._sel_gender = g
+        self._refresh_gender_btns()
+
+    def _refresh_gender_btns(self):
+        for g, b in self._gender_btns.items():
+            on = (g == self._sel_gender)
+            if on:
+                b.setStyleSheet(f"background: {C.PRI_DIM}; color: #000; border: 1px solid {C.PRI}; border-radius: 3px;")
+            else:
+                b.setStyleSheet(f"background: #00121a; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
+
+    # ── Speech engine selection ────────────────────────────────────────────
+    def _on_tts_engine_pick(self, eng: str):
+        self._sel_tts_engine = eng
+        self._refresh_tts_engine_btns()
+
+    def _refresh_tts_engine_btns(self):
+        for eng, b in self._tts_btns.items():
+            on = (eng == self._sel_tts_engine)
+            if on:
+                b.setStyleSheet(f"background: {C.PRI_DIM}; color: #000; border: 1px solid {C.PRI}; border-radius: 3px;")
+            else:
+                b.setStyleSheet(f"background: #00121a; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
+
+    # ── Edge-TTS voice selection ───────────────────────────────────────────
+    def _on_edge_voice_pick(self, voice_id: str):
+        self._sel_edge_voice = voice_id
+        self._refresh_edge_voice_btns()
+
+    def _refresh_edge_voice_btns(self):
+        for vid, b in self._edge_voice_btns.items():
+            on = (vid == self._sel_edge_voice)
+            if on:
+                b.setStyleSheet(f"background: {C.PRI_GHO}; color: {C.PRI}; border: 1px solid {C.PRI}; border-radius: 3px;")
+            else:
+                b.setStyleSheet(f"background: transparent; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
+
+    # ── Obsidian test connection ───────────────────────────────────────────
+    def _test_obsidian(self):
+        try:
+            self._obs_status_lbl.setText("Testing connection...")
+            self._obs_status_lbl.setStyleSheet(f"color: {C.PRI};")
+            from actions.obsidian_brain import test_connection
+            self._obsidian_cfg["api_key"] = self._obs_key_input.text().strip()
+            try:
+                self._obsidian_cfg["port"] = int(self._obs_port_input.text().strip())
+            except ValueError:
+                self._obsidian_cfg["port"] = 27124
+            self._obsidian_cfg["vault_path"] = self._obs_vault_input.text().strip()
+            self._obsidian_cfg["use_https"] = self._chk_obs_https.isChecked()
+            save_obsidian_config(self._obsidian_cfg)
+
+            ok, msg = test_connection()
+            if ok:
+                self._obs_status_lbl.setText(f"✓ {msg}")
+                self._obs_status_lbl.setStyleSheet("color: #00ff88;")
+            else:
+                self._obs_status_lbl.setText(f"✗ {msg}")
+                self._obs_status_lbl.setStyleSheet("color: #ff3b30;")
+        except Exception as e:
+            self._obs_status_lbl.setText(f"✗ Error: {e}")
+            self._obs_status_lbl.setStyleSheet("color: #ff3b30;")
+
     # ── Color flow ───────────────────────────────────────────────────────────
     def _set_color(self, hx: str, update_wheel: bool = True, preview: bool = True):
         self._sel_color = hx.strip().lower()
@@ -2866,11 +3119,26 @@ class CustomizeOverlay(QWidget):
         save_particle_density(self._sel_density)
         save_hud_fx(self._sel_hud_fx)
         save_sfx_enabled(self._chk_sfx.isChecked())
+        save_persona_mode(self._sel_persona)
+        save_assistant_gender(self._sel_gender)
+        save_tts_engine(self._sel_tts_engine)
+        save_edge_voice(self._sel_edge_voice)
+
+        self._obsidian_cfg["enabled"] = self._chk_obsidian.isChecked()
+        self._obsidian_cfg["api_key"] = self._obs_key_input.text().strip()
+        try:
+            self._obsidian_cfg["port"] = int(self._obs_port_input.text().strip())
+        except ValueError:
+            self._obsidian_cfg["port"] = 27124
+        self._obsidian_cfg["vault_path"] = self._obs_vault_input.text().strip()
+        self._obsidian_cfg["use_https"] = self._chk_obs_https.isChecked()
+        save_obsidian_config(self._obsidian_cfg)
 
         self.saved.emit(
             name, user, self._sel_color or DEFAULT_UI_COLOR, self._sel_voice,
             self._sel_avatar_mode, self._sel_density, self._sel_hud_fx, self._chk_sfx.isChecked(),
-            self._sel_anim_mode, self._sel_hud_glow
+            self._sel_anim_mode, self._sel_hud_glow,
+            self._sel_persona, self._sel_gender, self._sel_tts_engine, self._sel_edge_voice, self._obsidian_cfg
         )
         self.hide()
 
@@ -5836,16 +6104,29 @@ class MainWindow(QMainWindow):
                            voice: str = "", avatar_mode: str = "celestial",
                            particle_density: int = 200, hud_fx: dict = None,
                            sfx_enabled: bool = True, anim_mode: str = "reactive",
-                           hud_glow: int = 60):
+                           hud_glow: int = 60, persona_mode: str = "jarvis",
+                           gender: str = "male", tts_engine: str = "edge_tts",
+                           edge_voice: str = "hi-IN-MadhurNeural",
+                           obsidian_cfg: dict = None):
         """Update all name/theme/visual-dependent UI elements and persist to config."""
         self._assistant_name = name.strip() or "JARVIS"
         display = self._assistant_name.upper()
         self.setWindowTitle(f"{display} — {APP_VERSION}")
         self._title_lbl.setText(display)
-        if display in ("JARVIS", "J.A.R.V.I.S"):
+
+        persona_subtitles = {
+            "jarvis": "Just A Rather Very Intelligent System",
+            "teacher": "AI Mentor & Academic Instructor",
+            "companion": "Affectionate AI Companion",
+            "devops": "Autonomous DevOps & Cloud Specialist",
+        }
+        if display in ("JARVIS", "J.A.R.V.I.S") and persona_mode == "jarvis":
             self._sub_lbl.setText("Just A Rather Very Intelligent System")
+        elif persona_mode in persona_subtitles:
+            self._sub_lbl.setText(persona_subtitles[persona_mode])
         else:
             self._sub_lbl.setText("Personal AI Assistant")
+
         self._log._ai_name_lc = self._assistant_name.lower()
         self.hud._assistant_name = display
 
@@ -5893,6 +6174,7 @@ class MainWindow(QMainWindow):
             data["sfx_enabled"] = sfx_enabled
             API_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
             self._log.append_log(f"SYS: Identity updated — {display} ({avatar_mode.upper()} mode, {anim_mode.upper()} dynamics)")
+            self._log.append_log(f"SYS: Persona: {persona_mode.upper()} ({gender.upper()}) | Engine: {tts_engine.upper()}")
             if color_changed:
                 self._log.append_log(f"SYS: UI colour applied — {ui_color}")
             if voice_changed:

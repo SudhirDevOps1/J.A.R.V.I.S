@@ -296,6 +296,23 @@ TOOL_DECLARATIONS = [
         },
     },
     {
+        "name": "recall_past_activities",
+        "description": (
+            "Look up what the user or assistant did yesterday, today, or on any past day from the permanent Daily Activity Journal. "
+            "MUST be called whenever the user asks 'kal maine kya kya kiya tha', 'what did we do yesterday', 'did I do anything yesterday', or asks about past conversation history."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "day": {
+                    "type": "STRING",
+                    "description": "'yesterday', 'today', or a date like '2026-09-16'. Default is 'yesterday'",
+                }
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "undo",
         "description": (
             "Reverse the last change YOU made to this computer — a file you "
@@ -624,13 +641,65 @@ class JarvisLive:
         return url, key, f"{url}/auto-login?key={key}", manual
 
     def _on_text_command(self, text: str):
-        if not self._loop or not self.session:
-            return
         # Respect wake-word sleep: a typed command must not be answered while
         # asleep either (the sleep gate is not just for the mic). Wake first with
         # "Hey Jarvis" or the WAKE NOW button.
         if self._wake_enabled and not self._awake:
             self.ui.write_log("SYS: I'm asleep — say 'Hey Jarvis' or tap WAKE NOW first.")
+            return
+
+        from memory.memory_manager import log_daily_activity
+        log_daily_activity(text)
+
+        # Multi-Provider routing: if user configured OpenRouter, Groq, DeepSeek, or Custom LLM,
+        # route typed queries through MultiLLMClient with full persona and second-brain context.
+        from memory.config_manager import load_api_keys
+        cfg = load_api_keys()
+        prov = (cfg.get("preferred_llm_provider") or "gemini").lower().strip()
+
+        if prov in ("openrouter", "groq", "deepseek", "custom", "openai", "ollama"):
+            def _async_multi_llm():
+                try:
+                    self.ui.set_state("THINKING")
+                    from core.multi_llm import get_llm_model
+                    from core.persona_manager import build_persona_system_prompt
+                    from memory.memory_manager import format_memory_for_prompt, load_memory, get_daily_journal
+                    
+                    client = get_llm_model(preferred_provider=prov)
+                    persona = build_persona_system_prompt(self._asst_name)
+                    mem = format_memory_for_prompt(load_memory())
+                    y_log = get_daily_journal("yesterday")
+                    t_log = get_daily_journal("today")
+
+                    prompt_parts = [
+                        persona,
+                        f"\n[CURRENT DATE & TIME]: {datetime.now().strftime('%A, %B %d, %Y %I:%M %p')}\n",
+                    ]
+                    if mem:
+                        prompt_parts.append(f"\n[LONG-TERM MEMORY FACTS]:\n{mem}\n")
+                    if "No activity log found" not in y_log:
+                        prompt_parts.append(f"\n[YESTERDAY'S ACTIVITIES & CONTEXT]:\n{y_log[:900]}\n")
+                    if "No activity log found" not in t_log:
+                        prompt_parts.append(f"\n[TODAY'S ACTIVITIES & CONTEXT]:\n{t_log[:900]}\n")
+                    prompt_parts.append(f"\nUser says: {text}\nRespond as {self._asst_name}:")
+
+                    full_prompt = "\n".join(prompt_parts)
+                    res = client.generate_content(full_prompt)
+                    ans = (res.text or "").strip()
+                    if ans:
+                        log_daily_activity(text, ai_response=ans)
+                        self.ui.write_log(f"{self._asst_name}: {ans}")
+                        self.speak(ans)
+                    self.ui.set_state("LISTENING")
+                except Exception as e:
+                    print(f"[MultiLLM Error] {e}")
+                    self.ui.write_log(f"ERR: {prov.upper()} query failed: {e}")
+                    self.ui.set_state("LISTENING")
+
+            threading.Thread(target=_async_multi_llm, daemon=True).start()
+            return
+
+        if not self._loop or not self.session:
             return
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
@@ -682,8 +751,9 @@ class JarvisLive:
         self.ui.write_log("SYS: Interrupted — listening...")
 
     def speak(self, text: str):
-        from memory.config_manager import get_tts_engine
-        if get_tts_engine() in ("piper_hindi", "piper", "piper_hi"):
+        from memory.config_manager import get_tts_engine, get_edge_voice
+        eng = get_tts_engine()
+        if eng in ("piper_hindi", "piper", "piper_hi"):
             try:
                 from core.tts import PiperHindiTTSEngine
                 if not hasattr(self, "_piper_engine") or self._piper_engine is None:
@@ -692,6 +762,16 @@ class JarvisLive:
                 return
             except Exception as e:
                 print(f"[PiperTTS] Fallback error: {e}")
+        elif eng in ("edge_tts", "edge", "neural"):
+            try:
+                from core.tts import EdgeTTSEngine
+                v = get_edge_voice()
+                if not hasattr(self, "_edge_engine") or self._edge_engine is None or getattr(self._edge_engine, "voice", "") != v:
+                    self._edge_engine = EdgeTTSEngine(voice=v)
+                threading.Thread(target=self._edge_engine.speak, args=(text,), daemon=True).start()
+                return
+            except Exception as e:
+                print(f"[EdgeTTS] Fallback error: {e}")
 
         if not self._loop or not self.session:
             return
@@ -748,7 +828,19 @@ class JarvisLive:
             f"{_addr}\n\n"
         )
 
-        parts = [time_ctx, identity_ctx]
+        # Persona & Character injection
+        from core.persona_manager import build_persona_system_prompt
+        from memory.memory_manager import get_daily_journal
+        persona_ctx = build_persona_system_prompt(self._asst_name)
+
+        y_journal = get_daily_journal("yesterday")
+        journal_ctx = ""
+        if "No activity log found" not in y_journal:
+            journal_ctx = f"\n[YESTERDAY'S ACTIVITIES & PAST LOGS]\n{y_journal[:1400]}\n"
+
+        parts = [time_ctx, identity_ctx, persona_ctx]
+        if journal_ctx:
+            parts.append(journal_ctx)
         if mem_str:
             parts.append(mem_str)
         parts.append(sys_prompt)
@@ -795,10 +887,6 @@ class JarvisLive:
         if self._enhanced_live:
             # Proactive audio: JARVIS stays silent when speech isn't addressed
             # to it (background chatter, talking to someone else in the room).
-            # (Affective dialog was dropped: gemini-3.1-flash-live does not
-            #  support it, and it never reliably detected tone in practice.
-            #  To restore it on a 2.5 native-audio model, add back:
-            #  cfg["enable_affective_dialog"] = True )
             cfg["proactivity"] = types.ProactivityConfig(proactive_audio=True)
         return types.LiveConnectConfig(**cfg)
 
@@ -833,6 +921,10 @@ class JarvisLive:
                 # hundred short strings, and a thread hop would cost more than
                 # the work itself.
                 result = search_memory(args.get("query", ""), limit=8)
+
+            elif name == "recall_past_activities":
+                from memory.memory_manager import recall_past_activities
+                result = recall_past_activities(args.get("day", "yesterday"))
 
             elif name == "undo":
                 if str(args.get("action", "")).lower().strip() == "list":
