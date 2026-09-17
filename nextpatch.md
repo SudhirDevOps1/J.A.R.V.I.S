@@ -1,16 +1,16 @@
-# 🛠️ MARK LIII — NEXT PATCH ROADMAP & IMPLEMENTATION SPECIFICATION
+# 🛠️ J.A.R.V.I.S. — NEXT PATCH ROADMAP & IMPLEMENTATION SPECIFICATION
 > **Document:** `nextpatch.md`  
 > **Status:** Research & Architecture Plan (Ready for Phase-Wise Development)  
-> **Target Version:** Mark LIII Extended / Mark LIV  
-> **Engine:** Gemini 3.1 Flash Live + PyQt6 HUD + Self-Describing Plugins Architecture
+> **Target System:** J.A.R.V.I.S. (SudhirDevOps1 AI)  
+> **Engine:** Gemini Live + Multi-Brain Matrix + PyQt6 Cyberpunk HUD
 
 ---
 
 ## 🎯 Executive Overview
 
-Mark LIII already possesses high-speed bidirectional voice streaming, offline wake-word detection (`openwakeword`), an interactive PyQt6 Iron Man HUD, an undo system, and 16 bundled system actions. 
+J.A.R.V.I.S. already possesses high-speed bidirectional voice streaming, offline wake-word detection (`openwakeword`), an interactive PyQt6 Cyberpunk HUD, an undo system, and 16 bundled system actions. 
 
-This document outlines the **architectural blueprint, dependency requirements, technical design, and implementation steps** for the 8 proposed feature sets. By leveraging Mark LIII's self-describing **`plugins/` system** and modular **`actions/` architecture**, 90% of these features can be dropped in without risking the stability of the core loop in `main.py`.
+This document outlines the **architectural blueprint, dependency requirements, technical design, and implementation steps** for the feature sets. By leveraging J.A.R.V.I.S.'s self-describing **`plugins/` system** and modular **`actions/` architecture**, these features can be dropped in without risking the stability of the core loop in `main.py`.
 
 ---
 
@@ -18,7 +18,7 @@ This document outlines the **architectural blueprint, dependency requirements, t
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        MARK LIII NEXT PATCH ARCHITECTURE               │
+│                        J.A.R.V.I.S. NEXT PATCH ARCHITECTURE            │
 ├──────────────────┬──────────────────┬─────────────────┬────────────────┤
 │ 1. SMART HOME    │ 2. GESTURES      │ 3. SENTRY/FACE  │ 4. WORKSPACE   │
 │ Tuya/Home Assist │ MediaPipe Vision │ DeepFace & Cam  │ Cal, Notion,   │
@@ -409,7 +409,7 @@ This document outlines the **architectural blueprint, dependency requirements, t
 
 ## 🔒 Security, Safety, & Stability Guidelines
 
-1. **Isolation Guarantee**: All third-party skills must reside in `plugins/`. If a plugin fails or crashes, Mark LIII's `core/plugin_loader.py` will isolate the crash without closing the main UI.
+1. **Isolation Guarantee**: All third-party skills must reside in `plugins/`. If a plugin fails or crashes, J.A.R.V.I.S.'s `core/plugin_loader.py` will isolate the crash without closing the main UI.
 2. **Local Credential Storage**: All external API keys (Spotify, Telegram Bot, Notion, Tuya) must be kept strictly inside `config/` (e.g., `config/api_keys.json`), which is already gitignored.
 3. **Hardware Throttling**: Vision & Gesture detection must always run at capped frame rates (<= 15 FPS) to ensure gaming and regular PC usage receive 90%+ CPU/GPU resources.
 4. **User Confirmation**: Sentry mode and PC lockdown commands must pass through `core/confirm.py` so the model cannot accidentally trigger lockouts without human confirmation.

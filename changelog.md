@@ -1,6 +1,66 @@
-# 📝 SudhirDevOps1 AI Assistant (Mark LIII) — Changelog
+# 📝 SudhirDevOps1 AI Assistant (J.A.R.V.I.S.) — Changelog
 
-All notable changes, bug fixes, enhancements, and roadmap progressions for Mark LIII are documented in this file with dates and timestamps.
+All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
+
+---
+
+## [2026-09-17 12:30] — Thread-Safe Qt Metric Dispatch & Persistent Drive Cache
+
+### 🐛 Bug Fixes & Stability Hardening
+
+1. **Thread-Safe Qt Metric Dispatch (`ui.py`)**
+   - Fixed `ProviderSettingsOverlay._refresh_system_metrics()` to run filesystem and network calls asynchronously on a background worker thread and safely dispatch widget creation to the main GUI thread via `QTimer.singleShot(0, ...)`.
+   - Completely resolved `QObject::setParent: Cannot set parent, new parent is in a different thread` warnings.
+
+2. **Persistent Storage Drive Cache (`ui.py`)**
+   - Replaced repetitive widget destruction and reallocation inside `MainWindow._update_disk_gauges()` with an in-place widget dictionary cache (`self._disk_widgets`).
+   - Progress bar percentages, colors, and labels now update in place on every telemetry tick with zero widget thrashing or memory churn.
+
+3. **Gemini Live & Provider Socket Hardening (`core/multi_llm.py`)**
+   - Replaced gRPC-dependent ping check with direct lightweight Google Gemini REST API endpoint verification (`https://generativelanguage.googleapis.com/v1beta/models?key={key}`) with a 5.0s timeout.
+   - Prevents Windows socket permission conflicts (`[WinError 10013]`) and eliminates quota-consuming test generations.
+
+4. **Complete Legacy Nomenclature Cleanup**
+   - Cleaned up docstrings and header comments in `core/audio_devices.py`, `core/installer.py`, `core/llm_client.py`, `core/stt.py`, `core/tts.py`, `ui.py`, and `nextpatch.md` to reference `J.A.R.V.I.S.` uniformly.
+
+---
+
+## [2026-09-15 19:00] — Branding Unification & License Transition to MIT
+
+### 🚀 Enhancements & Bug Fixes
+
+1. **Complete Removal of Legacy "Mark LIII" Nomenclature**
+   - Cleanly replaced all legacy references to "Mark LIII", "Mark XL", and version suffixes across `readme.md`, `LICENSE`, `changelog.md`, `nextpatch.md`, `core/tts.py`, `core/installer.py`, `core/llm_client.py`, and `ui.py`.
+   - Unified official project naming under **J.A.R.V.I.S. (SudhirDevOps1 AI)**.
+
+2. **License Transition to Standard Permissive MIT License (`LICENSE`)**
+   - Completely eradicated restrictive Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0).
+   - Replaced with the clean, standard **MIT License** (Copyright 2026 SudhirDevOps1) for open-source freedom.
+
+3. **Resolved `QObject::setParent` Widget Thrashing (`ui.py`)**
+   - Replaced repeated runtime creation/destruction (`deleteLater()`) of drive progress bars with a static persistent widget cache updated in-place, eliminating Qt cross-thread parent warnings.
+
+4. **Multi-Brain Socket Resilience (`core/multi_llm.py`)**
+   - Refactored Google Gemini provider ping to standard HTTPS REST endpoint, eliminating Windows socket access errors (`[WinError 10013]`).
+
+---
+
+## [2026-09-15 18:27] — GitHub Actions CI/CD Pipeline & GitHub Repository Push
+
+### 🚀 CI/CD & DevOps Automation
+
+1. **GitHub Actions Multi-OS CI/CD Pipeline (`.github/workflows/ci.yml`)**
+   - Configured automated test & build matrix across **Ubuntu** (`ubuntu-latest`) and **Windows** (`windows-latest`) on Python 3.11 and 3.12.
+   - Added automated security & secret audit step to guarantee `config/api_keys.json` and `.env` are never published.
+   - Added automated Python compilation checks (`python -m compileall`) across all packages.
+   - Added automated smoke tests for zero-token telemetry and weather services.
+   - Added `flake8` syntax and code health validation.
+
+2. **Git Repository Initialization & Remote Push**
+   - Connected workspace to remote origin: `https://github.com/SudhirDevOps1/J.A.R.V.I.S.git`.
+   - Hardened `.gitignore` to prevent secret leaks and exclude large model binaries/audio cache.
+   - Added `.gitkeep` files in `core/models/piper/` and `core/assets/sfx/`.
+   - Successfully committed and pushed initial `main` branch upstream.
 
 ---
 

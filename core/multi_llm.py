@@ -266,17 +266,15 @@ def test_llm_provider(
             key = api_key.strip() or cfg.get("gemini_api_key", "").strip()
             if not key:
                 return False, "Missing Gemini API Key", 0.0
-            from google import genai
-            from google.genai import types
-            client = genai.Client(api_key=key)
-            resp = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents="Hi",
-            )
+            # Test key validity directly via Google Gemini REST API to eliminate socket conflicts and WinError 10013
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+            resp = requests.get(url, timeout=5.0)
             lat = (time.perf_counter() - t0) * 1000.0
-            if resp and (resp.text or getattr(resp, "candidates", None)):
+            if resp.status_code == 200:
                 return True, "Gemini 2.5 Flash Live", lat
-            return False, "Gemini empty response", lat
+            elif resp.status_code in (400, 401, 403):
+                return False, f"Invalid API Key ({resp.status_code})", lat
+            return False, f"Gemini HTTP {resp.status_code}", lat
 
         elif prov in ("custom", "ollama", "local"):
             url = (custom_url.strip() or cfg.get("custom_llm_url", "")).rstrip("/")

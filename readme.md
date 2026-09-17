@@ -1,4 +1,4 @@
-# ⚙️ SudhirDevOps1 AI (MARK LIII)
+# ⚙️ J.A.R.V.I.S. (SudhirDevOps1 AI)
 ### The Ultimate Cross-Platform Personal AI Assistant — By SudhirDevOps1
 
 A real-time voice AI that can hear, see, understand, and control your computer — on any OS. Supports Windows, macOS, and Linux. Built on the Gemini Live API for native audio streaming, delivering zero subscriptions and total digital autonomy.
@@ -7,7 +7,7 @@ A real-time voice AI that can hear, see, understand, and control your computer �
 
 ## ✨ Overview
 
-**MARK LIII is the hands-free & scalable release.** Say **"Hey Jarvis"** and it wakes; stay quiet and it slips back to sleep on its own — while asleep, your microphone never leaves the machine, so an off-hand *"I'll be right there"* to someone in the room no longer sets it off. Under the hood it now runs on the faster **Gemini 3.1 Flash Live** engine, and the moment you ask for something that takes a beat — analysing a file, searching the web — it answers instantly *("On it — going through that now…")* so you never wonder whether it heard you.
+**J.A.R.V.I.S. is the ultimate hands-free & scalable personal AI assistant.** Say **"Hey Jarvis"** and it wakes; stay quiet and it slips back to sleep on its own — while asleep, your microphone never leaves the machine, so an off-hand *"I'll be right there"* to someone in the room no longer sets it off. Under the hood it now runs on the faster **Gemini 2.5/3.1 Flash Live** engine with multi-brain fallback (Groq, DeepSeek, Ollama), and the moment you ask for something that takes a beat — analysing a file, searching the web — it answers instantly *("On it — going through that now…")* so you never wonder whether it heard you.
 
 It's also built to grow: every skill — bundled or drop-in — now **describes itself in its own file**, so adding a tool is a one-file operation and the core stays lean.
 
@@ -66,9 +66,9 @@ It's not just an assistant — it's an extension of your digital life.
 
 ---
 
-## 🆕 What's New in Mark LIII
+## 🆕 Features & Innovations
 
-Mark LIII is about making JARVIS **hands-free, faster, and easy to extend** — all universal: no hardcoded language, no bundled asset files, works the same on Windows, macOS and Linux.
+J.A.R.V.I.S. is engineered to be **hands-free, faster, and easy to extend** — all universal: no hardcoded language, no bundled asset files, works the same on Windows, macOS and Linux.
 
 ### 🎙️ Wake Word — "Hey Jarvis"
 JARVIS can now sit quietly until you call it. Turn on **⚙ → WAKE WORD** (a one-click, opt-in download of a tiny local model) and it goes to sleep: the microphone is processed **only on your machine** by a local detector, and nothing is sent to the cloud until it hears **"Hey Jarvis."** Once awake it listens normally, then **auto-sleeps after 2 minutes** of silence. You can also **sleep/wake it by clicking** in the settings. Because it's a *local* gate, background chatter — *"I'm coming!"* to someone at home — never wakes it. It costs **zero** when off (the model isn't even loaded), and the detection runs in its own thread, so nothing else in the app slows down.
@@ -76,21 +76,19 @@ JARVIS can now sit quietly until you call it. Turn on **⚙ → WAKE WORD** (a o
 ### ⚡ Instant Acknowledgment
 No more silent gaps. When you ask for something that takes a moment — reading an uploaded file, a web/research search, building code — JARVIS **immediately** says one short, natural sentence *in your language* (*"Right away — going through that file now."*) and *then* runs the tool. Instant actions (opening an app, volume) stay snappy with no chatter.
 
-### 🚀 Faster Live Engine — Gemini 3.1 Flash Live
-The live session moved to **`gemini-3.1-flash-live-preview`**, cutting the time-to-first-word roughly in half while keeping tools, all five voices, transcription, session resumption and sliding-window compression intact.
+### 🚀 Faster Live Engine — Gemini Live + Multi-Brain Matrix
+The live session is powered by **Gemini Live**, with multi-provider backup across Groq (Llama-3.3 70B), DeepSeek, and local Ollama, cutting latency while keeping tools, voices, transcription, and sliding-window compression intact.
 
 ### 🧩 Self-Describing Skills — a Scalable Core
 Every bundled **action** now carries its own `TOOL` declaration in its own file (exactly like a drop-in **plugin's** `PLUGIN` dict), and the core auto-discovers them at launch. `main.py` no longer holds a giant list of tool definitions and dispatch branches — it shrank by hundreds of lines. Adding a new built-in skill, or promoting an `actions/*.py` file into a shareable plugin, is now just… moving a file.
 
-> Built on the Mark LI/LII foundation: the **🧩 Plugin System**, **♾️ Unlimited Sessions**, **🎨 Live Theming**, **〰️ Reactive HUD** and **🎙️ Voice Picker** are all still here.
+> Built with a complete feature suite: the **🧩 Plugin System**, **♾️ Unlimited Sessions**, **🎨 Live Theming**, **〰️ Reactive HUD** and **🎙️ Voice Lab** are all ready out-of-the-box.
 
 ---
 
-## 🔄 The Foundation Update — in every Mark from LII
+## 🔄 Core Architectural Foundation
 
-These four landed across **Mark LII, LIII, LIV and LV at the same time**, after each of those releases had already shipped. They are not what any one of those versions originally introduced; they are the floor all of them now stand on, so moving up a Mark never costs you something the one below it had.
-
-No new dependencies. No bundled asset files. No hardcoded language, and nothing that assumes one operating system.
+Designed with high stability and modularity so new capabilities never compromise core functionality. No new dependencies. No bundled asset files. No hardcoded language, and nothing that assumes one operating system.
 
 ### 🧠 A memory that actually remembers
 
@@ -183,25 +181,24 @@ It is held in memory only, deliberately: writing it to disk would make a fresh l
 
 ---
 
-## 🗺️ Mark Roadmap
+### 🗺️ Evolution & Architecture Roadmap
 
-| Mark | Focus |
+| Phase | Capabilities |
 |---|---|
-| **XLIX** | Auto-start · clipboard intelligence · assistant customization |
-| **L** | Session memory · background monitoring · proactive 2.0 · instant vision |
-| **LI** | Plugin system · affective dialog · proactive audio · unlimited sessions |
-| **LII** | Voice picker · live theming · reactive HUD · recallable memory · undo · real confirmation · audio device picker · session continuity |
-| **LIII** | Wake word · Gemini 3.1 Flash Live · instant acknowledgment · self-describing action/plugin architecture |
-| *shared* | The last five above also shipped to LIII, LIV and LV at the same time — moving up a Mark never loses them |
-| **LIV+** | Plugin files: email · quiz mode · calendar · home assistant · 3D-printer · and more |
+| **Core Base** | Auto-start · clipboard intelligence · assistant customization |
+| **Telemetry** | Session memory · background monitoring · proactive 2.0 · instant vision |
+| **Ecosystem** | Plugin system · affective dialog · proactive audio · unlimited sessions |
+| **HUD & Voice** | Voice picker · live theming · reactive HUD · recallable memory · undo · real confirmation · audio device picker · session continuity |
+| **Intelligence**| Wake word · Gemini Live + Groq Llama-3.3 70B + DeepSeek · instant acknowledgment · self-describing action/plugin architecture |
+| **Offline Lab** | Offline Piper Hindi TTS (Devanagari) · Stark SFX · Zero-token drive gauges & Open-Meteo weather |
 
 ---
 
 ## ⚡ Quick Start
 
 ```bash
-git clone https://github.com/SudhirDevOps1/SudhirDevOps1-AI.git
-cd SudhirDevOps1-AI
+git clone https://github.com/SudhirDevOps1/J.A.R.V.I.S.git
+cd J.A.R.V.I.S
 python setup.py        # installs deps for YOUR OS + the browser automation engine
 python main.py
 ```
@@ -220,15 +217,15 @@ python main.py
 | **Python** | 3.11 or 3.12 |
 | **Microphone** | Required for voice interaction (and for the "Hey Jarvis" wake word) |
 | **Speakers** | Required for voice replies |
-| **API Key** | Free Gemini API key (entered on first launch → `config/api_keys.json`) |
-| **Wake word** *(optional)* | One-click download from ⚙ → WAKE WORD (`openwakeword`, a few MB, fully local) |
+| **API Key** | Free Gemini / Groq API key (entered on first launch → `config/api_keys.json`) |
+| **Wake word** *(optional)* | One-click download from ⚙ → WAKE WORD (`openwakeword`, fully local) |
 
 ---
 
 ## 🗂️ Project Structure
 
 ```
-Mark LIII/
+J.A.R.V.I.S./
 ├── main.py                   # Core loop — Gemini Live session, audio I/O, wake/sleep state, tool dispatch
 ├── ui.py                     # PyQt6 HUD — reactive waveform, log panel, settings drawer, plugin manager, camera feed
 ├── setup.py                  # OS-aware installer (skips wrong-OS dependencies)
@@ -240,14 +237,6 @@ Mark LIII/
 │   ├── screen_processor.py   # Screen & webcam capture for vision
 │   ├── background_monitor.py # User-configured topic watching — daily DDG check, no crypto
 │   ├── proactive.py          # Proactive 2.0 — time/context/rotation-aware check-ins
-│   ├── reminder.py           # OS-native scheduled notifications
-│   ├── system_monitor.py     # CPU / RAM / GPU / temperature telemetry
-│   ├── computer_settings.py  # Volume, brightness, WiFi, power (per-OS)
-│   ├── computer_control.py   # Keyboard shortcuts, mouse, window management
-│   ├── open_app.py           # Application launcher (per-OS name map)
-│   ├── browser_control.py    # Web browser control
-│   ├── file_controller.py    # File system operations
-│   ├── file_processor.py     # Document reading and summarization
 │   ├── send_message.py       # Messaging integration
 │   ├── weather_report.py     # Live weather data
 │   ├── flight_finder.py      # Flight search
@@ -274,10 +263,9 @@ Mark LIII/
 
 ---
 
-## ⚠️ License
+## ⚖️ License
 
-Personal and non-commercial use only.
-Licensed under **[Creative Commons BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)**.
+Licensed under the **[MIT License](LICENSE)**. Open-source and free for all developers.
 
 ---
 

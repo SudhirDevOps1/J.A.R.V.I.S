@@ -42,12 +42,9 @@ from PyQt6.QtWidgets import (
     QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
 )
 
-# ── Which Mark this is ───────────────────────────────────────────────────────
-# One constant, read by the window title, the header badge and the PROTOCOL
-# panel. It used to be typed separately in each of those places, and they drifted:
-# Mark 52 and 53 shipped showing "PROTOCOL XLIX" — the number from Mark 49 — and
-# Mark 55 shipped titled "MARK 54". Deriving the protocol from the name means a
-# release bump is this one line.
+# ── Application Identity & Protocol ──────────────────────────────────────────
+# Dynamic application identity and protocol derivation managed centrally
+# via config_manager.
 from memory.config_manager import get_app_name, get_protocol_name
 APP_VERSION  = get_app_name()
 APP_PROTOCOL = get_protocol_name()
@@ -1864,12 +1861,6 @@ class ProviderSettingsOverlay(QWidget):
             badge.setStyleSheet("color: #ff4444;")
 
     def _refresh_system_metrics(self):
-        # Clear existing drive widgets
-        while self._drives_lay.count():
-            item = self._drives_lay.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
         def _worker():
             try:
                 from core.system_info import get_drive_stats, get_free_weather
@@ -1879,39 +1870,48 @@ class ProviderSettingsOverlay(QWidget):
             except Exception:
                 return [], {}
 
-        def _update():
+        def _bg():
             drives, weather = _worker()
-            for d in drives:
-                d_card = QWidget()
-                d_box = QVBoxLayout(d_card); d_box.setContentsMargins(4, 2, 4, 2); d_box.setSpacing(2)
-                row = QHBoxLayout()
-                lbl = QLabel(f"Drive {d['letter']} (Free: {d['free_gb']} GB / {d['total_gb']} GB)")
-                lbl.setFont(QFont("Courier New", 7)); lbl.setStyleSheet(f"color: {C.TEXT};")
-                pct_lbl = QLabel(f"{d['percent']}% used")
-                pct_lbl.setFont(QFont("Courier New", 7)); pct_lbl.setStyleSheet("color: #00ffaa;" if d['percent'] < 80 else "#ffaa00;")
-                row.addWidget(lbl); row.addStretch(1); row.addWidget(pct_lbl)
-                d_box.addLayout(row)
+            QTimer.singleShot(0, lambda: self._render_system_metrics(drives, weather))
 
-                pb = QProgressBar()
-                pb.setFixedHeight(6)
-                pb.setTextVisible(False)
-                pb.setRange(0, 100)
-                pb.setValue(int(d['percent']))
-                pb.setStyleSheet(f"""
-                    QProgressBar {{ background: #00121a; border: 1px solid {C.BORDER}; border-radius: 2px; }}
-                    QProgressBar::chunk {{ background: {'#00ffff' if d['percent'] < 80 else '#ff5533'}; }}
-                """)
-                d_box.addWidget(pb)
-                self._drives_lay.addWidget(d_card)
+        threading.Thread(target=_bg, daemon=True).start()
 
-            if weather.get("success"):
-                self._weather_card.setText(
-                    f"City: {weather.get('city', 'Local')} | Temp: {weather.get('temp')} | Sky: {weather.get('desc')} | Wind: {weather.get('wind')}"
-                )
-            else:
-                self._weather_card.setText("Open-Meteo Weather: Service ready (check internet)")
+    def _render_system_metrics(self, drives: list, weather: dict):
+        # Safely clear and rebuild drive widgets on the main GUI thread
+        while self._drives_lay.count():
+            item = self._drives_lay.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
 
-        threading.Thread(target=_update, daemon=True).start()
+        for d in drives:
+            d_card = QWidget()
+            d_box = QVBoxLayout(d_card); d_box.setContentsMargins(4, 2, 4, 2); d_box.setSpacing(2)
+            row = QHBoxLayout()
+            lbl = QLabel(f"Drive {d['letter']} (Free: {d['free_gb']} GB / {d['total_gb']} GB)")
+            lbl.setFont(QFont("Courier New", 7)); lbl.setStyleSheet(f"color: {C.TEXT};")
+            pct_lbl = QLabel(f"{d['percent']}% used")
+            pct_lbl.setFont(QFont("Courier New", 7)); pct_lbl.setStyleSheet("color: #00ffaa;" if d['percent'] < 80 else "#ffaa00;")
+            row.addWidget(lbl); row.addStretch(1); row.addWidget(pct_lbl)
+            d_box.addLayout(row)
+
+            pb = QProgressBar()
+            pb.setFixedHeight(6)
+            pb.setTextVisible(False)
+            pb.setRange(0, 100)
+            pb.setValue(int(d['percent']))
+            pb.setStyleSheet(f"""
+                QProgressBar {{ background: #00121a; border: 1px solid {C.BORDER}; border-radius: 2px; }}
+                QProgressBar::chunk {{ background: {'#00ffff' if d['percent'] < 80 else '#ff5533'}; }}
+            """)
+            d_box.addWidget(pb)
+            self._drives_lay.addWidget(d_card)
+
+        if weather.get("success"):
+            self._weather_card.setText(
+                f"City: {weather.get('city', 'Local')} | Temp: {weather.get('temp')} | Sky: {weather.get('desc')} | Wind: {weather.get('wind')}"
+            )
+        else:
+            self._weather_card.setText("Open-Meteo Weather: Service ready (check internet)")
 
     def _save(self):
         prov_id = self._provider_combo.currentData() or "gemini"
@@ -4010,37 +4010,55 @@ class MainWindow(QMainWindow):
         try:
             from core.system_info import get_drive_stats
             drives = get_drive_stats()
-            while self._disk_lay.count():
-                item = self._disk_lay.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-                elif item.layout():
-                    while item.layout().count():
-                        sub = item.layout().takeAt(0)
-                        if sub.widget():
-                            sub.widget().deleteLater()
+            if not hasattr(self, "_disk_widgets"):
+                self._disk_widgets = {}
+
+            current_letters = {d["letter"]: d for d in drives[:3]}
+
+            # Clean up widgets for drives that are no longer present
+            for letter in list(self._disk_widgets.keys()):
+                if letter not in current_letters:
+                    _, _, row_w = self._disk_widgets.pop(letter)
+                    row_w.setParent(None)
+                    row_w.deleteLater()
 
             for d in drives[:3]:
-                row = QHBoxLayout()
-                row.setContentsMargins(0, 0, 0, 0)
-                row.setSpacing(4)
-                lbl = QLabel(f"{d['letter']} {d['percent']:.0f}%")
-                lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-                lbl.setStyleSheet(f"color: {C.TEXT_MED}; border: none; background: transparent;")
-                
-                bar = QProgressBar()
-                bar.setFixedHeight(6)
-                bar.setTextVisible(False)
-                bar.setRange(0, 100)
-                bar.setValue(int(d['percent']))
-                bar_col = C.RED if d['percent'] > 90 else (C.ACC if d['percent'] > 75 else C.PRI)
-                bar.setStyleSheet(f"""
-                    QProgressBar {{ background: #00121d; border: 1px solid {C.BORDER}; border-radius: 2px; }}
-                    QProgressBar::chunk {{ background: {bar_col}; border-radius: 1px; }}
-                """)
-                row.addWidget(lbl)
-                row.addWidget(bar)
-                self._disk_lay.addLayout(row)
+                letter = d["letter"]
+                pct = int(d["percent"])
+                bar_col = C.RED if pct > 90 else (C.ACC if pct > 75 else C.PRI)
+
+                if letter in self._disk_widgets:
+                    lbl, bar, _ = self._disk_widgets[letter]
+                    lbl.setText(f"{letter} {pct}%")
+                    bar.setValue(pct)
+                    bar.setStyleSheet(f"""
+                        QProgressBar {{ background: #00121d; border: 1px solid {C.BORDER}; border-radius: 2px; }}
+                        QProgressBar::chunk {{ background: {bar_col}; border-radius: 1px; }}
+                    """)
+                else:
+                    row_w = QWidget()
+                    row = QHBoxLayout(row_w)
+                    row.setContentsMargins(0, 0, 0, 0)
+                    row.setSpacing(4)
+
+                    lbl = QLabel(f"{letter} {pct}%")
+                    lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+                    lbl.setStyleSheet(f"color: {C.TEXT_MED}; border: none; background: transparent;")
+
+                    bar = QProgressBar()
+                    bar.setFixedHeight(6)
+                    bar.setTextVisible(False)
+                    bar.setRange(0, 100)
+                    bar.setValue(pct)
+                    bar.setStyleSheet(f"""
+                        QProgressBar {{ background: #00121d; border: 1px solid {C.BORDER}; border-radius: 2px; }}
+                        QProgressBar::chunk {{ background: {bar_col}; border-radius: 1px; }}
+                    """)
+
+                    row.addWidget(lbl)
+                    row.addWidget(bar)
+                    self._disk_widgets[letter] = (lbl, bar, row_w)
+                    self._disk_lay.addWidget(row_w)
         except Exception:
             pass
 
