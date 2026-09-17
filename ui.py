@@ -385,93 +385,168 @@ class _SysMetrics:
 _metrics = _SysMetrics()
 
 class HudCanvas(QWidget):
+    """
+    Celestial AI Avatar HUD with 3D Swirling Planetary Orbital Halo Ring,
+    Cosmic Stardust Particle Cloud, Fiber-Optic Neural Filaments, and Live Voice Reactivity.
+    """
+
     def __init__(self, face_path: str, assistant_name: str = "J.A.R.V.I.S", parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
         self.setMinimumSize(300, 300)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self.muted    = False
+        self.muted = False
         self.speaking = False
-        self.state    = "INITIALISING"
+        self.state = "INITIALISING"
         self._assistant_name = assistant_name
+        self._face_path = face_path
 
-        self._tick       = 0
-        self._scale      = 1.0
-        self._tgt_scale  = 1.0
-        self._halo       = 55.0
-        self._tgt_halo   = 55.0
-        self._last_t     = time.time()
-        self._scan       = 0.0
-        self._scan2      = 180.0
-        self._rings      = [0.0, 120.0, 240.0]
-        self._pulses: list[float] = [0.0, 50.0, 100.0]
-        self._blink      = True
-        self._blink_tick = 0
-        self._particles: list[list[float]] = []
-        self._face_px: QPixmap | None = None
-        # Rescaled-face cache: the smooth rescale is expensive, so we keep the
-        # last result and only rebuild it when the (quantised) size changes.
-        self._face_cache: QPixmap | None = None
-        self._face_cache_sz = -1
-        # Static grid-dot layer, pre-rendered once per size/theme into a pixmap
-        # so paintEvent blits it in one call instead of thousands of drawPoint()s.
-        self._grid_cache: QPixmap | None = None
-        self._grid_key = None
-        # Repaint throttle counter (idle frames drop to ~20 Hz — see _step()).
+        self._tick = 0
         self._paint_tick = 0
+        self._last_t = time.time()
+
+        # ── 3D Orbital Planetary Halo Parameters ──────────────────────────────
+        self._halo_angle = 0.0                      # Main orbital rotation angle in degrees
+        self._halo_tilt = math.radians(16.0)        # Perspective tilt angle (~16°)
+        self._halo = 60.0                           # Base glow intensity
+        self._scale = 1.0                           # Organic breathing scale
+        self._base_scale = 1.0
+        self._tgt_scale = 1.0
+
+        # Orbiting photons travelling along the tilted 3D elliptical halo
+        self._photons: list[dict] = []
+        for i in range(42):
+            base_ang = (i / 42.0) * math.pi * 2 + random.uniform(-0.05, 0.05)
+            self._photons.append({
+                "angle": base_ang,
+                "rad_jit": random.uniform(-5.0, 5.0),
+                "spd": random.uniform(0.85, 1.25),
+                "sz": random.uniform(1.2, 3.4),
+                "alpha": random.uniform(180, 255),
+                "strand": random.choice([0, 1, 2]),
+            })
+
+        # ── Cosmic Stardust Swarm (220 particles) ─────────────────────────────
+        self._stardust: list[dict] = []
+        for _ in range(220):
+            ny = random.uniform(-0.85, 0.85)
+            max_w = 0.38 if ny < -0.2 else (0.50 if ny < 0.2 else 0.82)
+            nx = random.gauss(0, max_w * 0.42)
+            nx = max(-max_w, min(max_w, nx))
+            self._stardust.append({
+                "x": nx,
+                "y": ny,
+                "sz": random.uniform(1.1, 3.0),
+                "phase": random.uniform(0, math.pi * 2),
+                "spd": random.uniform(0.65, 1.45),
+                "col": random.choice(["gold", "amber", "white", "cyan"]),
+                "base_a": random.uniform(130, 240),
+                "dx": 0.0,
+                "dy": 0.0,
+            })
+
+        # ── Vocal Shockwaves ──────────────────────────────────────────────────
+        self._shockwaves: list[dict] = []
+
+        # ── Image Caching & Soft Vignetting ───────────────────────────────────
+        self._face_px: QPixmap | None = None
+        self._face_cache: QPixmap | None = None
+        self._face_cache_sz = (-1, -1)
+        self._face_aspect = 0.62
         self._load_face(face_path)
 
-        # Live audio reactivity: _live_amp is written from the audio threads
-        # (0.0–1.0), _amp_disp is the smoothed value the paint code reads.
-        self._live_amp  = 0.0
-        self._amp_disp  = 0.0
-        self._base_scale = 1.0    # slow "breathing" target; amp is added per-frame
-        self._base_halo  = 55.0
+        # ── Audio Reactivity ──────────────────────────────────────────────────
+        self._live_amp = 0.0
+        self._amp_disp = 0.0
 
+        # ── Blinking / Status Animation ───────────────────────────────────────
+        self._blink = True
+        self._blink_tick = 0
+
+        # Background Grid Layer Cache
+        self._grid_cache: QPixmap | None = None
+        self._grid_key = None
+
+        # 60 FPS Animation Timer
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._tmr.start(16)
 
     def set_audio_level(self, level: float) -> None:
-        """Thread-safe entry point for the audio threads. Stores the louder of
-        the incoming level and the current value so brief gaps between chunks
-        don't make the waveform stutter; _step() decays it back down."""
+        """Thread-safe entry point for audio amplitude from mic/TTS."""
         try:
             lv = float(level)
         except (TypeError, ValueError):
             return
-        if lv < 0.0:
-            lv = 0.0
-        elif lv > 1.0:
-            lv = 1.0
+        lv = max(0.0, min(1.0, lv))
         if lv > self._live_amp:
             self._live_amp = lv
 
     def _load_face(self, path: str):
+        """Load avatar portrait with smooth feathered vignette dissolving into void."""
         try:
-            from PIL import Image, ImageDraw
+            from PIL import Image, ImageDraw, ImageFilter
             import io
-            img = Image.open(path).convert("RGBA")
-            sz  = min(img.size)
-            img = img.resize((sz, sz), Image.LANCZOS)
-            mk  = Image.new("L", (sz, sz), 0)
-            ImageDraw.Draw(mk).ellipse((2, 2, sz - 2, sz - 2), fill=255)
+
+            p = Path(path)
+            if not p.exists():
+                alt = BASE_DIR / "core" / "assets" / "avatar" / "celestial_avatar.jpg"
+                if alt.exists():
+                    p = alt
+                elif (BASE_DIR / "face.png").exists():
+                    p = BASE_DIR / "face.png"
+
+            if not p.exists():
+                self._face_px = None
+                return
+
+            img = Image.open(p).convert("RGBA")
+            w, h = img.size
+
+            # Create soft vignette mask
+            mk = Image.new("L", (w, h), 255)
+            d = ImageDraw.Draw(mk)
+
+            fade_x = int(w * 0.10)
+            fade_y_bot = int(h * 0.18)
+            fade_y_top = int(h * 0.06)
+
+            for i in range(fade_x):
+                alpha = int(255 * (i / max(1, fade_x)))
+                d.line([(i, 0), (i, h)], fill=alpha)
+                d.line([(w - 1 - i, 0), (w - 1 - i, h)], fill=alpha)
+
+            for j in range(fade_y_bot):
+                alpha = int(255 * (j / max(1, fade_y_bot)))
+                for x_idx in range(w):
+                    cur = mk.getpixel((x_idx, h - 1 - j))
+                    mk.putpixel((x_idx, h - 1 - j), min(cur, alpha))
+
+            for k in range(fade_y_top):
+                alpha = int(255 * (k / max(1, fade_y_top)))
+                for x_idx in range(w):
+                    cur = mk.getpixel((x_idx, k))
+                    mk.putpixel((x_idx, k), min(cur, alpha))
+
+            mk = mk.filter(ImageFilter.GaussianBlur(radius=6))
             img.putalpha(mk)
+
             buf = io.BytesIO()
             img.save(buf, format="PNG")
-            px = QPixmap(); px.loadFromData(buf.getvalue())
+            px = QPixmap()
+            px.loadFromData(buf.getvalue())
             self._face_px = px
-        except Exception:
+            self._face_aspect = w / max(1, h)
+        except Exception as e:
+            print(f"[HUD] Avatar load error: {e}")
             self._face_px = None
-        # New source image → drop the rescaled cache so it rebuilds on next paint.
-        self._face_cache    = None
-        self._face_cache_sz = -1
+
+        self._face_cache = None
+        self._face_cache_sz = (-1, -1)
 
     def _make_grid(self, W: int, H: int) -> QPixmap:
-        """Pre-render the static grid-dot background into a transparent pixmap so
-        paintEvent can blit it once per frame instead of running a nested
-        drawPoint() loop across the whole widget every 16 ms."""
+        """Pre-render static celestial stardust grid points for background depth."""
         pm = QPixmap(max(1, W), max(1, H))
         pm.fill(Qt.GlobalColor.transparent)
         gp = QPainter(pm)
@@ -484,73 +559,71 @@ class HudCanvas(QWidget):
 
     def _step(self):
         self._tick += 1
-        now = time.time()
 
-        # ── Live audio reactivity ────────────────────────────────────────────
-        # Audio threads push peaks into _live_amp; decay it toward silence so
-        # gaps between chunks fade out instead of freezing, then smooth it.
+        # Audio smoothing
         self._live_amp *= 0.86
         self._amp_disp += (self._live_amp - self._amp_disp) * 0.45
         amp = self._amp_disp
 
-        # Slow "breathing" base target (random shimmer), refreshed on a timer.
-        if now - self._last_t > (0.12 if self.speaking else 0.5):
-            if self.speaking:
-                self._base_scale = 1.03
-                self._base_halo  = 122.0
-            elif self.muted:
-                self._base_scale = random.uniform(0.998, 1.002)
-                self._base_halo  = random.uniform(15, 28)
-            else:
-                self._base_scale = random.uniform(1.001, 1.008)
-                self._base_halo  = random.uniform(48, 68)
-            self._last_t = now
+        # Organic breathing scale
+        self._scale = 1.0 + math.sin(self._tick * 0.035) * 0.012 + amp * 0.03
 
-        # Every frame, the live audio level lifts the target on top of the base
-        # — this is what makes the core visibly pulse to the actual voice.
-        if self.muted:
-            self._tgt_scale, self._tgt_halo = self._base_scale, self._base_halo
-        elif self.speaking:
-            self._tgt_scale = self._base_scale + amp * 0.13
-            self._tgt_halo  = self._base_halo  + amp * 95.0
+        # Orbital halo rotation speed based on state and sound
+        if self.speaking:
+            rot_spd = 1.8 + amp * 5.2
+        elif self.state == "LISTENING" and amp > 0.03:
+            rot_spd = 1.3 + amp * 3.8
+        elif self.state in ("THINKING", "PROCESSING"):
+            rot_spd = 3.6
+        elif self.muted:
+            rot_spd = 0.35
         else:
-            self._tgt_scale = self._base_scale + amp * 0.06
-            self._tgt_halo  = self._base_halo  + amp * 75.0
+            rot_spd = 0.80
 
-        sp = 0.38 if self.speaking else (0.30 if amp > 0.02 else 0.15)
-        self._scale += (self._tgt_scale - self._scale) * sp
-        self._halo  += (self._tgt_halo  - self._halo)  * sp
+        self._halo_angle = (self._halo_angle + rot_spd) % 360.0
 
-        # Rings/scanners spin faster while speaking, reacting to loudness.
-        boost  = 1.0 + amp * 1.6
-        speeds = ([1.3, -0.9, 2.0] if self.speaking else [0.55, -0.35, 0.9])
-        for i, spd in enumerate(speeds):
-            self._rings[i] = (self._rings[i] + spd * boost) % 360
+        # Advance orbiting photons
+        for ph in self._photons:
+            ph["angle"] = (ph["angle"] + math.radians(rot_spd * ph["spd"])) % (math.pi * 2)
 
-        self._scan  = (self._scan  + (3.0 if self.speaking else 1.3) * boost) % 360
-        self._scan2 = (self._scan2 + (-2.0 if self.speaking else -0.75) * boost) % 360
+        # Update stardust particles
+        for p in self._stardust:
+            p["phase"] += 0.045 * p["spd"]
+            p["y"] -= 0.0012 * p["spd"]
+            p["x"] += math.sin(p["phase"] * 0.8) * 0.0006
 
-        fw  = min(self.width(), self.height())
-        lim = fw * 0.74
-        spd = 4.2 if self.speaking else 2.0
-        self._pulses = [r + spd for r in self._pulses if r + spd < lim]
-        if len(self._pulses) < 3 and random.random() < (0.07 if self.speaking else 0.025):
-            self._pulses.append(0.0)
+            # Vocal shockwave push on speech
+            if amp > 0.07:
+                dist = math.hypot(p["x"], p["y"]) + 0.001
+                p["dx"] += (p["x"] / dist) * amp * 0.006
+                p["dy"] += (p["y"] / dist) * amp * 0.006
 
-        if self.speaking and random.random() < 0.28:
-            cx, cy = self.width() / 2, self.height() / 2
-            ang = random.uniform(0, 2 * math.pi)
-            r_s = fw * 0.28
-            self._particles.append([
-                cx + math.cos(ang) * r_s, cy + math.sin(ang) * r_s,
-                math.cos(ang) * random.uniform(0.9, 2.4),
-                math.sin(ang) * random.uniform(0.9, 2.4) - 0.4, 1.0,
-            ])
-        self._particles = [
-            [p[0]+p[2], p[1]+p[3], p[2]*0.97, p[3]*0.97, p[4]-0.028]
-            for p in self._particles if p[4] > 0
-        ]
+            p["dx"] *= 0.88
+            p["dy"] *= 0.88
 
+            if p["y"] < -0.92:
+                p["y"] = 0.90
+                max_w = 0.80
+                p["x"] = random.gauss(0, max_w * 0.42)
+
+        # Trigger energy shockwaves on vocal onset bursts
+        if (self.speaking or (self.state == "LISTENING" and amp > 0.15)) and amp > 0.16 and random.random() < 0.22:
+            self._shockwaves.append({
+                "r": 12.0,
+                "max_r": 180.0 + amp * 120.0,
+                "alpha": 220,
+                "spd": 4.5 + amp * 6.5,
+            })
+
+        active_sw = []
+        for sw in self._shockwaves:
+            sw["r"] += sw["spd"]
+            sw["alpha"] = max(0, int(sw["alpha"] * 0.93 - 2))
+            if sw["r"] < sw["max_r"] and sw["alpha"] > 5:
+                active_sw.append(sw)
+        self._shockwaves = active_sw
+
+        # Blinking logic for status
         self._blink_tick += 1
         if self._blink_tick >= 38:
             self._blink = not self._blink
@@ -559,186 +632,265 @@ class HudCanvas(QWidget):
         else:
             _blinked = False
 
-        # Repaint throttling — advancing the animation state above is cheap at
-        # 60 Hz, but the paint is heavy. Repaint every frame while something is
-        # actually happening (speaking, audio, thinking) or when the blink
-        # toggles; otherwise drop to ~20 Hz so an idle HUD stops pinning a CPU
-        # core. The visuals stay smooth because the state keeps stepping.
+        # Repaint throttling (60fps when active, ~24fps when idle)
         self._paint_tick = (self._paint_tick + 1) % 3
-        active = (self.speaking or amp > 0.02
-                  or self.state in ("THINKING", "PROCESSING"))
+        active = (self.speaking or amp > 0.02 or self.state in ("THINKING", "PROCESSING"))
         if active or _blinked or self._paint_tick == 0:
             self.update()
 
     def paintEvent(self, _):
         p = QPainter(self)
-        if not p.isActive():      # device not ready (e.g. 0-size during layout) — skip cleanly
+        if not p.isActive():
             return
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(), qcol(C.BG))
 
         W, H = self.width(), self.height()
-        cx, cy = W / 2, H / 2
+        cx, cy = W / 2.0, H / 2.0
         fw = min(W, H)
+        amp = self._amp_disp
 
-        # grid dots — blitted from a cached layer; rebuilt only when the size
-        # or the theme's ghost colour changes (so live re-theming still works).
+        # Fill deep space void
+        p.fillRect(self.rect(), qcol(C.BG))
+
+        # Ambient starlight grid
         _gkey = (W, H, C.PRI_GHO)
         if self._grid_cache is None or self._grid_key != _gkey:
             self._grid_cache = self._make_grid(W, H)
-            self._grid_key   = _gkey
+            self._grid_key = _gkey
         p.drawPixmap(0, 0, self._grid_cache)
 
-        r_face = fw * 0.31
+        # ── Determine Color Palette Based on State ────────────────────────────
+        if self.speaking:
+            primary_c = QColor(255, 204, 51)     # Solar gold
+            sec_c     = QColor(255, 153, 0)      # Amber flare
+            white_c   = QColor(255, 255, 255)
+            bloom_c   = QColor(255, 170, 0)
+            status_txt, status_col = "●  SPEAKING", qcol(C.ACC)
+        elif self.state == "LISTENING":
+            primary_c = QColor(0, 255, 187)      # Radiant emerald
+            sec_c     = QColor(0, 229, 255)      # Starlight cyan
+            white_c   = QColor(255, 255, 255)
+            bloom_c   = QColor(0, 230, 200)
+            status_txt, status_col = ("●  LISTENING" if self._blink else "○  LISTENING"), qcol(C.GREEN)
+        elif self.state in ("THINKING", "PROCESSING"):
+            primary_c = QColor(0, 212, 255)      # Hyper cyan
+            sec_c     = QColor(179, 102, 255)    # Quantum violet
+            white_c   = QColor(255, 255, 255)
+            bloom_c   = QColor(0, 191, 255)
+            sym = "◈" if self._blink else "◇"
+            status_txt, status_col = f"{sym}  {self.state}", qcol(C.ACC2)
+        elif self.muted:
+            primary_c = QColor(255, 68, 68)      # Ember crimson
+            sec_c     = QColor(153, 34, 34)
+            white_c   = QColor(255, 200, 200)
+            bloom_c   = QColor(255, 50, 50)
+            status_txt, status_col = "⊘  MUTED", qcol(C.MUTED_C)
+        else:
+            primary_c = QColor(255, 204, 68)     # Celestial Gold
+            sec_c     = QColor(255, 170, 34)     # Warm amber
+            white_c   = QColor(255, 255, 255)
+            bloom_c   = QColor(255, 180, 50)
+            status_txt, status_col = ("●  READY" if self._blink else "○  READY"), qcol(C.PRI)
 
-        # halo glow
-        for i in range(10):
-            r   = r_face * (1.8 - i * 0.08)
-            frc = 1.0 - i / 10
-            a   = max(0, min(255, int(self._halo * 0.085 * frc)))
-            col = qcol(C.MUTED_C if self.muted else C.PRI, a)
-            p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+        # ── Avatar Coordinates & Sizing ───────────────────────────────────────
+        av_h = min(int(H * 0.76), int(W * 1.32))
+        av_w = int(av_h * getattr(self, "_face_aspect", 0.62))
+        av_x = int(cx - av_w / 2.0)
+        av_y = int(cy - av_h * 0.50)
 
-        # pulse rings
-        for pr in self._pulses:
-            a   = max(0, int(230 * (1.0 - pr / (fw * 0.74))))
-            col = qcol(C.MUTED_C if self.muted else C.PRI, a)
-            p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawEllipse(QRectF(cx - pr, cy - pr, pr * 2, pr * 2))
+        # Center of the celestial head/temples where the halo orbits
+        head_cx = cx
+        head_cy = av_y + av_h * 0.355
 
-        # spinning arc rings
-        for idx, (r_frac, w_r, arc_l, gap) in enumerate(
-            [(0.48, 3, 115, 78), (0.40, 2, 78, 55), (0.32, 1, 56, 40)]
-        ):
-            ring_r = fw * r_frac
-            base   = self._rings[idx]
-            a_val  = max(0, min(255, int(self._halo * (1.0 - idx * 0.18))))
-            col    = qcol(C.MUTED_C if self.muted else C.PRI, a_val)
-            p.setPen(QPen(col, w_r)); p.setBrush(Qt.BrushStyle.NoBrush)
-            angle = base
-            rect  = QRectF(cx - ring_r, cy - ring_r, ring_r * 2, ring_r * 2)
-            while angle < base + 360:
-                p.drawArc(rect, int(angle * 16), int(arc_l * 16))
-                angle += arc_l + gap
+        # 3D Elliptical Halo Radii
+        r_x = av_w * 0.72 + amp * 38.0
+        r_y = r_x * math.sin(self._halo_tilt) * 1.15
 
-        # scanners
-        sr = fw * 0.50
-        sa = min(255, int(self._halo * 1.5))
-        ex = 75 if self.speaking else 44
-        p.setPen(QPen(qcol(C.MUTED_C if self.muted else C.PRI, sa), 2.5))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        srect = QRectF(cx - sr, cy - sr, sr * 2, sr * 2)
-        p.drawArc(srect, int(self._scan * 16), int(ex * 16))
-        p.setPen(QPen(qcol(C.ACC, sa // 2), 1.5))
-        p.drawArc(srect, int(self._scan2 * 16), int(ex * 16))
+        # ──────────────────────────────────────────────────────────────────────
+        # LAYER 1: Back Half of the 3D Planetary Orbital Halo (z < 0)
+        # ──────────────────────────────────────────────────────────────────────
+        # Angles from 180° to 360° pass BEHIND the head
+        halo_rot_rad = math.radians(self._halo_angle)
+        rect_halo = QRectF(head_cx - r_x, head_cy - r_y, r_x * 2.0, r_y * 2.0)
 
-        # tick marks
-        t_out, t_in = fw * 0.497, fw * 0.474
-        p.setPen(QPen(qcol(C.PRI, 140), 1))
-        for deg in range(0, 360, 10):
-            rad = math.radians(deg)
-            inn = t_in if deg % 30 == 0 else t_in + 6
-            p.drawLine(
-                QPointF(cx + t_out * math.cos(rad), cy - t_out * math.sin(rad)),
-                QPointF(cx + inn  * math.cos(rad), cy - inn  * math.sin(rad)),
-            )
+        # Draw smooth back-half glowing arcs (0..180 deg in Qt drawArc is upper/back half)
+        for w_pen, a_mult in [(5.5, 35), (3.0, 75), (1.5, 140)]:
+            c = QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(a_mult * (0.8 + amp * 0.5)))
+            p.setPen(QPen(c, w_pen))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawArc(rect_halo, 0 * 16, 180 * 16)
 
-        # crosshair
-        ch_r, gap_h = fw * 0.51, fw * 0.16
-        p.setPen(QPen(qcol(C.PRI, int(self._halo * 0.5)), 1))
-        p.drawLine(QPointF(cx - ch_r, cy), QPointF(cx - gap_h, cy))
-        p.drawLine(QPointF(cx + gap_h, cy), QPointF(cx + ch_r, cy))
-        p.drawLine(QPointF(cx, cy - ch_r), QPointF(cx, cy - gap_h))
-        p.drawLine(QPointF(cx, cy + gap_h), QPointF(cx, cy + ch_r))
+        # Draw back photons (z < 0)
+        for ph in self._photons:
+            ang = (ph["angle"] + halo_rot_rad) % (math.pi * 2)
+            z_depth = -math.sin(ang)
+            if z_depth < 0:  # Back half
+                px = head_cx + (r_x + ph["rad_jit"]) * math.cos(ang)
+                py = head_cy - (r_y + ph["rad_jit"] * 0.28) * math.sin(ang)
+                alpha = int(ph["alpha"] * 0.45)
+                p.setBrush(QBrush(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), alpha)))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(px, py), ph["sz"] * 0.8, ph["sz"] * 0.8)
 
-        # corner brackets
-        bl = 24
-        bc = qcol(C.PRI, 210)
-        hl, hr = cx - fw // 2, cx + fw // 2
-        ht, hb = cy - fw // 2, cy + fw // 2
-        p.setPen(QPen(bc, 2))
-        for bx, by, dx, dy in [(hl,ht,1,1),(hr,ht,-1,1),(hl,hb,1,-1),(hr,hb,-1,-1)]:
-            p.drawLine(QPointF(bx, by), QPointF(bx + dx * bl, by))
-            p.drawLine(QPointF(bx, by), QPointF(bx, by + dy * bl))
+        # ──────────────────────────────────────────────────────────────────────
+        # LAYER 2: Celestial Silhouette & Connective Neural Filaments
+        # ──────────────────────────────────────────────────────────────────────
+        # Ambient halo aura behind head
+        aura_r = av_w * 0.55 + amp * 30.0
+        aura_grad = QRadialGradient(head_cx, head_cy, aura_r)
+        aura_grad.setColorAt(0.0, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(50 + amp * 90)))
+        aura_grad.setColorAt(0.5, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), int(25 + amp * 40)))
+        aura_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.setBrush(QBrush(aura_grad))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QPointF(head_cx, head_cy), aura_r, aura_r)
 
-        # face
+        # Draw Avatar Pixmap (feathered silhouette)
         if self._face_px:
-            fsz = int(fw * 0.62 * self._scale)
-            # Quantise the target size so the expensive smooth rescale only runs
-            # when it visibly changes — not on every 1 px "breathing" step.
-            q_sz = max(1, (fsz // 4) * 4)
+            q_sz = (max(1, (av_w // 4) * 4), max(1, (av_h // 4) * 4))
             if self._face_cache is None or self._face_cache_sz != q_sz:
                 self._face_cache = self._face_px.scaled(
-                    q_sz, q_sz,
+                    q_sz[0], q_sz[1],
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
                 self._face_cache_sz = q_sz
             scaled = self._face_cache
-            p.drawPixmap(int(cx - scaled.width() / 2),
-                         int(cy - scaled.height() / 2), scaled)
+            draw_w = int(scaled.width() * self._scale)
+            draw_h = int(scaled.height() * self._scale)
+            dx = int(head_cx - draw_w / 2.0)
+            dy = int(av_y + (av_h - draw_h) / 2.0)
+            p.drawPixmap(dx, dy, draw_w, draw_h, scaled)
         else:
-            orb_r = int(fw * 0.27 * self._scale)
-            oc    = (200, 0, 50) if self.muted else (0, 60, 110)
+            # Fallback pure procedural celestial orb if image missing
+            orb_r = int(fw * 0.26 * self._scale)
             for i in range(8, 0, -1):
-                r2  = int(orb_r * i / 8)
-                frc = i / 8
-                a   = max(0, min(255, int(self._halo * 1.1 * frc)))
-                p.setBrush(QBrush(QColor(int(oc[0]*frc), int(oc[1]*frc), int(oc[2]*frc), a)))
+                r2 = int(orb_r * i / 8)
+                frc = i / 8.0
+                a = max(0, min(255, int(self._halo * 1.2 * frc)))
+                p.setBrush(QBrush(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), a)))
                 p.setPen(Qt.PenStyle.NoPen)
                 p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
-            p.setPen(QPen(qcol(C.PRI, min(255, int(self._halo * 2))), 1))
-            p.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
-            p.drawText(QRectF(cx - 80, cy - 14, 160, 28),
-                       Qt.AlignmentFlag.AlignCenter, self._assistant_name)
 
-        # particles
-        for pt in self._particles:
-            a = max(0, min(255, int(pt[4] * 255)))
+        # Draw Constellation Neural Filaments between close stardust particles
+        fil_pts = []
+        for s in self._stardust:
+            px = head_cx + (s["x"] + s["dx"]) * (av_w * 0.55)
+            py = head_cy + (s["y"] + s["dy"]) * (av_h * 0.48)
+            fil_pts.append((px, py, s))
+
+        # Connect near-neighbors
+        p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(35 + amp * 40)), 1))
+        for i in range(0, len(fil_pts), 3):
+            x1, y1, _ = fil_pts[i]
+            for j in range(i + 1, min(i + 5, len(fil_pts))):
+                x2, y2, _ = fil_pts[j]
+                if abs(x1 - x2) < 32 and abs(y1 - y2) < 32:
+                    p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+
+        # ──────────────────────────────────────────────────────────────────────
+        # LAYER 3: Front Half of the 3D Planetary Orbital Halo (z >= 0)
+        # ──────────────────────────────────────────────────────────────────────
+        # Angles passing IN FRONT of the forehead and temples!
+        for w_pen, a_mult in [(7.0, 50), (4.0, 110), (2.0, 210), (1.0, 255)]:
+            alpha_v = max(0, min(255, int(a_mult * (0.85 + amp * 0.45))))
+            col = white_c if w_pen <= 1.5 else primary_c
+            p.setPen(QPen(QColor(col.red(), col.green(), col.blue(), alpha_v), w_pen))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawArc(rect_halo, 180 * 16, 180 * 16)
+
+        # Draw front photons with intense diamond starlight
+        for ph in self._photons:
+            ang = (ph["angle"] + halo_rot_rad) % (math.pi * 2)
+            z_depth = -math.sin(ang)
+            if z_depth >= 0:  # Front half
+                px = head_cx + (r_x + ph["rad_jit"]) * math.cos(ang)
+                py = head_cy - (r_y + ph["rad_jit"] * 0.28) * math.sin(ang)
+                alpha = max(0, min(255, int(ph["alpha"] * (0.85 + amp * 0.35))))
+                p.setBrush(QBrush(QColor(white_c.red(), white_c.green(), white_c.blue(), alpha)))
+                p.setPen(Qt.PenStyle.NoPen)
+                sz = ph["sz"] * (1.1 + amp * 0.4)
+                p.drawEllipse(QPointF(px, py), sz, sz)
+
+        # ── Twin Lateral Focal Blooms (Left & Right Limb Flares) ───────────────
+        flare_r = 16.0 + amp * 32.0
+        for fx, fy in [(head_cx - r_x, head_cy), (head_cx + r_x, head_cy)]:
+            rad = QRadialGradient(fx, fy, flare_r)
+            rad.setColorAt(0.0, QColor(255, 255, 255, 255))
+            rad.setColorAt(0.22, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(210 + amp * 45)))
+            rad.setColorAt(0.65, QColor(sec_c.red(), sec_c.green(), sec_c.blue(), int(80 + amp * 40)))
+            rad.setColorAt(1.0, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), 0))
+            p.setBrush(QBrush(rad))
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(qcol(C.PRI, a)))
-            p.drawEllipse(QPointF(pt[0], pt[1]), 2.5, 2.5)
+            p.drawEllipse(QPointF(fx, fy), flare_r, flare_r)
 
-        # status text
-        sy = cy + fw * 0.40
-        if self.muted:
-            txt, col = "⊘  MUTED",     qcol(C.MUTED_C)
-        elif self.speaking:
-            txt, col = "●  SPEAKING",  qcol(C.ACC)
-        elif self.state == "THINKING":
-            sym = "◈" if self._blink else "◇"
-            txt, col = f"{sym}  THINKING",   qcol(C.ACC2)
-        elif self.state == "PROCESSING":
-            sym = "▷" if self._blink else "▶"
-            txt, col = f"{sym}  PROCESSING", qcol(C.ACC2)
-        elif self.state == "LISTENING":
-            sym = "●" if self._blink else "○"
-            txt, col = f"{sym}  LISTENING",  qcol(C.GREEN)
-        else:
-            sym = "●" if self._blink else "○"
-            txt, col = f"{sym}  {self.state}", qcol(C.PRI)
+            # Brilliant horizontal starlight diffraction spikes
+            p.setPen(QPen(QColor(255, 255, 255, int(180 + amp * 70)), 1.5))
+            sp_len = 24.0 + amp * 38.0
+            p.drawLine(QPointF(fx - sp_len, fy), QPointF(fx + sp_len, fy))
+            p.drawLine(QPointF(fx, fy - sp_len * 0.35), QPointF(fx, fy + sp_len * 0.35))
 
-        p.setPen(QPen(col, 1))
-        p.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
-        p.drawText(QRectF(0, sy, W, 26), Qt.AlignmentFlag.AlignCenter, txt)
+        # ──────────────────────────────────────────────────────────────────────
+        # LAYER 4: Floating Cosmic Stardust & Expanding Shockwaves
+        # ──────────────────────────────────────────────────────────────────────
+        # Expanding voice shockwaves
+        for sw in self._shockwaves:
+            col_sw = QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), sw["alpha"])
+            p.setPen(QPen(col_sw, 1.5))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            rx_sw = sw["r"]
+            ry_sw = sw["r"] * math.sin(self._halo_tilt) * 1.15
+            p.drawEllipse(QRectF(head_cx - rx_sw, head_cy - ry_sw, rx_sw * 2.0, ry_sw * 2.0))
 
-        # waveform — reacts to the real audio level (mic while listening,
-        # JARVIS's own voice while speaking). Falls back to a gentle idle
-        # ripple when there's no sound. _amp_disp is the smoothed 0–1 level.
-        wy = sy + 30
-        N, bw = 36, 8
-        wx0 = (W - N * bw) / 2
-        amp = self._amp_disp
+        # Floating stardust points
+        for px, py, s in fil_pts:
+            twinkle = 0.65 + 0.35 * math.sin(self._tick * 0.08 + s["phase"])
+            cur_a = max(0, min(255, int(s["base_a"] * twinkle * (0.85 + amp * 0.35))))
+            if s["col"] == "white":
+                pt_col = QColor(255, 255, 255, cur_a)
+            elif s["col"] == "cyan":
+                pt_col = QColor(0, 229, 255, cur_a)
+            elif s["col"] == "amber":
+                pt_col = QColor(255, 170, 0, cur_a)
+            else:
+                pt_col = QColor(255, 204, 51, cur_a)
+
+            p.setBrush(QBrush(pt_col))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(px, py), s["sz"], s["sz"])
+
+        # ──────────────────────────────────────────────────────────────────────
+        # LAYER 5: Modern HUD Frame, Status Indicators & Voice Waveform
+        # ──────────────────────────────────────────────────────────────────────
+        # Corner brackets
+        bl = 22
+        bc = qcol(C.PRI, 180)
+        hl, hr = cx - fw // 2 + 12, cx + fw // 2 - 12
+        ht, hb = cy - fw // 2 + 12, cy + fw // 2 - 12
+        p.setPen(QPen(bc, 1.5))
+        for bx, by, dx, dy in [(hl, ht, 1, 1), (hr, ht, -1, 1), (hl, hb, 1, -1), (hr, hb, -1, -1)]:
+            p.drawLine(QPointF(bx, by), QPointF(bx + dx * bl, by))
+            p.drawLine(QPointF(bx, by), QPointF(bx, by + dy * bl))
+
+        # Status text below avatar
+        sy = cy + av_h * 0.44
+        p.setPen(QPen(status_col, 1))
+        p.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
+        p.drawText(QRectF(0, sy, W, 22), Qt.AlignmentFlag.AlignCenter, status_txt)
+
+        # Center-weighted voice spectrum equalizer
+        wy = sy + 24
+        N, bw = 36, 7
+        wx0 = (W - N * bw) / 2.0
         mid = (N - 1) / 2.0
         for i in range(N):
             if self.muted:
                 hgt, cl = 2, qcol(C.MUTED_C)
             else:
-                env     = (1.0 - abs(i - mid) / mid) ** 0.7      # center-weighted hump
+                env = (1.0 - abs(i - mid) / mid) ** 0.65
                 shimmer = 0.55 + 0.45 * math.sin(self._tick * 0.18 + i * 0.7)
-                idle    = 3.0 + 2.0 * math.sin(self._tick * 0.09 + i * 0.6)
-                hgt     = int(max(2, min(24, idle + amp * 22.0 * env * shimmer)))
+                idle = 2.5 + 1.5 * math.sin(self._tick * 0.09 + i * 0.6)
+                hgt = int(max(2, min(26, idle + amp * 25.0 * env * shimmer)))
                 if amp > 0.05:
                     cl = qcol(C.PRI) if hgt > 12 else qcol(C.PRI_DIM)
                 else:

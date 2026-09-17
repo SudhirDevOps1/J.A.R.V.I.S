@@ -4,6 +4,30 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ---
 
+## [2026-09-17 12:50] — Celestial Particle Avatar HUD with 3D Swirling Orbital Halo & Live Voice Reactivity
+
+### 🌟 UI/UX & Visual Experience Overhaul
+
+1. **3D Swirling Planetary Orbital Halo Ring (`ui.py`)**
+   - Engineered parametric 3D elliptical halo projection tilted at ~16° perspective around the avatar temples.
+   - Implemented depth-sorted multi-pass rendering: back-half arc passes smoothly *behind* the head ($z < 0$) while the front-half arc glows vibrantly *in front* ($z \ge 0$).
+   - Rendered brilliant twin lateral solar focal blooms at the orbital limbs where perspective light bundles together.
+   - Ring rotational velocity dynamically accelerates with live speech audio (`(1.8 + amp * 5.2)` deg/tick).
+
+2. **Cosmic Stardust Particle Cloud & Neural Filaments (`ui.py`)**
+   - 220+ luminous floating stardust particles with organic upward drift, sinusoidal twinkling, and vocal shockwave expansion.
+   - Dynamic connective neural constellation filaments connecting near-neighbor particles for a fiber-optic cosmic aesthetic.
+
+3. **Smooth Vignette Portrait Asset Blending (`core/assets/avatar/celestial_avatar.jpg`)**
+   - Feathered Gaussian alpha edge mask dissolving portrait boundaries seamlessly into the deep space canvas void.
+   - Added reference asset `core/assets/avatar/celestial_avatar.jpg` and synchronized with `face.png`.
+
+4. **Live Voice Reactivity & State Color Grading**
+   - Vocal bursts trigger dynamic expanding shockwave energy ripples outward from the halo.
+   - State-aware lighting: Radiant Solar Gold (`SPEAKING`), Emerald/Cyan Starlight (`LISTENING`), Hyper-Cyan & Quantum Violet (`THINKING`), and Deep Ember Crimson (`MUTED`).
+
+---
+
 ## [2026-09-17 12:40] — Release v1.0.0 & Automated GitHub Actions Release Workflow
 
 ### 🚀 Release Automation & Versioning
