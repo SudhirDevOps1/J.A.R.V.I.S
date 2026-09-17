@@ -663,6 +663,21 @@ class JarvisLive:
         except Exception:
             pass
 
+        # Direct Avatar Emotion / Expression Voice & Text commands
+        t_low = text.lower()
+        if any(w in t_low for w in ("expression", "mood", "react", "chehre ke bhav", "bhav dikhao")):
+            try:
+                from core.expression_engine import detect_expression
+                m_expr = detect_expression(t_low)
+                if m_expr:
+                    self.ui.set_expression(m_expr, 8.0)
+                    self.ui.write_log(f"SYS: Avatar expression changed to [{m_expr.upper()}].")
+                    if any(w in t_low for w in ("karo", "dikhao", "change", "set", "show", "kar do")):
+                        self.speak(f"Avatar par {m_expr} expression set kar diya hai.")
+                        return
+            except Exception:
+                pass
+
         # Multi-Provider routing: if user configured OpenRouter, Groq, DeepSeek, or Custom LLM,
         # route typed queries through MultiLLMClient with full persona and second-brain context.
         from memory.config_manager import load_api_keys
@@ -701,6 +716,13 @@ class JarvisLive:
                     if ans:
                         log_daily_activity(text, ai_response=ans)
                         self.ui.write_log(f"{self._asst_name}: {ans}")
+                        try:
+                            from core.expression_engine import detect_expression
+                            expr = detect_expression(ans) or detect_expression(text)
+                            if expr:
+                                self.ui.set_expression(expr)
+                        except Exception:
+                            pass
                         self.speak(ans)
                     self.ui.set_state("LISTENING")
                 except Exception as e:
@@ -763,6 +785,13 @@ class JarvisLive:
         self.ui.write_log("SYS: Interrupted — listening...")
 
     def speak(self, text: str):
+        try:
+            from core.expression_engine import detect_expression
+            _ex = detect_expression(text)
+            if _ex:
+                self.ui.set_expression(_ex)
+        except Exception:
+            pass
         from memory.config_manager import get_tts_engine, get_edge_voice
         eng = get_tts_engine()
         if eng in ("piper_hindi", "piper", "piper_hi"):
@@ -1345,6 +1374,14 @@ class JarvisLive:
                                 from memory.config_manager import get_tts_engine
                                 if get_tts_engine() in ("piper_hindi", "piper", "piper_hi"):
                                     self._speak_with_piper(full_out)
+                                # Dynamic Avatar Emotional Reaction
+                                try:
+                                    from core.expression_engine import detect_expression
+                                    expr = detect_expression(full_out) or detect_expression(full_in)
+                                    if expr:
+                                        self.ui.set_expression(expr)
+                                except Exception:
+                                    pass
                             # Hermes Continuous Learning from spoken turn
                             if full_in:
                                 try:

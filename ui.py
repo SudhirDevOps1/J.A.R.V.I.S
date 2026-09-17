@@ -430,6 +430,12 @@ class HudCanvas(QWidget):
         self._anim_mode = get_anim_mode()
         self._hud_glow = get_hud_glow()
 
+        # Real-Time Emotional State & Expression Engine
+        self._expression = ""
+        self._expr_timer = QTimer(self)
+        self._expr_timer.setSingleShot(True)
+        self._expr_timer.timeout.connect(self._clear_expression)
+
         # Multi-mode state trackers
         self._reactor_outer_ang = 0.0
         self._reactor_inner_ang = 0.0
@@ -556,6 +562,18 @@ class HudCanvas(QWidget):
     def set_hud_glow(self, glow: int) -> None:
         """Update HUD glow bloom intensity (10..100)."""
         self._hud_glow = max(10, min(100, int(glow)))
+        self.update()
+
+    def set_expression(self, expr_name: str, duration_sec: float = 6.0) -> None:
+        """Trigger an emotional visual reaction on the avatar HUD."""
+        self._expression = (expr_name or "").upper().strip()
+        if self._expression:
+            self._expr_timer.stop()
+            self._expr_timer.start(int(duration_sec * 1000))
+        self.update()
+
+    def _clear_expression(self) -> None:
+        self._expression = ""
         self.update()
 
     def set_audio_level(self, level: float) -> None:
@@ -792,8 +810,23 @@ class HudCanvas(QWidget):
                 self._grid_key = _gkey
             p.drawPixmap(0, 0, self._grid_cache)
 
-        # ── Determine Color Palette Based on State ────────────────────────────
-        if self.speaking:
+        # ── Determine Color Palette Based on State & Expression ───────────────
+        expr_info = None
+        if getattr(self, "_expression", ""):
+            try:
+                from core.expression_engine import get_expression_details
+                expr_info = get_expression_details(self._expression)
+            except Exception:
+                expr_info = None
+
+        if expr_info:
+            primary_c = QColor(expr_info["primary"])
+            sec_c     = QColor(expr_info["secondary"])
+            bloom_c   = QColor(expr_info["bloom"])
+            white_c   = QColor(255, 255, 255)
+            status_txt = expr_info["label"]
+            status_col = QColor(expr_info["primary"])
+        elif self.speaking:
             primary_c = QColor(255, 204, 51)     # Solar gold
             sec_c     = QColor(255, 153, 0)      # Amber flare
             white_c   = QColor(255, 255, 255)
@@ -1110,11 +1143,23 @@ class HudCanvas(QWidget):
                 p.drawLine(QPointF(bx, by), QPointF(bx + dx * bl, by))
                 p.drawLine(QPointF(bx, by), QPointF(bx, by + dy * bl))
 
-        # Status text below avatar
+        # Status text below avatar (with expressive mood badge when emotional state active)
         sy = cy + fw * 0.38
-        p.setPen(QPen(status_col, 1))
-        p.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
-        p.drawText(QRectF(0, sy, W, 22), Qt.AlignmentFlag.AlignCenter, status_txt)
+        if expr_info:
+            p.save()
+            bw_w = 260
+            badge_r = QRectF(cx - bw_w / 2.0, sy - 2, bw_w, 24)
+            p.setPen(QPen(QColor(expr_info["primary"]), 1))
+            p.setBrush(QBrush(QColor(0, 10, 16, 215)))
+            p.drawRoundedRect(badge_r, 4, 4)
+            p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            p.setPen(QPen(QColor(expr_info["primary"]), 1))
+            p.drawText(badge_r, Qt.AlignmentFlag.AlignCenter, status_txt)
+            p.restore()
+        else:
+            p.setPen(QPen(status_col, 1))
+            p.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
+            p.drawText(QRectF(0, sy, W, 22), Qt.AlignmentFlag.AlignCenter, status_txt)
 
         # Center-weighted voice spectrum equalizer (if enabled)
         if self._hud_fx.get("spectrum", True):
@@ -2503,6 +2548,7 @@ class CustomizeOverlay(QWidget):
         self.on_hud_glow_preview         = None   # callable(glow)
         self.on_particle_density_preview = None   # callable(density)
         self.on_hud_fx_preview           = None   # callable(fx_dict)
+        self.on_preview_expression       = None   # callable(expr_name)
 
         # Header Title (&& prevents Qt mnemonic parsing of & into underscore)
         main_lay.addWidget(_lbl("⚙  HUD STUDIO && CUSTOMISATION", 11, True))
@@ -2512,19 +2558,146 @@ class CustomizeOverlay(QWidget):
 
         # Tab Buttons
         tab_bar = QHBoxLayout(); tab_bar.setSpacing(4)
-        self._tab_btn_avatar = QPushButton("🎭 VISUALS && HUD")
-        self._tab_btn_color  = QPushButton("🎨 COLOR WHEEL")
-        self._tab_btn_ident  = QPushButton("⚙ IDENTITY && VOICE")
+        self._tab_btn_presets = QPushButton("✨ 1-CLICK PRESETS")
+        self._tab_btn_avatar  = QPushButton("🎭 VISUALS")
+        self._tab_btn_color   = QPushButton("🎨 COLORS")
+        self._tab_btn_ident   = QPushButton("⚙ IDENTITY")
 
-        for b in (self._tab_btn_avatar, self._tab_btn_color, self._tab_btn_ident):
+        for b in (self._tab_btn_presets, self._tab_btn_avatar, self._tab_btn_color, self._tab_btn_ident):
             b.setFixedHeight(26)
-            b.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             tab_bar.addWidget(b)
         main_lay.addLayout(tab_bar)
 
         self._stack = QStackedWidget()
         main_lay.addWidget(self._stack, 1)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # TAB 0: ✨ 1-CLICK ALL-IN-ONE VIBE PRESETS
+        # ══════════════════════════════════════════════════════════════════════
+        scroll_presets = QScrollArea()
+        scroll_presets.setWidgetResizable(True)
+        scroll_presets.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_presets.setStyleSheet("""
+            QScrollArea { background: transparent; border: none; }
+            QScrollBar:vertical {
+                background: #000d14; width: 6px; margin: 0px; border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(0, 212, 255, 0.35); min-height: 20px; border-radius: 3px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(0, 212, 255, 0.75);
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+
+        page_presets = QWidget()
+        lay_presets = QVBoxLayout(page_presets)
+        lay_presets.setContentsMargins(4, 4, 8, 4)
+        lay_presets.setSpacing(8)
+
+        lay_presets.addWidget(_lbl("ONE-CLICK COMPLETE VIBE & PERSONALITY SETUPS", 8, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignLeft))
+        lay_presets.addWidget(_lbl("Instantly configure Theme, Voice, Pitch, Language, Avatar & Persona with 1 click:", 7, color=C.TEXT_MED, align=Qt.AlignmentFlag.AlignLeft))
+
+        self._preset_status_lbl = QLabel("⚪ Click a preset below to instantly transform and save all settings.")
+        self._preset_status_lbl.setFont(QFont("Courier New", 7))
+        self._preset_status_lbl.setStyleSheet(f"color: {C.PRI}; padding: 3px 6px; background: #00121a; border: 1px solid {C.BORDER}; border-radius: 3px;")
+        lay_presets.addWidget(self._preset_status_lbl)
+
+        presets_data = [
+            (
+                "gf",
+                "💖 DEVOTED GF SOULMATE",
+                "#ff2a70",
+                "Swara (Hi ♀) • +8Hz Sweet Pitch • Rose Neon • Quantum Orb • Hinglish",
+                "Exclusively loyal girlfriend with Hinglish warmth, playful teasing, cute jealousy, and tender care routines.",
+            ),
+            (
+                "jarvis",
+                "🛡️ STARK JARVIS TACTICAL",
+                "#00dcff",
+                "Chris (US ♂) • -4Hz Deep Pitch • Stark Cyan • Arc Reactor • English",
+                "Precision tactical engineering assistant with low-latency English cadence, HUD diagnostic telemetry, and system mastery.",
+            ),
+            (
+                "devops",
+                "⚡ ELITE DEVOPS BEAST",
+                "#00ff88",
+                "Madhur (Hi ♂) • +0Hz Normal • Matrix Green • Cyber Matrix • Hinglish",
+                "High-throughput terminal and cloud infrastructure commander with containerized automation and troubleshooting focus.",
+            ),
+            (
+                "mentor",
+                "🎓 MENTOR & GURU",
+                "#ffaa00",
+                "Madhur (Hi ♂) • +0Hz Normal • Solar Gold • Planetary Halo • Hindi",
+                "Patient, thoughtful mentor delivering structured explanations, conceptual depth, and academic guidance in clear Hindi.",
+            ),
+        ]
+
+        for p_id, p_title, p_col, p_specs, p_desc in presets_data:
+            box = QFrame()
+            box.setStyleSheet(f"""
+                QFrame {{
+                    background: #00121a;
+                    border: 1px solid {C.BORDER};
+                    border-left: 3px solid {p_col};
+                    border-radius: 4px;
+                    padding: 4px;
+                }}
+                QFrame:hover {{
+                    border-color: {p_col};
+                    background: #001924;
+                }}
+            """)
+            box_lay = QVBoxLayout(box)
+            box_lay.setContentsMargins(6, 4, 6, 4)
+            box_lay.setSpacing(2)
+
+            top_row = QHBoxLayout()
+            lbl_title = QLabel(p_title)
+            lbl_title.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            lbl_title.setStyleSheet(f"color: {p_col};")
+            top_row.addWidget(lbl_title)
+            top_row.addStretch(1)
+
+            btn_apply = QPushButton("APPLY VIBE")
+            btn_apply.setFixedHeight(22)
+            btn_apply.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            btn_apply.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_apply.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {p_col};
+                    border: 1px solid {p_col}; border-radius: 2px; padding: 2px 10px;
+                }}
+                QPushButton:hover {{
+                    background: {p_col}; color: #000;
+                }}
+            """)
+            btn_apply.clicked.connect(lambda _=False, pk=p_id: self._apply_preset(pk))
+            top_row.addWidget(btn_apply)
+            box_lay.addLayout(top_row)
+
+            lbl_specs = QLabel(p_specs)
+            lbl_specs.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            lbl_specs.setStyleSheet("color: #ffffff;")
+            box_lay.addWidget(lbl_specs)
+
+            lbl_desc = QLabel(p_desc)
+            lbl_desc.setWordWrap(True)
+            lbl_desc.setFont(QFont("Courier New", 6))
+            lbl_desc.setStyleSheet(f"color: {C.TEXT_MED};")
+            box_lay.addWidget(lbl_desc)
+
+            lay_presets.addWidget(box)
+
+        lay_presets.addStretch(1)
+        scroll_presets.setWidget(page_presets)
+        self._stack.addWidget(scroll_presets)
 
         # ══════════════════════════════════════════════════════════════════════
         # TAB 1: 🎭 VISUALS && HUD (Avatar, Dynamics, Glow, Themes, FX)
@@ -3025,15 +3198,16 @@ class CustomizeOverlay(QWidget):
         # Tab Switching Handler
         def _set_tab(idx: int):
             self._stack.setCurrentIndex(idx)
-            for i, b in enumerate((self._tab_btn_avatar, self._tab_btn_color, self._tab_btn_ident)):
+            for i, b in enumerate((self._tab_btn_presets, self._tab_btn_avatar, self._tab_btn_color, self._tab_btn_ident)):
                 if i == idx:
                     b.setStyleSheet(f"background: {C.PRI_DIM}; color: #000; border: 1px solid {C.PRI}; border-radius: 3px;")
                 else:
                     b.setStyleSheet(f"background: #00121a; color: {C.TEXT_MED}; border: 1px solid {C.BORDER}; border-radius: 3px;")
 
-        self._tab_btn_avatar.clicked.connect(lambda: _set_tab(0))
-        self._tab_btn_color.clicked.connect(lambda: _set_tab(1))
-        self._tab_btn_ident.clicked.connect(lambda: _set_tab(2))
+        self._tab_btn_presets.clicked.connect(lambda: _set_tab(0))
+        self._tab_btn_avatar.clicked.connect(lambda: _set_tab(1))
+        self._tab_btn_color.clicked.connect(lambda: _set_tab(2))
+        self._tab_btn_ident.clicked.connect(lambda: _set_tab(3))
         _set_tab(0)
 
         # Bottom Actions
@@ -3068,6 +3242,86 @@ class CustomizeOverlay(QWidget):
         cancel_btn.clicked.connect(self._cancel)
         btn_row.addWidget(cancel_btn)
         main_lay.addLayout(btn_row)
+
+    # ── 1-Click Persona & Vibe Presets ──────────────────────────────────────
+    def _apply_preset(self, p_key: str):
+        presets = {
+            "gf": {
+                "color": "#ff2a70",
+                "avatar": "orb",
+                "voice": "hi-IN-SwaraNeural",
+                "pitch": "+8Hz",
+                "persona": "companion",
+                "gender": "female",
+                "lang": "hinglish",
+                "tts": "edge",
+                "name": "Friday",
+                "glow": 90,
+                "msg": "💖 Devoted GF Soulmate Preset applied & persisted!",
+            },
+            "jarvis": {
+                "color": "#00dcff",
+                "avatar": "arc_reactor",
+                "voice": "en-US-ChristopherNeural",
+                "pitch": "-4Hz",
+                "persona": "jarvis",
+                "gender": "male",
+                "lang": "english",
+                "tts": "edge",
+                "name": "JARVIS",
+                "glow": 80,
+                "msg": "🛡️ Stark JARVIS Tactical Preset applied & persisted!",
+            },
+            "devops": {
+                "color": "#00ff88",
+                "avatar": "cyber_matrix",
+                "voice": "hi-IN-MadhurNeural",
+                "pitch": "+0Hz",
+                "persona": "devops",
+                "gender": "male",
+                "lang": "hinglish",
+                "tts": "edge",
+                "name": "Matrix",
+                "glow": 85,
+                "msg": "⚡ Elite DevOps Beast Preset applied & persisted!",
+            },
+            "mentor": {
+                "color": "#ffaa00",
+                "avatar": "halo",
+                "voice": "hi-IN-MadhurNeural",
+                "pitch": "+0Hz",
+                "persona": "teacher",
+                "gender": "male",
+                "lang": "hindi",
+                "tts": "edge",
+                "name": "Guru",
+                "glow": 75,
+                "msg": "🎓 Mentor & Guru Preset applied & persisted!",
+            },
+        }
+        cfg = presets.get(p_key)
+        if not cfg:
+            return
+
+        if hasattr(self, "_name_input") and cfg.get("name"):
+            self._name_input.setText(cfg["name"])
+
+        self._on_avatar_mode_pick(cfg["avatar"])
+        self._on_persona_pick(cfg["persona"])
+        self._on_gender_pick(cfg["gender"])
+        self._on_language_pick(cfg["lang"])
+        self._on_tts_engine_pick(cfg["tts"])
+        self._on_edge_voice_pick(cfg["voice"])
+        self._on_edge_pitch_pick(cfg["pitch"])
+        self._set_color(cfg["color"], update_wheel=True, preview=True)
+        self._on_glow_changed(cfg["glow"])
+
+        if p_key == "gf" and self.on_preview_expression:
+            self.on_preview_expression("love")
+        elif self.on_preview_expression:
+            self.on_preview_expression("tactical")
+
+        self._save()
 
     # ── Avatar mode pick & refresh ───────────────────────────────────────────
     def _on_avatar_mode_pick(self, mode: str):
@@ -4453,6 +4707,7 @@ class MainWindow(QMainWindow):
     _confirm_sig    = pyqtSignal(str, str)   # (title, detail) — irreversible-action gate
     _confirm_hide_sig = pyqtSignal()
     _wake_dl_sig    = pyqtSignal(bool, str)  # wake-word install finished (ok, message)
+    _expression_sig = pyqtSignal(str, float) # (expression_name, duration_sec) live HUD avatar reaction
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -4625,6 +4880,7 @@ class MainWindow(QMainWindow):
         self._cam_frame_sig.connect(self._on_cam_frame)
         self._clipboard_sig.connect(self._show_clipboard_panel)
         self._wake_dl_sig.connect(self._on_wake_install_done)
+        self._expression_sig.connect(lambda expr, dur: self.hud.set_expression(expr, dur))
         self._cam_stop = threading.Event()
 
         # Camera preview overlay (child of central widget, positioned in resizeEvent)
@@ -6268,6 +6524,7 @@ class MainWindow(QMainWindow):
         ov.on_hud_glow_preview = lambda g: self.hud.set_hud_glow(g)
         ov.on_particle_density_preview = lambda d: self.hud.set_particle_density(d)
         ov.on_hud_fx_preview = lambda fx: self.hud.set_hud_fx(fx)
+        ov.on_preview_expression = lambda expr: self.hud.set_expression(expr, 5.0)
         ov.saved.connect(self._apply_name_update)
         ov.show()
         self._customize_overlay = ov
@@ -6376,6 +6633,8 @@ class MainWindow(QMainWindow):
             data["preferred_language"] = language
             data["tts_engine"] = tts_engine
             data["edge_voice"] = edge_voice
+            from memory.config_manager import get_edge_pitch
+            data["edge_pitch"] = get_edge_pitch()
             if obsidian_cfg is not None:
                 data["obsidian_config"] = obsidian_cfg
 
@@ -6772,3 +7031,10 @@ class JarvisUI:
     def stop_speaking(self):
         if not self.muted:
             self.set_state("LISTENING")
+
+    def set_expression(self, expr: str, duration: float = 6.0) -> None:
+        """Thread-safe: trigger an emotional reaction & color pulse on the HUD avatar."""
+        try:
+            self._win._expression_sig.emit(expr, duration)
+        except Exception:
+            pass

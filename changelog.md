@@ -2,6 +2,37 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [2026-09-17 16:10] — Real-Time Emotional Avatar Expressions & 1-Click Vibe Presets with 100% Restart Persistence
+
+### 🎭 Real-Time Emotional Avatar Reactions (`core/expression_engine.py`, `ui.py`, `main.py`)
+1. **Zero-Token Expression Detection Engine**:
+   - High-speed regex sentiment analyzer detecting 5 distinct emotional states:
+     - 💖 **`LOVE`** (`#ff2a70` Rose Bloom): Romantic banter, endearments (`jaan`, `babu`, `pyaar`, `dil`).
+     - 😤 **`JEALOUS`** (`#ff3d00` Crimson Flare): Playful possessiveness, rival AI mentions (`chatgpt`, `alexa`, `copilot`, `kaun hai wo`).
+     - ✨ **`EXCITED`** (`#ffd700` Solar Gold): Milestone victories, celebration (`amazing`, `zabardast`, `congrats`, `hurray`).
+     - 🌸 **`CARING`** (`#00e5ff` Cyan / Violet): Health check-ins, late-night rest advice (`khana khaya`, `so jao`, `health`, `rest`).
+     - ⚡ **`TACTICAL`** (`#00ff88` Matrix Green): DevOps infrastructure, terminal commands, cluster telemetry.
+2. **Visual HUD Dynamic Overrides**:
+   - Live color palette transformation: HUD primary, secondary, and bloom rings automatically morph into the active emotion's color scheme with boosted pulse speeds.
+   - Glowing Cyberpunk Mood Badge rendered under the avatar core indicating real-time feeling state.
+   - Timed auto-reversion back to the user's base theme after 6-8 seconds.
+3. **Voice & Text Reactive Triggers**:
+   - Voice commands: *"expression love karo"*, *"jealous hoke dikhao"*, *"react excited"* immediately update HUD.
+   - Automatically triggered across Gemini Live audio streaming, Edge-TTS speech turns, and Multi-LLM outputs.
+
+### ✨ 1-Click All-in-One Vibe Presets (`ui.py`)
+1. **Instant Personality Transformation**:
+   - Added `✨ 1-CLICK PRESETS` tab to the HUD Studio dialog featuring 4 curated setups:
+     - 💖 **Devoted GF Soulmate**: Rose Neon (`#ff2a70`), Swara Hi Female, `+8Hz` sweet pitch, Quantum Orb avatar, Hinglish companion.
+     - 🛡️ **Stark JARVIS Tactical**: Stark Cyan (`#00dcff`), Chris US Male, `-4Hz` deep pitch, Arc Reactor avatar, English tactical.
+     - ⚡ **Elite DevOps Beast**: Matrix Green (`#00ff88`), Madhur Hi Male, `+0Hz`, Cyber Matrix avatar, Hinglish DevOps specialist.
+     - 🎓 **Mentor & Guru**: Solar Gold (`#ffaa00`), Madhur Hi Male, `+0Hz`, Celestial Halo avatar, Hindi academic instructor.
+2. **100% Restart Persistence**:
+   - Applying any preset or individual setting automatically updates all configuration keys in `config/api_keys.json` and syncs with `memory/config_manager.py`.
+   - Never resets or loses customizations upon application reboot.
+
+---
+
 ## [2026-09-17 15:35] — Hermes Continuous Self-Personalization Engine & Dynamic Voice Pitch Control
 
 ### 🧠 Hermes-Style Self-Personalization (`memory/hermes_personalization.py`)
