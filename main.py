@@ -826,40 +826,15 @@ class JarvisLive:
                 self.ui.set_expression(_ex)
         except Exception:
             pass
-        from memory.config_manager import get_tts_engine, get_edge_voice
-        eng = get_tts_engine()
+        from memory.config_manager import get_tts_engine
+        eng = (get_tts_engine() or "").lower().strip()
+
+        # 1. If user explicitly configured offline Piper Hindi
         if eng in ("piper_hindi", "piper", "piper_hi"):
             self._speak_with_piper(text)
             return
-        elif eng in ("edge_tts", "edge", "neural"):
-            try:
-                from core.tts import EdgeTTSEngine
-                from memory.config_manager import get_edge_pitch, get_edge_rate
-                v = get_edge_voice()
-                p = get_edge_pitch()
-                r = get_edge_rate()
-                if (not hasattr(self, "_edge_engine") or self._edge_engine is None
-                        or getattr(self._edge_engine, "voice", "") != v
-                        or getattr(self._edge_engine, "pitch", "") != p
-                        or getattr(self._edge_engine, "rate", "") != r):
-                    self._edge_engine = EdgeTTSEngine(voice=v, pitch=p, rate=r)
-                
-                def _edge_run():
-                    self.set_speaking(True)
-                    try:
-                        self._edge_engine.speak(text)
-                    except Exception as e:
-                        print(f"[EdgeTTS] Fallback error: {e}")
-                        self._speak_with_piper(text)
-                    finally:
-                        self.set_speaking(False)
-                threading.Thread(target=_edge_run, daemon=True).start()
-                return
-            except Exception as e:
-                print(f"[EdgeTTS] Initialization error: {e}")
-                self._speak_with_piper(text)
-                return
 
+        # 2. If official Gemini Live audio session is active via WebSockets
         if self._loop and self.session:
             asyncio.run_coroutine_threadsafe(
                 self.session.send_client_content(
@@ -868,9 +843,11 @@ class JarvisLive:
                 ),
                 self._loop
             )
-        else:
-            # In Free Mode or when session is not connected, speak using local voice
-            self._speak_with_piper(text)
+            return
+
+        # 3. In Free Mode or Multi-Provider: default to natural Edge Neural voice
+        # (e.g. Swara for Maya, Madhur for Jarvis) with automatic fallback to Piper
+        self._speak_with_edge(text)
 
     def speak_error(self, tool_name: str, error: str):
         short = str(error)[:120]
@@ -1246,6 +1223,63 @@ class JarvisLive:
                     self.ui.write_log(f"SYS: Piper TTS error: {e}")
         finally:
             self._piper_worker_running = False
+            self.set_speaking(False)
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+
+    def _speak_with_edge(self, text: str) -> None:
+        """Synthesize and play response using Microsoft Edge Neural TTS in a sequential queue."""
+        if not text or not text.strip():
+            return
+
+        if not hasattr(self, "_edge_queue"):
+            import queue
+            self._edge_queue = queue.Queue()
+
+        self._edge_queue.put(text)
+        if not getattr(self, "_edge_worker_running", False):
+            self._edge_worker_running = True
+            threading.Thread(target=self._edge_worker_loop, daemon=True).start()
+
+    def _edge_worker_loop(self):
+        try:
+            from core.tts import EdgeTTSEngine
+            from memory.config_manager import get_edge_voice, get_edge_pitch, get_edge_rate
+            v = get_edge_voice() or "hi-IN-SwaraNeural"
+            p = get_edge_pitch() or "+0Hz"
+            r = get_edge_rate() or "+0%"
+
+            if (not hasattr(self, "_edge_engine") or self._edge_engine is None
+                    or getattr(self._edge_engine, "voice", "") != v
+                    or getattr(self._edge_engine, "pitch", "") != p
+                    or getattr(self._edge_engine, "rate", "") != r):
+                self._edge_engine = EdgeTTSEngine(voice=v, pitch=p, rate=r)
+
+            while hasattr(self, "_edge_queue") and not self._edge_queue.empty():
+                try:
+                    text = self._edge_queue.get_nowait()
+                except Exception:
+                    break
+
+                if not text or not text.strip() or self._interrupted:
+                    continue
+
+                self.set_speaking(True)
+                self.ui.set_state("SPEAKING")
+                short_text = text[:80] + "..." if len(text) > 80 else text
+                voice_label = v.split("-")[-1].replace("Neural", "")
+                self.ui.write_log(f"🎙️ [Edge {voice_label}]: {short_text}")
+                print(f"[TTS] 🎙️ EdgeTTS ({v}) synthesising: {text}")
+                try:
+                    self._edge_engine.speak(text)
+                except Exception as e:
+                    print(f"[TTS] ❌ EdgeTTS failed ({e}) — falling back to Piper...")
+                    self._speak_with_piper(text)
+        except Exception as err:
+            print(f"[TTS] ❌ Edge worker error: {err}")
+            self._speak_with_piper(text)
+        finally:
+            self._edge_worker_running = False
             self.set_speaking(False)
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
