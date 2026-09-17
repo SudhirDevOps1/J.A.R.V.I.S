@@ -40,22 +40,36 @@ class NeedleToolRouter:
     def __init__(self):
         self._enabled = True
         self._needle_loaded = False
-        self._model = None
-        self._params = None
-        self._tokenizer = None
+        self._needle_instance = None
 
         if _NEEDLE_AVAILABLE:
             try:
-                # Attempt to load Needle 2 weights if present in checkpoints/
-                from needle import SimpleAttentionNetwork, load_checkpoint, get_tokenizer
-                ckpt_path = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "needle.pkl")
-                if os.path.exists(ckpt_path):
-                    self._params, config = load_checkpoint(ckpt_path)
-                    self._model = SimpleAttentionNetwork(config)
-                    self._tokenizer = get_tokenizer()
-                    self._needle_loaded = True
+                from needle import Needle
+
+                def open_app(name: str):
+                    """Open an application by name."""
+                    return json.dumps({"tool": "open_app", "args": {"action": "open", "name": name}})
+
+                def file_controller(action: str, path: str = "C:"):
+                    """Disk storage and directory file controller."""
+                    return json.dumps({"tool": "file_controller", "args": {"action": action, "path": path}})
+
+                def computer_settings(action: str, value: str = ""):
+                    """System settings like volume, brightness."""
+                    return json.dumps({"tool": "computer_settings", "args": {"action": action, "value": value}})
+
+                def computer_control(action: str):
+                    """Computer controls like screenshot."""
+                    return json.dumps({"tool": "computer_control", "args": {"action": action}})
+
+                def system_status():
+                    """Hardware system telemetry and status."""
+                    return json.dumps({"tool": "system_status", "args": {}})
+
+                self._needle_instance = Needle(tools=[open_app, file_controller, computer_settings, computer_control, system_status])
+                self._needle_loaded = True
             except Exception as e:
-                print(f"[Needle2] Optional weight load note: {e}")
+                print(f"[Needle2] Engine init note: {e}")
 
     def is_active(self) -> bool:
         return self._enabled
@@ -69,30 +83,6 @@ class NeedleToolRouter:
             return None
 
         clean = text.strip().lower()
-
-        # 1. Needle 2 Native Model Inference (if package and weights loaded)
-        if self._needle_loaded and self._model is not None:
-            try:
-                from needle import generate
-                tools_schema = json.dumps([
-                    {"name": "open_app", "description": "Open or close an application", "parameters": {"action": {"type": "string"}, "name": {"type": "string"}}},
-                    {"name": "computer_settings", "description": "Change volume, brightness, wifi, power", "parameters": {"action": {"type": "string"}, "value": {"type": "string"}}},
-                    {"name": "file_controller", "description": "Disk storage usage and large files", "parameters": {"action": {"type": "string"}, "path": {"type": "string"}}},
-                    {"name": "computer_control", "description": "Take screenshot, mouse, hotkeys", "parameters": {"action": {"type": "string"}}},
-                    {"name": "system_status", "description": "CPU, RAM, GPU hardware status", "parameters": {}},
-                ])
-                out = generate(
-                    self._model, self._params, self._tokenizer,
-                    query=text, tools=tools_schema, stream=False
-                )
-                if out and isinstance(out, list) and len(out) > 0:
-                    call = out[0]
-                    t_name = call.get("name")
-                    t_args = call.get("arguments", {})
-                    if t_name:
-                        return (t_name, t_args)
-            except Exception as e:
-                print(f"[Needle2] Inference fallback: {e}")
 
         # 2. Ultra-fast local reflex pattern matching (deterministic edge reflex in ~1ms)
         # -- App Management ---------------------------------------------------
@@ -158,6 +148,22 @@ class NeedleToolRouter:
         if re.search(r"\b(cpu usage|ram usage|temperature|system status|hardware status|pc performance)\b", clean):
             return ("system_status", {})
 
+        # -- Neural Needle 2 Engine Fallback (foundation model tool extraction) --
+        if self._needle_loaded and self._needle_instance is not None:
+            try:
+                res = self._needle_instance.run(text)
+                if res and isinstance(res, dict) and res.get("success"):
+                    for r in res.get("results", []):
+                        if isinstance(r, str) and r.startswith("{"):
+                            try:
+                                parsed = json.loads(r)
+                                if "tool" in parsed:
+                                    return (parsed["tool"], parsed.get("args", {}))
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
         return None
 
 
@@ -170,9 +176,15 @@ class LFMChatEngine:
     def __init__(self, endpoint: str = "http://localhost:11434"):
         self.endpoint = endpoint
         self.model_name = "oamazonasgabriel/lfm2.5-230m"
+        self._local_gguf_path = os.path.join(
+            os.path.dirname(__file__), "..", "models", "lfm", "LFM2.5-230M-Q4_K_M.gguf"
+        )
         self._available: Optional[bool] = None
 
     def is_available(self) -> bool:
+        if os.path.exists(self._local_gguf_path):
+            self._available = True
+            return True
         if not _REQUESTS_AVAILABLE:
             return False
         try:

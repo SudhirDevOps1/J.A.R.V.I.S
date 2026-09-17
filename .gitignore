@@ -41,6 +41,8 @@ config/weather_cache.json
 *.bin
 *.pt
 *.pth
+*.gguf
+models/
 core/models/piper/*
 !core/models/piper/.gitkeep
 
