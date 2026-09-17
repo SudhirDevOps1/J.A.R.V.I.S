@@ -495,4 +495,24 @@ def save_obsidian_config(cfg: dict) -> None:
     """Persist Obsidian configuration."""
     cur = get_obsidian_config()
     cur.update(cfg)
-    _patch_config(obsidian_config=cur)
+    _patch_config(obsidian_config=cur)
+
+
+def get_all_selected_models() -> dict[str, str]:
+    """Return dictionary of selected models mapped per provider."""
+    raw = load_api_keys().get("selected_models", {})
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def get_selected_model(provider: str) -> str:
+    """Return configured model for a specific provider, or empty string."""
+    models = get_all_selected_models()
+    return models.get(provider.lower().strip(), "")
+
+
+def save_selected_model(provider: str, model: str) -> None:
+    """Save chosen model for a specific provider."""
+    models = get_all_selected_models()
+    models[provider.lower().strip()] = model.strip()
+    _patch_config(selected_models=models, custom_llm_model=model.strip())
+

@@ -120,7 +120,46 @@ JARVIS can now sit quietly until you call it. Turn on **⚙ → WAKE WORD** (a o
 No more silent gaps. When you ask for something that takes a moment — reading an uploaded file, a web/research search, building code — JARVIS **immediately** says one short, natural sentence *in your language* (*"Right away — going through that file now."*) and *then* runs the tool. Instant actions (opening an app, volume) stay snappy with no chatter.
 
 ### 🚀 Faster Live Engine — Gemini Live + Multi-Brain Matrix
-The live session is powered by **Gemini Live**, with multi-provider backup across Groq (Llama-3.3 70B), DeepSeek, and local Ollama, cutting latency while keeping tools, voices, transcription, and sliding-window compression intact.
+The live session is powered by **Gemini Live**, with multi-provider backup across Cerebras, Groq, NVIDIA NIM, OpenRouter, Mistral, GitHub Models, SambaNova, DeepSeek, and local Ollama, cutting latency while keeping tools, voices, transcription, and sliding-window compression intact.
+
+### ⚡ Supported High-Speed Free LLM Providers & Gateways (22+ Engines)
+
+J.A.R.V.I.S. now supports 22+ high-speed, free-tier LLM providers, aggregators, and local gateways. Every provider can be configured directly from the Cyberpunk HUD Settings (`⚙ → AI PROVIDERS`), complete with a **dynamic model selector** and instant **`⚡ TEST` latency ping**.
+
+| Provider | Free Tier (Approx) | Highlights | Why Use It in J.A.R.V.I.S.? |
+|---|---|---|---|
+| **Cerebras Cloud** | 1M tokens/day, 30 RPM | World's fastest AI inference (~2,000 tok/s, 20x faster than OpenAI) | Real-time conversational responses with zero delay. |
+| **Groq LPU** | 30 RPM, 1K RPD | Ultra-fast LPU inference (350–1000 tok/s) | Rock-solid reliability and speed for long dialogues and coding. |
+| **OpenRouter** | 20+ free models, 50 req/day | Unified API for 200+ models with `:free` tag | Testing and comparing different open models with one key. |
+| **Google Gemini** | 1M tokens/min (free tier) | 1M+ token context window, native multimodal input | Extended memory, full documents, and live screen/webcam vision. |
+| **NVIDIA NIM** | 1,000 free calls/month | 70+ models hosted on enterprise NVIDIA DGX Cloud | Access to Nemotron, Llama 3.3 70B, and DeepSeek R1. |
+| **Mistral AI** | 1B tokens/month, 500K TPM | European open-weights leader, Codestral programming model | Outstanding code generation and GDPR-compliant reasoning. |
+| **Cloudflare Workers AI** | 10,000 Neurons/day free | Globally distributed serverless inference at the edge | Lightweight, fast queries with zero credit card setup. |
+| **Cohere** | 1,000 calls/month free | Specialized Command-R+ model with native search grounding | RAG citations, structured outputs, and factual retrieval. |
+| **Zhipu AI (GLM)** | GLM-4-Flash permanently free | High-speed model with 200K context, zero expiration | Permanent free fallback brain with zero token anxiety. |
+| **GitHub Models** | Free access with GitHub PAT | Direct access to GPT-4o, DeepSeek-R1, and Llama 3.3 | Use your existing developer GitHub account with no new signup. |
+| **Hugging Face** | Serverless free inference API | 500,000+ open-source models with community endpoints | Testing novel architectures and niche fine-tunes. |
+| **SambaNova Cloud** | 20 RPM, 200K tokens/day | Full-precision Llama 3.1 405B and 70B available free | Mammoth 405B parameter reasoning at blistering speeds. |
+| **Kluster AI** | $5 free credits + permanent tier | Low-latency inference for DeepSeek R1 and Qwen 2.5 | Fast batch tasks and complex multi-step reasoning. |
+| **LLM7.io** | 30–120 RPM free | Instant access, zero-friction, no signup required | Instant out-of-the-box operation with zero registration. |
+| **FreeLLMAPI** | 1.7B tokens/month shared | Aggregator with automatic failover across 14+ providers | Eliminates 429 rate limit errors automatically. |
+| **OrcaRouter** | $0 / token free tier | Auto-routing across top free community models | Zero markup smart router for free models. |
+| **Vercel AI Gateway** | Unified free gateway tier | Failover routing with custom BYOK support | Edge failover orchestration for reliable uptime. |
+| **FreeTheAi** | 60+ models free forever | Community-backed initiative for unrestricted free AI | 100% free models with zero subscription gates. |
+| **OmniRoute Gateway** | Universal local proxy | Connects to 352+ providers and 1,200+ models on `localhost:20128` | All-in-one local aggregator with automatic fallback. |
+| **Gemini Web Proxy** | 100% Free Built-in | Reverse-engineered web endpoints (`gemini-3.7-flash` on `:8081`) | Autonomous local proxy, works out-of-the-box without keys. |
+| **DeepSeek Direct** | Official Free Tier | Official DeepSeek V3 and DeepSeek Reasoner R1 | Ultra-smart reasoning and mathematical problem solving. |
+| **Custom / Local AI** | Unlimited offline | Local Ollama, LM Studio, vLLM, or private OpenAI endpoint | Complete offline privacy with zero external internet dependencies. |
+
+#### 🎛️ Individual Provider & Model Selection in Settings:
+1. Open the HUD settings by clicking the **⚙ (Gear)** icon on the Cyberpunk HUD.
+2. Select the **🤖 AI PROVIDERS** tab.
+3. Choose your desired provider from the **ACTIVE BRAIN / LLM PROVIDER** dropdown.
+4. The **ACTIVE MODEL FOR SELECTED PROVIDER** combobox will automatically populate with that provider's models (e.g. `llama-3.3-70b` for Cerebras, `meta/llama-3.3-70b-instruct` for NVIDIA NIM, `Meta-Llama-3.1-405B-Instruct` for SambaNova).
+5. You can pick any model from the dropdown or type in any custom model name.
+6. Click **⚡ TEST** next to your API key to verify latency and connectivity in real time (e.g. `🟢 Cerebras Live • 142ms`).
+7. Click **SAVE & CLOSE** — your active provider, chosen models, and API keys are safely recorded in `config/api_keys.json` with zero git leakage.
+
 
 ### 🧩 Self-Describing Skills — a Scalable Core
 Every bundled **action** now carries its own `TOOL` declaration in its own file (exactly like a drop-in **plugin's** `PLUGIN` dict), and the core auto-discovers them at launch. `main.py` no longer holds a giant list of tool definitions and dispatch branches — it shrank by hundreds of lines. Adding a new built-in skill, or promoting an `actions/*.py` file into a shareable plugin, is now just… moving a file.

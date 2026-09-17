@@ -66,6 +66,275 @@ def _load_config() -> dict:
         return {}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Complete Provider Registry & Model Catalog
+# ─────────────────────────────────────────────────────────────────────────────
+PROVIDER_REGISTRY: dict[str, dict] = {
+    "cerebras": {
+        "name": "Cerebras Cloud (Ultra-Fast ~2,000 tok/s)",
+        "url": "https://api.cerebras.ai/v1",
+        "key_field": "cerebras_api_key",
+        "default_model": "llama-3.3-70b",
+        "models": ["llama-3.3-70b", "llama3.1-8b", "llama3.1-70b"],
+        "requires_key": True,
+        "placeholder": "csk-...",
+        "desc": "1M tokens/day, 30 RPM. World's fastest inference engine.",
+    },
+    "groq": {
+        "name": "Groq LPU (Ultra-Fast ~350-1000 tok/s)",
+        "url": "https://api.groq.com/openai/v1",
+        "key_field": "groq_api_key",
+        "default_model": "llama-3.3-70b-versatile",
+        "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b", "gemma2-9b-it"],
+        "requires_key": True,
+        "placeholder": "gsk_...",
+        "desc": "30 RPM, 1K RPD. Highly reliable and ultra low-latency.",
+    },
+    "openrouter": {
+        "name": "OpenRouter (20+ Free Models & Unified API)",
+        "url": "https://openrouter.ai/api/v1",
+        "key_field": "openrouter_api_key",
+        "default_model": "deepseek/deepseek-r1:free",
+        "models": [
+            "deepseek/deepseek-r1:free",
+            "meta-llama/llama-3.3-70b-instruct:free",
+            "google/gemini-2.0-flash-exp:free",
+            "mistralai/mistral-7b-instruct:free",
+            "qwen/qwen-2.5-72b-instruct",
+            "meta-llama/llama-3.1-8b-instruct:free",
+        ],
+        "requires_key": True,
+        "placeholder": "sk-or-...",
+        "desc": "One key for 200+ models. Free models indicated with :free suffix.",
+    },
+    "gemini": {
+        "name": "Google Gemini (Gemini 2.5 / 2.0 Flash)",
+        "url": "https://generativelanguage.googleapis.com",
+        "key_field": "gemini_api_key",
+        "default_model": "gemini-2.5-flash",
+        "models": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
+        "requires_key": True,
+        "placeholder": "AIzaSy...",
+        "desc": "1M token context window, live audio and vision.",
+    },
+    "gemini-web": {
+        "name": "Gemini Web FREE (Built-in Anonymous Proxy - 0 Key)",
+        "url": "http://127.0.0.1:8081/v1",
+        "key_field": "free_proxy_token",
+        "default_model": "gemini-3.7-flash",
+        "models": ["gemini-3.7-flash", "gemini-2.0-flash", "gemini-2.0-pro"],
+        "requires_key": False,
+        "placeholder": "None needed (runs locally)",
+        "desc": "100% Free, zero tokens, zero credit card.",
+    },
+    "nvidia": {
+        "name": "NVIDIA NIM (70+ Models, 1000 Free Calls/mo)",
+        "url": "https://integrate.api.nvidia.com/v1",
+        "key_field": "nvidia_api_key",
+        "default_model": "meta/llama-3.3-70b-instruct",
+        "models": [
+            "meta/llama-3.3-70b-instruct",
+            "deepseek-ai/deepseek-r1",
+            "mistralai/mistral-large-2-instruct",
+            "nvidia/nemotron-4-340b-instruct",
+        ],
+        "requires_key": True,
+        "placeholder": "nvapi-...",
+        "desc": "1000 API calls/model/month, enterprise-grade inference.",
+    },
+    "mistral": {
+        "name": "Mistral AI (Codestral & Mistral - 1B tok/mo)",
+        "url": "https://api.mistral.ai/v1",
+        "key_field": "mistral_api_key",
+        "default_model": "mistral-small-latest",
+        "models": [
+            "mistral-small-latest",
+            "codestral-latest",
+            "mistral-large-latest",
+            "open-mistral-nemo",
+        ],
+        "requires_key": True,
+        "placeholder": "mis_...",
+        "desc": "1B tokens/month, 500K TPM. GDPR-compliant European AI.",
+    },
+    "cloudflare": {
+        "name": "Cloudflare Workers AI (10K Neurons/day Free)",
+        "url": "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+        "key_field": "cloudflare_api_key",
+        "default_model": "@cf/meta/llama-3.3-70b-instruct",
+        "models": [
+            "@cf/meta/llama-3.3-70b-instruct",
+            "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+            "@cf/mistral/mistral-7b-instruct-v0.1",
+            "@cf/qwen/qwen1.5-14b-chat-awq",
+        ],
+        "requires_key": True,
+        "placeholder": "Bearer token...",
+        "desc": "Serverless edge AI, no credit card required.",
+    },
+    "cohere": {
+        "name": "Cohere (Command-R & RAG Embeddings)",
+        "url": "https://api.cohere.com/v2",
+        "key_field": "cohere_api_key",
+        "default_model": "command-r-plus-08-2024",
+        "models": ["command-r-plus-08-2024", "command-r-08-2024", "command-light"],
+        "requires_key": True,
+        "placeholder": "co_...",
+        "desc": "1,000 calls/month free. Best for RAG & structured citations.",
+    },
+    "zhipu": {
+        "name": "Zhipu AI / Z.AI (GLM-4-Flash Permanent Free)",
+        "url": "https://open.bigmodel.cn/api/paas/v4",
+        "key_field": "zhipu_api_key",
+        "default_model": "glm-4-flash",
+        "models": ["glm-4-flash", "glm-4-plus", "glm-4-air", "glm-4"],
+        "requires_key": True,
+        "placeholder": "api_key.token...",
+        "desc": "GLM-4.7-Flash with 200K context, permanently free.",
+    },
+    "github": {
+        "name": "GitHub Models (Free GPT-4o, DeepSeek-R1, Llama 4)",
+        "url": "https://models.inference.ai.azure.com",
+        "key_field": "github_token",
+        "default_model": "gpt-4o-mini",
+        "models": [
+            "gpt-4o-mini",
+            "gpt-4o",
+            "DeepSeek-R1",
+            "Meta-Llama-3.3-70B-Instruct",
+            "Phi-3.5-mini-instruct",
+        ],
+        "requires_key": True,
+        "placeholder": "ghp_... or github_pat_...",
+        "desc": "Access cutting-edge models directly using your GitHub token.",
+    },
+    "huggingface": {
+        "name": "Hugging Face Inference API (500K+ Models)",
+        "url": "https://api-inference.huggingface.co/v1",
+        "key_field": "huggingface_token",
+        "default_model": "meta-llama/Llama-3.2-3B-Instruct",
+        "models": [
+            "meta-llama/Llama-3.2-3B-Instruct",
+            "Qwen/Qwen2.5-72B-Instruct",
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+            "mistralai/Mistral-7B-Instruct-v0.3",
+        ],
+        "requires_key": True,
+        "placeholder": "hf_...",
+        "desc": "Largest open-source catalog with free serverless inference.",
+    },
+    "sambanova": {
+        "name": "SambaNova Cloud (Free Llama 3.1 405B & 70B)",
+        "url": "https://api.sambanova.ai/v1",
+        "key_field": "sambanova_api_key",
+        "default_model": "Meta-Llama-3.1-405B-Instruct",
+        "models": [
+            "Meta-Llama-3.1-405B-Instruct",
+            "Meta-Llama-3.3-70B-Instruct",
+            "DeepSeek-R1",
+            "Meta-Llama-3.1-8B-Instruct",
+        ],
+        "requires_key": True,
+        "placeholder": "samba_...",
+        "desc": "20 RPM, 200K tokens/day. Mammoth 405B model available free.",
+    },
+    "kluster": {
+        "name": "Kluster AI (DeepSeek R1, Llama, Qwen3)",
+        "url": "https://api.kluster.ai/v1",
+        "key_field": "kluster_api_key",
+        "default_model": "deepseek-ai/DeepSeek-R1",
+        "models": [
+            "deepseek-ai/DeepSeek-R1",
+            "meta-llama/Llama-3.3-70B-Instruct",
+            "Qwen/Qwen2.5-72B-Instruct",
+        ],
+        "requires_key": True,
+        "placeholder": "kluster_...",
+        "desc": "$5 free credits + permanent free tier for batch tasks.",
+    },
+    "llm7": {
+        "name": "LLM7.io (Zero-Friction, No Signup Needed)",
+        "url": "https://api.llm7.io/v1",
+        "key_field": "llm7_token",
+        "default_model": "llama-3.3-70b",
+        "models": ["llama-3.3-70b", "deepseek-r1", "gpt-4o-mini"],
+        "requires_key": False,
+        "placeholder": "Optional token (30-120 RPM)",
+        "desc": "Instant zero-friction API without requiring sign up.",
+    },
+    "freellmapi": {
+        "name": "FreeLLMAPI Aggregator (1.7B Tokens/mo, Failover)",
+        "url": "https://api.freellmapi.com/v1",
+        "key_field": "freellmapi_key",
+        "default_model": "auto",
+        "models": ["auto", "gpt-4o-mini", "deepseek-v3", "claude-3-haiku", "llama-3.3-70b"],
+        "requires_key": True,
+        "placeholder": "freellm_...",
+        "desc": "Automatic failover across 14+ providers, eliminates 429 errors.",
+    },
+    "orcarouter": {
+        "name": "OrcaRouter ($0 / token, 200+ Free Models)",
+        "url": "https://api.orcarouter.com/v1",
+        "key_field": "orcarouter_key",
+        "default_model": "auto",
+        "models": ["auto", "deepseek-r1", "llama-3.3-70b", "mistral-small"],
+        "requires_key": True,
+        "placeholder": "orca_...",
+        "desc": "Free model routing tier with zero markup.",
+    },
+    "vercel": {
+        "name": "Vercel AI Gateway (Unified Multi-Provider)",
+        "url": "https://ai.gateway.vercel.dev/v1",
+        "key_field": "vercel_gateway_key",
+        "default_model": "auto",
+        "models": ["auto", "openai/gpt-4o-mini", "anthropic/claude-3-5-sonnet", "meta/llama-3.3-70b"],
+        "requires_key": True,
+        "placeholder": "vercel_...",
+        "desc": "Zero markup gateway with BYOK failover.",
+    },
+    "freetheai": {
+        "name": "FreeTheAi (60+ Community Models, Free Forever)",
+        "url": "https://api.freetheai.com/v1",
+        "key_field": "freetheai_key",
+        "default_model": "deepseek-chat",
+        "models": ["deepseek-chat", "llama-3.3-70b", "qwen-2.5-72b"],
+        "requires_key": True,
+        "placeholder": "ftai_...",
+        "desc": "Community-run Discord signup, free forever.",
+    },
+    "omniroute": {
+        "name": "OmniRoute Gateway (Local 352+ Providers, 1200+ Models)",
+        "url": "http://localhost:20128/v1",
+        "key_field": "omniroute_token",
+        "default_model": "auto",
+        "models": ["auto", "gpt-4o", "claude-3.5-sonnet", "gemini-2.5-pro", "deepseek-r1"],
+        "requires_key": False,
+        "placeholder": "None needed (localhost:20128)",
+        "desc": "Universal local gateway. Auto-switches across 350+ backends.",
+    },
+    "deepseek": {
+        "name": "DeepSeek Direct (DeepSeek-V3 / R1 Official)",
+        "url": "https://api.deepseek.com/v1",
+        "key_field": "deepseek_api_key",
+        "default_model": "deepseek-chat",
+        "models": ["deepseek-chat", "deepseek-reasoner"],
+        "requires_key": True,
+        "placeholder": "sk-...",
+        "desc": "Official DeepSeek endpoint for V3 and Reasoner R1.",
+    },
+    "custom": {
+        "name": "Custom / Local AI (Ollama, LM Studio, vLLM)",
+        "url": "http://localhost:11434/v1",
+        "key_field": "custom_llm_api_key",
+        "default_model": "llama3.2",
+        "models": ["llama3.2", "qwen2.5-coder", "mistral", "deepseek-r1"],
+        "requires_key": False,
+        "placeholder": "Optional key (Ollama uses dummy)",
+        "desc": "Run 100% locally on your own GPU/CPU without internet.",
+    },
+}
+
+
 class MultiLLMClient:
     def __init__(self, preferred_provider: str = None, model: str = None):
         cfg = _load_config()
@@ -73,6 +342,17 @@ class MultiLLMClient:
         self.groq_key = cfg.get("groq_api_key", "").strip()
         self.openrouter_key = cfg.get("openrouter_api_key", "").strip()
         self.deepseek_key = cfg.get("deepseek_api_key", "").strip()
+
+        # ── Load all registered provider keys dynamically ──────────────
+        self.provider_keys = {}
+        for pid, meta in PROVIDER_REGISTRY.items():
+            kfield = meta.get("key_field")
+            if kfield:
+                self.provider_keys[pid] = cfg.get(kfield, "").strip()
+
+        self.selected_models = cfg.get("selected_models", {})
+        if not isinstance(self.selected_models, dict):
+            self.selected_models = {}
 
         # ── Legacy single custom endpoint (kept for backward compat) ──────────
         self.custom_url = (cfg.get("custom_llm_url") or cfg.get("openai_url") or "").strip()
@@ -124,6 +404,8 @@ class MultiLLMClient:
                 self.provider = "gemini-web"
             elif self.custom_providers:
                 self.provider = "custom-list"
+            elif self.provider_keys.get("cerebras"):
+                self.provider = "cerebras"
             elif self.groq_key:
                 self.provider = "groq"
             elif self.openrouter_key:
@@ -135,7 +417,15 @@ class MultiLLMClient:
             else:
                 self.provider = "gemini"
 
-        self.model = model
+        # Determine active model
+        if model:
+            self.model = model
+        elif self.provider in self.selected_models:
+            self.model = self.selected_models[self.provider]
+        elif self.provider in PROVIDER_REGISTRY:
+            self.model = PROVIDER_REGISTRY[self.provider].get("default_model")
+        else:
+            self.model = self.custom_model
 
     def _check_omniroute(self) -> bool:
         """Check if OmniRoute is running on localhost:20128. Cached per instance."""
@@ -264,6 +554,19 @@ class MultiLLMClient:
             if out:
                 return _maybe_cache(LLMResponse(out))
             print(f"[MultiLLM] {name} failed — trying next provider")
+
+        # ── 0-C. Registered Providers (Cerebras, Groq, NVIDIA, Mistral, GitHub, SambaNova, etc.) ──
+        if self.provider in PROVIDER_REGISTRY and self.provider not in ("gemini", "gemini-web"):
+            reg = PROVIDER_REGISTRY[self.provider]
+            p_key = self.provider_keys.get(self.provider) or "dummy-key"
+            p_model = self.model or reg.get("default_model")
+            p_url = reg.get("url")
+            out = self._try_openai_endpoint(
+                p_url, p_key, p_model, prompt, timeout=60, provider_name=reg.get("name", self.provider)
+            )
+            if out:
+                return _maybe_cache(LLMResponse(out))
+            print(f"[MultiLLM] {self.provider} failed — attempting secondary fallback")
 
         # 1. Legacy Single Custom Provider (Ollama / LM Studio / LocalAI / Private Endpoints)
         if (self.provider in ("custom", "openai", "local", "ollama")) and self.custom_url:
@@ -538,6 +841,52 @@ def test_llm_provider(
                 return True, "Local AI / Ollama Live", lat
             return False, f"Endpoint Error {resp.status_code}", lat
 
+        elif prov in PROVIDER_REGISTRY:
+            reg = PROVIDER_REGISTRY[prov]
+            kfield = reg.get("key_field", f"{prov}_api_key")
+            key = api_key.strip() or cfg.get(kfield, "").strip()
+            if not key and kfield:
+                return False, f"Missing {reg.get('name', prov)} API Key", 0.0
+
+            base_url = reg.get("url", "")
+            if "/chat/completions" in base_url:
+                models_url = base_url.replace("/chat/completions", "/models")
+            elif base_url.endswith("/v1"):
+                models_url = f"{base_url}/models"
+            else:
+                models_url = f"{base_url.rstrip('/')}/models"
+
+            headers = {"Content-Type": "application/json"}
+            if key:
+                headers["Authorization"] = f"Bearer {key}"
+            if prov == "openrouter":
+                headers["HTTP-Referer"] = "https://github.com/SudhirDevOps1"
+                headers["X-Title"] = "SudhirDevOps1 AI"
+
+            try:
+                resp = requests.get(models_url, headers=headers, timeout=5.0)
+                lat = (time.perf_counter() - t0) * 1000.0
+                if resp.status_code == 200:
+                    return True, f"{reg.get('name', prov)} Live", lat
+                elif resp.status_code in (401, 403):
+                    return False, f"Invalid API Key ({resp.status_code})", lat
+
+                # Fallback: lightweight single-token prompt test
+                chat_url = base_url if "/chat/completions" in base_url else (f"{base_url}/chat/completions" if base_url.endswith("/v1") else f"{base_url}/v1/chat/completions")
+                body = {
+                    "model": reg.get("default_model", ""),
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 1
+                }
+                c_resp = requests.post(chat_url, headers=headers, json=body, timeout=5.0)
+                lat = (time.perf_counter() - t0) * 1000.0
+                if c_resp.status_code == 200:
+                    return True, f"{reg.get('name', prov)} Live", lat
+                return False, f"{reg.get('name', prov)} HTTP {c_resp.status_code}", lat
+            except Exception as ex:
+                lat = (time.perf_counter() - t0) * 1000.0
+                return False, f"Connection Failed: {str(ex)[:35]}", lat
+
         else:
             return False, f"Unknown provider: {provider}", 0.0
 
@@ -674,6 +1023,39 @@ def fetch_provider_models(
             except Exception:
                 pass
             return ["auto"]
+
+        elif prov in PROVIDER_REGISTRY:
+            reg = PROVIDER_REGISTRY[prov]
+            curated = list(reg.get("models", []))
+            kfield = reg.get("key_field", f"{prov}_api_key")
+            key = api_key.strip() or cfg.get(kfield, "").strip()
+            base_url = reg.get("url", "")
+            if base_url:
+                models_url = (
+                    base_url.replace("/chat/completions", "/models")
+                    if "/chat/completions" in base_url
+                    else (f"{base_url}/models" if base_url.endswith("/v1") else f"{base_url.rstrip('/')}/models")
+                )
+                headers = {"Authorization": f"Bearer {key}"} if key else {}
+                try:
+                    resp = requests.get(models_url, headers=headers, timeout=4.0)
+                    if resp.status_code == 200:
+                        data = resp.json().get("data", [])
+                        fetched = [
+                            m["id"]
+                            for m in data
+                            if "id" in m and not str(m["id"]).startswith("whisper")
+                        ]
+                        if fetched:
+                            combined = []
+                            for m in curated + fetched:
+                                if m not in combined:
+                                    combined.append(m)
+                            return combined[:60]
+                except Exception:
+                    pass
+            return curated if curated else [reg.get("default_model", "default")]
+
     except Exception:
         pass
 

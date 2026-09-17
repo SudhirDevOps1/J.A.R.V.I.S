@@ -2060,21 +2060,25 @@ class ProviderSettingsOverlay(QWidget):
         self._provider_combo = QComboBox()
         self._provider_combo.setFont(QFont("Courier New", 9))
         self._provider_combo.setStyleSheet(self._fs)
-        providers = [
-            ("gemini", "Google Gemini (gemini-2.5-flash / Multilingual)"),
-            ("gemini-web", "Gemini Web FREE (Built-in Anonymous Proxy - No Key Needed)"),
-            ("omniroute", "OmniRoute Gateway (352+ Providers, 1200+ Models)"),
-            ("groq", "Groq (Ultra-Fast Llama 3.3 70B ~350 tok/s)"),
-            ("openrouter", "OpenRouter (DeepSeek R1, Claude 3.5, etc.)"),
-            ("deepseek", "DeepSeek Direct (DeepSeek-V3 / R1)"),
-            ("custom", "Custom / Local AI (Ollama, LM Studio)"),
-        ]
+
+        from core.multi_llm import PROVIDER_REGISTRY
+
         curr_prov = (self.cfg.get("preferred_llm_provider") or "gemini").lower().strip()
-        for idx, (p_id, p_label) in enumerate(providers):
-            self._provider_combo.addItem(p_label, p_id)
+        idx_to_select = 0
+        for idx, (p_id, reg) in enumerate(PROVIDER_REGISTRY.items()):
+            self._provider_combo.addItem(reg.get("name", p_id), p_id)
             if curr_prov == p_id:
-                self._provider_combo.setCurrentIndex(idx)
+                idx_to_select = idx
+        self._provider_combo.setCurrentIndex(idx_to_select)
         lay_ai.addWidget(self._provider_combo)
+
+        # Active Model Selector for Selected Provider (Dynamic / User Configurable)
+        lay_ai.addWidget(_lbl("ACTIVE MODEL FOR SELECTED PROVIDER (Dynamic / Custom)", 7, bold=True, color=C.TEXT_MED))
+        self._model_combo = QComboBox()
+        self._model_combo.setEditable(True)
+        self._model_combo.setFont(QFont("Courier New", 8))
+        self._model_combo.setStyleSheet(self._fs)
+        lay_ai.addWidget(self._model_combo)
 
         # Scrollable Key and Test Row
         key_scroll = QScrollArea()
@@ -2085,6 +2089,9 @@ class ProviderSettingsOverlay(QWidget):
         k_lay = QVBoxLayout(key_container)
         k_lay.setContentsMargins(0, 0, 0, 0)
         k_lay.setSpacing(5)
+
+        self._key_inputs = {}
+        self._stat_labels = {}
 
         def _make_key_row(title, placeholder, value, prov_id):
             k_lay.addWidget(_lbl(title, 7, color=C.TEXT_MED))
@@ -2112,6 +2119,9 @@ class ProviderSettingsOverlay(QWidget):
             stat_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; padding-left: 2px;")
             k_lay.addWidget(stat_lbl)
 
+            self._key_inputs[prov_id] = inp
+            self._stat_labels[prov_id] = stat_lbl
+
             def _on_test():
                 stat_lbl.setText("🟡 Pinging...")
                 stat_lbl.setStyleSheet("color: #ffaa00;")
@@ -2130,10 +2140,110 @@ class ProviderSettingsOverlay(QWidget):
             t_btn.clicked.connect(_on_test)
             return inp, stat_lbl
 
-        self._gemini_input, self._gemini_stat = _make_key_row("GEMINI API KEY (Live Voice & Vision)", "AIzaSy...", self.cfg.get("gemini_api_key", ""), "gemini")
-        self._groq_input, self._groq_stat = _make_key_row("GROQ API KEY (Recommended: 350+ tok/s)", "gsk_...", self.cfg.get("groq_api_key", ""), "groq")
-        self._openrouter_input, self._openrouter_stat = _make_key_row("OPENROUTER API KEY (DeepSeek R1 / Claude)", "sk-or-...", self.cfg.get("openrouter_api_key", ""), "openrouter")
-        self._deepseek_input, self._deepseek_stat = _make_key_row("DEEPSEEK API KEY", "sk-...", self.cfg.get("deepseek_api_key", ""), "deepseek")
+        # Live feedback on provider test completion
+        def _on_provider_tested(prov_id, ok, msg, lat):
+            lbl = self._stat_labels.get(prov_id)
+            if lbl:
+                icon = "🟢" if ok else "🔴"
+                color = "#00ffaa" if ok else "#ff5555"
+                lat_str = f" • {lat:.0f}ms" if lat > 0 else ""
+                lbl.setText(f"{icon} {msg}{lat_str}")
+                lbl.setStyleSheet(f"color: {color}; padding-left: 2px;")
+
+        self.provider_tested.connect(_on_provider_tested)
+
+        def _update_model_dropdown(p_id):
+            self._model_combo.blockSignals(True)
+            self._model_combo.clear()
+            reg = PROVIDER_REGISTRY.get(p_id, {})
+            curated = list(reg.get("models", []))
+            saved_models = self.cfg.get("selected_models", {})
+            active_m = saved_models.get(p_id) or reg.get("default_model", "")
+            for m in curated:
+                self._model_combo.addItem(m)
+            if active_m and active_m not in curated:
+                self._model_combo.insertItem(0, active_m)
+            if active_m:
+                self._model_combo.setCurrentText(active_m)
+            self._model_combo.blockSignals(False)
+
+        def _on_models_fetched(prov_id, models):
+            curr_p = self._provider_combo.currentData()
+            if curr_p == prov_id and models:
+                cur_text = self._model_combo.currentText().strip()
+                self._model_combo.blockSignals(True)
+                existing = [self._model_combo.itemText(i) for i in range(self._model_combo.count())]
+                for m in models:
+                    if m not in existing:
+                        self._model_combo.addItem(m)
+                        existing.append(m)
+                if cur_text:
+                    self._model_combo.setCurrentText(cur_text)
+                self._model_combo.blockSignals(False)
+
+        self.models_fetched.connect(_on_models_fetched)
+
+        def _on_provider_changed(index):
+            p_id = self._provider_combo.currentData() or "gemini"
+            _update_model_dropdown(p_id)
+            def _bg():
+                try:
+                    from core.multi_llm import fetch_provider_models
+                    inp = self._key_inputs.get(p_id)
+                    key_val = inp.text().strip() if inp else ""
+                    live_m = fetch_provider_models(p_id, api_key=key_val)
+                    if live_m:
+                        self.models_fetched.emit(p_id, live_m)
+                except Exception:
+                    pass
+            threading.Thread(target=_bg, daemon=True).start()
+
+        self._provider_combo.currentIndexChanged.connect(_on_provider_changed)
+        _update_model_dropdown(curr_prov)
+
+        # Primary Key Inputs (Legacy attribute aliases retained)
+        self._gemini_input, self._gemini_stat = _make_key_row(
+            "GEMINI API KEY (Live Voice & Vision)", "AIzaSy...",
+            self.cfg.get("gemini_api_key", ""), "gemini"
+        )
+        self._cerebras_input, self._cerebras_stat = _make_key_row(
+            "CEREBRAS API KEY (Ultra-Fast ~2,000 tok/s - 1M tokens/day)", "csk-...",
+            self.cfg.get("cerebras_api_key", ""), "cerebras"
+        )
+        self._groq_input, self._groq_stat = _make_key_row(
+            "GROQ API KEY (Recommended: 350+ tok/s)", "gsk_...",
+            self.cfg.get("groq_api_key", ""), "groq"
+        )
+        self._openrouter_input, self._openrouter_stat = _make_key_row(
+            "OPENROUTER API KEY (DeepSeek R1 / Claude)", "sk-or-...",
+            self.cfg.get("openrouter_api_key", ""), "openrouter"
+        )
+        self._deepseek_input, self._deepseek_stat = _make_key_row(
+            "DEEPSEEK API KEY", "sk-...",
+            self.cfg.get("deepseek_api_key", ""), "deepseek"
+        )
+
+        # Additional Registered Providers
+        other_provs = [
+            ("nvidia", "NVIDIA NIM API KEY (70+ Models, 1000 Free Calls/mo)"),
+            ("mistral", "MISTRAL AI API KEY (Codestral & Mistral - 1B tok/mo)"),
+            ("cloudflare", "CLOUDFLARE WORKERS AI API KEY (10K Neurons/day Free)"),
+            ("cohere", "COHERE API KEY (Command-R & RAG Embeddings)"),
+            ("zhipu", "ZHIPU AI API KEY (GLM-4-Flash Permanent Free)"),
+            ("github", "GITHUB MODELS TOKEN / PAT (Free GPT-4o, DeepSeek-R1)"),
+            ("huggingface", "HUGGING FACE TOKEN (500K+ Models Serverless)"),
+            ("sambanova", "SAMBANOVA CLOUD API KEY (Free Llama 3.1 405B & 70B)"),
+            ("kluster", "KLUSTER AI API KEY (DeepSeek R1, Llama, Qwen3)"),
+            ("llm7", "LLM7.IO TOKEN (Optional - Zero-Friction 30-120 RPM)"),
+            ("freellmapi", "FREELLMAPI KEY (1.7B Tokens/mo Failover Aggregator)"),
+            ("orcarouter", "ORCAROUTER KEY ($0/token, 200+ Free Models)"),
+            ("vercel", "VERCEL AI GATEWAY KEY (Unified Multi-Provider)"),
+            ("freetheai", "FREETHEAI KEY (60+ Community Models Free Forever)"),
+        ]
+        for p_id, row_label in other_provs:
+            reg = PROVIDER_REGISTRY.get(p_id, {})
+            kfield = reg.get("key_field", f"{p_id}_api_key")
+            _make_key_row(row_label, reg.get("placeholder", "key..."), self.cfg.get(kfield, ""), p_id)
 
         # Custom / Ollama
         k_lay.addWidget(_lbl("CUSTOM / OLLAMA ENDPOINT URL & MODEL", 7, color=C.TEXT_MED))
@@ -2161,6 +2271,7 @@ class ProviderSettingsOverlay(QWidget):
         self._custom_stat.setFont(QFont("Courier New", 7))
         self._custom_stat.setStyleSheet(f"color: {C.TEXT_DIM}; padding-left: 2px;")
         k_lay.addWidget(self._custom_stat)
+        self._stat_labels["custom"] = self._custom_stat
 
         def _on_custom_test():
             self._custom_stat.setText("🟡 Pinging local endpoint...")
@@ -2200,6 +2311,7 @@ class ProviderSettingsOverlay(QWidget):
         self._gemini_web_stat.setFont(QFont("Courier New", 7))
         self._gemini_web_stat.setStyleSheet("color: #00ffaa; padding-left: 2px;")
         k_lay.addWidget(self._gemini_web_stat)
+        self._stat_labels["gemini-web"] = self._gemini_web_stat
 
         def _on_gemini_web_test():
             self._gemini_web_stat.setText("🟡 Testing local proxy connection...")
@@ -2235,6 +2347,7 @@ class ProviderSettingsOverlay(QWidget):
         self._omni_stat.setFont(QFont("Courier New", 7))
         self._omni_stat.setStyleSheet(f"color: {C.TEXT_DIM}; padding-left: 2px;")
         k_lay.addWidget(self._omni_stat)
+        self._stat_labels["omniroute"] = self._omni_stat
 
         def _on_omni_test():
             self._omni_stat.setText("🟡 Checking OmniRoute on :20128...")
@@ -2637,17 +2750,44 @@ class ProviderSettingsOverlay(QWidget):
     def _save(self):
         prov_id = self._provider_combo.currentData() or "gemini"
         try:
+            from core.multi_llm import PROVIDER_REGISTRY
             data = _read_full_config()
             data["preferred_llm_provider"] = prov_id
             data["tts_engine"] = self._tts_combo.currentData() or "gemini_live"
             data["sfx_enabled"] = self._sfx_checkbox.isChecked()
-            if self._gemini_input.text().strip():
+
+            # Save chosen model for provider
+            active_m = self._model_combo.currentText().strip()
+            if "selected_models" not in data or not isinstance(data.get("selected_models"), dict):
+                data["selected_models"] = {}
+            if active_m:
+                data["selected_models"][prov_id] = active_m
+                data["custom_llm_model"] = active_m
+
+            # Preserve core legacy inputs
+            if hasattr(self, "_gemini_input") and self._gemini_input.text().strip():
                 data["gemini_api_key"] = self._gemini_input.text().strip()
-            data["groq_api_key"] = self._groq_input.text().strip()
-            data["openrouter_api_key"] = self._openrouter_input.text().strip()
-            data["deepseek_api_key"] = self._deepseek_input.text().strip()
-            data["custom_llm_url"] = self._custom_url.text().strip()
-            data["custom_llm_model"] = self._custom_model.text().strip()
+            if hasattr(self, "_groq_input"):
+                data["groq_api_key"] = self._groq_input.text().strip()
+            if hasattr(self, "_openrouter_input"):
+                data["openrouter_api_key"] = self._openrouter_input.text().strip()
+            if hasattr(self, "_deepseek_input"):
+                data["deepseek_api_key"] = self._deepseek_input.text().strip()
+            if hasattr(self, "_custom_url"):
+                data["custom_llm_url"] = self._custom_url.text().strip()
+
+            # Save all dynamic registered provider keys
+            if hasattr(self, "_key_inputs"):
+                for p_name, inp in self._key_inputs.items():
+                    val = inp.text().strip()
+                    reg = PROVIDER_REGISTRY.get(p_name, {})
+                    kfield = reg.get("key_field")
+                    if kfield:
+                        if val or kfield not in data:
+                            data[kfield] = val
+                        elif not val and kfield in data and p_name != "gemini":
+                            data[kfield] = ""
+
             API_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
             try:
                 from core.sfx import play_sfx
