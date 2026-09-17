@@ -94,7 +94,9 @@ class NeedleToolRouter:
         m_open_hi = re.search(r"\b([a-zA-Z0-9_\-\.]+)\s+(kholo|chalao|start karo|open karo)\b", clean)
         if m_open_en or m_open_hi:
             app_target = (m_open_en.group(2) if m_open_en else m_open_hi.group(1)).strip()
-            if not any(k in app_target for k in ("storage", "camera", "c drive", "d drive", "video", "youtube")):
+            _folder_words = ("storage", "camera", "c drive", "d drive", "video", "youtube",
+                             "downloads", "desktop", "documents", "pictures", "music", "folder")
+            if not any(k in app_target for k in _folder_words):
                 app_target = re.sub(r"\s+(karo|do|please|now)$", "", app_target).strip()
                 if app_target:
                     return ("open_app", {"action": "open", "name": app_target})
@@ -178,10 +180,147 @@ class NeedleToolRouter:
             return ("youtube_video", {"action": "play", "query": vid_q or "trending"})
 
         # -- System Metrics ---------------------------------------------------
-        if re.search(r"\b(cpu usage|ram usage|temperature|system status|hardware status|pc performance)\b", clean):
+        if re.search(r"\b(cpu usage|ram usage|temperature|system status|hardware status|pc performance"
+                     r"|cpu kitna|ram kitna|memory kitni|processor load|pc garam|kitna garam)\b", clean):
             return ("system_status", {})
 
+        # -- Web Search -------------------------------------------------------
+        # "google karo X" / "X dhundo" / "search karo X" / "X ke baare mein batao"
+        m_ws_en = re.search(r"\b(search|google|bing|find|lookup)\s+(?:for\s+)?(.+)", clean)
+        m_ws_hi = re.search(r"(.+?)\s+(?:dhundo|search\s*karo|google\s*karo|khojo|batao|dekho)\b", clean)
+        m_ws_kya = re.search(r"\b(kya hai|kaun hai|kahan hai|kab hai)\s+(.+)", clean)
+        if m_ws_en:
+            q = m_ws_en.group(2).strip()
+            if q and len(q) > 1:
+                return ("web_search", {"query": q})
+        elif m_ws_hi:
+            q = m_ws_hi.group(1).strip()
+            q = re.sub(r"\b(yaar|bhai|sir|please|zara|jaldi|mujhe|abhi)\b", "", q).strip()
+            if q and len(q) > 1:
+                return ("web_search", {"query": q})
+        elif m_ws_kya:
+            q = f"{m_ws_kya.group(2)} {m_ws_kya.group(1)}".strip()
+            return ("web_search", {"query": q})
+
+        # -- Weather ----------------------------------------------------------
+        # "Delhi ka mausam" / "aaj weather" / "kal baarish hogi kya"
+        m_weather = re.search(
+            r"\b(mausam|weather|baarish|tapman|garmi|sardi|temperature|barish|barsat)\b", clean
+        )
+        if m_weather:
+            city_m = re.search(
+                r"\b(delhi|mumbai|bangalore|bengaluru|pune|hyderabad|chennai|kolkata|jaipur|lucknow"
+                r"|noida|gurgaon|chandigarh|ahmedabad|surat|indore|bhopal|patna|agra)\b", clean
+            )
+            city = city_m.group(1).title() if city_m else "current location"
+            when_m = re.search(r"\b(kal|tomorrow|aaj|today|parso|week)\b", clean)
+            when = "tomorrow" if when_m and "kal" in (when_m.group(1) or "") else "today"
+            return ("weather_report", {"city": city, "time": when})
+
+        # -- Reminder / Alarm -------------------------------------------------
+        # "5 minute baad yaad dilana" / "kal subah 8 baje reminder"
+        m_remind = re.search(
+            r"\b(reminder|alarm|yaad\s*dilana|yaad\s*karna|set\s*alarm|remind)\b", clean
+        )
+        if m_remind:
+            # Extract time expression
+            time_m = re.search(
+                r"(\d+)\s*(minute|min|ghante|hour|second|sec|baje|am|pm)", clean
+            )
+            msg_m = re.search(r"(?:ke\s*liye|ke\s*baad|baad|that)\s+(.+)$", clean)
+            r_time = time_m.group(0) if time_m else "5 minutes"
+            r_msg = msg_m.group(1).strip() if msg_m else "reminder"
+            r_msg = re.sub(r"\b(lagao|set|karo|do|dena|please)\b", "", r_msg).strip() or "reminder"
+            return ("reminder", {"action": "set", "time": r_time, "message": r_msg})
+
+        # -- WhatsApp / Message Send ------------------------------------------
+        # "Mummy ko WhatsApp karo" / "Rahul ko message bhejo" / "whatsapp mummy"
+        m_msg = re.search(
+            r"\b(whatsapp|message|msg|text|sms)\b.*(ko\s+|to\s+)?", clean
+        )
+        m_contact = re.search(
+            r"([a-zA-Z\u0900-\u097F]+)\s+ko\s+(?:whatsapp|message|msg|text)", clean
+        )
+        # Also match LFM-normalized "whatsapp {contact}" form
+        m_wa_direct = re.search(r"^whatsapp\s+([a-zA-Z\u0900-\u097F]+)$", clean.strip())
+        if m_wa_direct:
+            contact = m_wa_direct.group(1).strip()
+            if contact not in ("ek", "koi", "kuch", "yeh", "kisi", "karo", "bhejo"):
+                return ("send_message", {"platform": "whatsapp", "contact": contact, "message": ""})
+        elif m_msg and m_contact:
+            contact = m_contact.group(1).strip()
+            if contact not in ("ek", "koi", "kuch", "yeh"):
+                msg_text_m = re.search(
+                    r"(?:likho|likhke|bol|bolo|bhejo)\s+(.+)$", clean
+                )
+                msg_text = msg_text_m.group(1).strip() if msg_text_m else ""
+                return ("send_message", {
+                    "platform": "whatsapp",
+                    "contact": contact,
+                    "message": msg_text
+                })
+
+        # -- Window Control ---------------------------------------------------
+        # "minimize karo" / "maximize karo" / "window band karo" / "fullscreen"
+        if re.search(r"\b(minimize|choti\s*karo|chhupa\s*do|taskbar\s*mein)\b", clean):
+            return ("computer_settings", {"action": "minimize"})
+        if re.search(r"\b(maximize|badi\s*karo|fullscreen|poori\s*screen)\b", clean):
+            return ("computer_settings", {"action": "full_screen"})
+        if re.search(r"\b(window\s*band|window\s*close|band\s*karo\s*window|close\s*window|alt\s*f4)\b", clean):
+            return ("computer_settings", {"action": "close_window"})
+
+        # -- Typing / Clipboard -----------------------------------------------
+        # "yeh type karo: hello" / "likho: main theek hoon"
+        m_type = re.search(r"\b(?:type\s*karo|likho|type\s*this|type)\s*[:\-]?\s*(.+)$", clean)
+        if m_type:
+            type_text = m_type.group(1).strip().strip(":- \"'")
+            if type_text and len(type_text) > 0:
+                return ("computer_control", {"action": "type", "text": type_text})
+
+        # -- System Power (Shutdown / Restart / Sleep) ------------------------
+        # "PC band karo" / "shutdown" / "restart karo" / "sleep mode"
+        if re.search(r"\b(shutdown|pc\s*band|computer\s*band|band\s*karo\s*pc|band\s*kar\s*do)\b", clean):
+            if "restart" not in clean and "reboot" not in clean:
+                return ("computer_settings", {"action": "shutdown"})
+        if re.search(r"\b(restart|reboot|dobara\s*chalu|phir\s*se\s*start)\b", clean):
+            return ("computer_settings", {"action": "restart"})
+        if re.search(r"\b(sleep|hibernate|so\s*jao|pc\s*so|suspend)\b", clean):
+            return ("computer_settings", {"action": "sleep"})
+
+        # -- WiFi / Internet Toggle -------------------------------------------
+        # "wifi on karo" / "wifi off karo" / "internet band karo"
+        if re.search(r"\b(wifi|wi-fi|internet|net|network)\b", clean):
+            if any(w in clean for w in ("on", "chalu", "shuru", "connect", "lagao")):
+                return ("computer_settings", {"action": "wifi_on"})
+            if any(w in clean for w in ("off", "band", "disconnect", "hatao", "rok")):
+                return ("computer_settings", {"action": "wifi_off"})
+
+        # -- File / Folder Open -----------------------------------------------
+        # "downloads kholo" / "desktop kholo" / "documents folder"
+        _folder_map = {
+            "downloads": str(os.path.expanduser("~\\Downloads")),
+            "desktop": str(os.path.expanduser("~\\Desktop")),
+            "documents": str(os.path.expanduser("~\\Documents")),
+            "pictures": str(os.path.expanduser("~\\Pictures")),
+            "videos": str(os.path.expanduser("~\\Videos")),
+            "music": str(os.path.expanduser("~\\Music")),
+            "c drive": "C:\\",
+            "d drive": "D:\\",
+            "e drive": "E:\\",
+        }
+        m_folder = re.search(
+            r"\b(downloads|desktop|documents|pictures|videos|music|c\s*drive|d\s*drive|e\s*drive)\b", clean
+        )
+        m_folder_action = any(w in clean for w in (
+            "kholo", "open", "dekho", "dikhao", "jao", "explore", "show"
+        ))
+        if m_folder and m_folder_action:
+            folder_key = m_folder.group(1).strip()
+            folder_path = _folder_map.get(folder_key, str(os.path.expanduser("~")))
+            return ("file_controller", {"action": "open_folder", "path": folder_path})
+
         # -- Neural Needle 2 Engine Fallback (foundation model tool extraction) --
+
         if self._needle_loaded and self._needle_instance is not None:
             try:
                 res = self._needle_instance.run(text)
@@ -311,6 +450,86 @@ class LFMChatEngine:
         # E.g. "kaun se apps chal rahe hain", "kya khula hai"
         if any(w in clean for w in ("kaun se", "konsa", "kya")) and any(w in clean for w in ("app", "program", "software")) and any(w in clean for w in ("chal", "khula", "open", "running")):
             return "running apps", "list_apps"
+
+        # Semantic Mapping 6: Web Search
+        # "google karo X" / "X ke baare mein batao" / "X dhundo" / "X kya hai"
+        if any(w in clean for w in ("google karo", "search karo", "dhundo", "khojo", "net par dekho")):
+            q = re.sub(r"\b(google\s*karo|search\s*karo|dhundo|khojo|net\s*par\s*dekho|zara|yaar|bhai|sir|please)\b", "", clean).strip()
+            if q:
+                return f"search {q}", "web_search"
+        if re.search(r"\bke\s+baare\s+mein\s+(batao|bolo|samjhao|likho)\b", clean):
+            q = re.sub(r"\bke\s+baare\s+mein\s+(batao|bolo|samjhao|likho)\b", "", clean).strip()
+            if q:
+                return f"search {q}", "web_search"
+
+        # Semantic Mapping 7: Weather
+        # "Delhi ka mausam" / "aaj garmi hai kitni" / "kal baarish hogi"
+        if any(w in clean for w in ("mausam", "baarish", "barish", "garmi", "sardi", "tapman", "barsat")):
+            city_m = re.search(r"\b(delhi|mumbai|bangalore|bengaluru|pune|hyderabad|chennai|kolkata|jaipur|lucknow|noida|gurgaon)\b", clean)
+            city = city_m.group(1).title() if city_m else "current location"
+            when = "tomorrow" if "kal" in clean else "today"
+            return f"weather {city} {when}", "weather"
+
+        # Semantic Mapping 8: Reminder
+        # "5 min baad yaad dilana" / "reminder lagao" / "alarm set karo"
+        if any(w in clean for w in ("yaad dilana", "yaad dilao", "reminder lagao", "alarm lagao", "alarm set")):
+            time_m = re.search(r"(\d+)\s*(minute|min|ghante|hour|baje)", clean)
+            t = time_m.group(0) if time_m else "5 minutes"
+            return f"reminder {t}", "reminder"
+
+        # Semantic Mapping 9: WhatsApp / Message
+        # "Mummy ko whatsapp karo" / "bhai ko message bhejo"
+        m_wa = re.search(r"([a-zA-Z\u0900-\u097F]+)\s+ko\s+(whatsapp|message|msg)\s*(karo|bhejo|likho|bhej\s*do)?", clean)
+        if m_wa:
+            contact = m_wa.group(1).strip()
+            if contact not in ("ek", "koi", "kuch", "yeh", "kisi"):
+                return f"whatsapp {contact}", "send_whatsapp"
+
+        # Semantic Mapping 10: Window Control
+        # "window chhoti karo" / "screen minimize" / "badi karo window"
+        if any(w in clean for w in ("minimize", "chhoti karo", "chota karo", "taskbar mein")):
+            return "minimize window", "minimize"
+        if any(w in clean for w in ("maximize", "badi karo", "bada karo", "fullscreen", "poori screen")):
+            return "maximize window", "maximize"
+        if any(w in clean for w in ("window band", "window close", "band karo window")):
+            return "close window", "close_window"
+
+        # Semantic Mapping 11: Typing
+        # "yeh type karo: hello" / "likho yeh: ..."
+        m_type_hi = re.search(r"\b(type\s*karo|likho|type\s*this)\s*[:\-]?\s*(.+)$", clean)
+        if m_type_hi:
+            t_text = m_type_hi.group(2).strip().strip(":- \"'")
+            if t_text:
+                return f"type {t_text}", "type_text"
+
+        # Semantic Mapping 12: System Power
+        # "PC band karo" / "PC off karo" / "restart karo" / "so jao"
+        if any(w in clean for w in ("pc band", "computer band", "pc off", "band kar do", "shut down", "shutdown")):
+            if "restart" not in clean:
+                return "shutdown pc", "shutdown"
+        if any(w in clean for w in ("restart karo", "reboot", "dobara chalu", "phir se start")):
+            return "restart pc", "restart"
+        if any(w in clean for w in ("sleep mode", "hibernate", "pc so", "so jao")):
+            return "sleep pc", "sleep"
+
+        # Semantic Mapping 13: WiFi
+        # "wifi on karo" / "internet chalu karo" / "net band karo"
+        if any(w in clean for w in ("wifi", "wi-fi", "internet", "net")):
+            if any(w in clean for w in ("on", "chalu", "shuru", "lagao", "connect")):
+                return "wifi on", "wifi_on"
+            if any(w in clean for w in ("off", "band", "disconnect", "hatao")):
+                return "wifi off", "wifi_off"
+
+        # Semantic Mapping 14: Folder / File Open
+        # "downloads kholo" / "desktop folder dikhao"
+        _hi_folders = {
+            "downloads": "downloads", "desktop": "desktop",
+            "documents": "documents", "pictures": "pictures",
+            "videos": "videos", "music": "music",
+        }
+        for folder_hi, folder_en in _hi_folders.items():
+            if folder_hi in clean and any(w in clean for w in ("kholo", "open", "dekho", "dikhao")):
+                return f"open folder {folder_en}", "open_folder"
 
         return text, "general"
 

@@ -847,6 +847,27 @@ def file_controller(
         elif action == "info":
             return get_file_info(path, name=name)
 
+        elif action in ("open_folder", "open", "explore", "show_folder"):
+            # Open folder in system file explorer
+            import subprocess, platform as _plat
+            target_path = _resolve_path(path)
+            if not target_path.exists():
+                # Try path directly as string (absolute path from Needle)
+                target_path = Path(path)
+            if not target_path.exists():
+                return f"Folder not found: {path}"
+            sys_name = _plat.system()
+            try:
+                if sys_name == "Windows":
+                    subprocess.Popen(["explorer", str(target_path)], creationflags=subprocess.CREATE_NO_WINDOW)
+                elif sys_name == "Darwin":
+                    subprocess.Popen(["open", str(target_path)])
+                else:
+                    subprocess.Popen(["xdg-open", str(target_path)])
+                return f"Opened: {target_path}"
+            except Exception as e:
+                return f"Could not open folder: {e}"
+
         else:
             return f"Unknown action: '{action}'"
 
