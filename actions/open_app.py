@@ -1,7 +1,11 @@
-import time
-import subprocess
+import difflib
+import json
+import os
 import platform
 import shutil
+import subprocess
+import time
+from pathlib import Path
 
 try:
     import psutil
@@ -12,7 +16,6 @@ except ImportError:
 _SYSTEM = platform.system()
 
 _APP_ALIASES: dict[str, dict[str, str]] = {
-
     "chrome":             {"Windows": "chrome",                  "Darwin": "Google Chrome",        "Linux": "google-chrome"},
     "google chrome":      {"Windows": "chrome",                  "Darwin": "Google Chrome",        "Linux": "google-chrome"},
     "firefox":            {"Windows": "firefox",                 "Darwin": "Firefox",              "Linux": "firefox"},
@@ -64,21 +67,186 @@ _APP_ALIASES: dict[str, dict[str, str]] = {
     "epic games":         {"Windows": "EpicGamesLauncher",       "Darwin": "Epic Games Launcher",  "Linux": "legendary"},
 }
 
+_CATEGORY_FALLBACKS: dict[str, list[str]] = {
+    "browser": ["brave", "chrome", "msedge", "firefox", "opera"],
+    "chrome": ["chrome", "brave", "msedge", "firefox", "opera"],
+    "google chrome": ["chrome", "brave", "msedge", "firefox", "opera"],
+    "brave": ["brave", "chrome", "msedge", "firefox"],
+    "firefox": ["firefox", "chrome", "brave", "msedge"],
+    "edge": ["msedge", "brave", "chrome", "firefox"],
 
-def _normalize(raw: str) -> str:
-    key = raw.lower().strip()
+    "notepad": ["notepad", "notepad3", "notepad++", "code", "sublime_text"],
+    "text editor": ["notepad", "notepad3", "notepad++", "code", "sublime_text"],
+    "editor": ["notepad", "code", "notepad++", "notepad3", "sublime_text"],
+    "code editor": ["code", "cursor", "sublime_text", "notepad++", "notepad"],
+    "vscode": ["code", "cursor", "sublime_text", "notepad++"],
 
+    "media player": ["vlc", "wmplayer", "mpv", "potplayer", "groove"],
+    "video player": ["vlc", "wmplayer", "mpv", "potplayer"],
+    "music player": ["spotify", "vlc", "wmplayer", "groove"],
+
+    "terminal": ["wt", "powershell", "cmd", "git-bash"],
+    "cmd": ["cmd", "wt", "powershell"],
+    "powershell": ["powershell", "wt", "cmd"],
+}
+
+_INSTALLED_APPS_CACHE: dict[str, str] = {}
+_CACHE_FILE = Path(__file__).resolve().parent.parent / "config" / "installed_apps.json"
+
+
+def _scan_installed_apps() -> dict[str, str]:
+    """Scan and index all installed desktop and Store applications on Windows."""
+    global _INSTALLED_APPS_CACHE
+    if _INSTALLED_APPS_CACHE:
+        return _INSTALLED_APPS_CACHE
+
+    if _CACHE_FILE.exists():
+        try:
+            data = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+            if data and isinstance(data, dict):
+                _INSTALLED_APPS_CACHE = data
+                return _INSTALLED_APPS_CACHE
+        except Exception:
+            pass
+
+    apps: dict[str, str] = {}
+    if _SYSTEM == "Windows":
+        try:
+            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-StartApps | ConvertTo-Json"]
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
+            if p.returncode == 0 and p.stdout.strip():
+                items = json.loads(p.stdout)
+                if isinstance(items, dict):
+                    items = [items]
+                for item in items:
+                    name = item.get("Name", "").replace(".lnk", "").strip()
+                    appid = item.get("AppID", "").strip()
+                    if name and appid:
+                        apps[name.lower()] = appid
+        except Exception as e:
+            print(f"[open_app] Get-StartApps note: {e}")
+
+        # Also index Start Menu shortcut directories
+        start_menu_dirs = [
+            Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+            Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+        ]
+        for sm_dir in start_menu_dirs:
+            if sm_dir.exists():
+                try:
+                    for lnk in sm_dir.rglob("*.lnk"):
+                        clean_n = lnk.stem.strip()
+                        if clean_n and clean_n.lower() not in apps:
+                            apps[clean_n.lower()] = str(lnk)
+                except Exception:
+                    pass
+
+    _INSTALLED_APPS_CACHE = apps
+    if apps:
+        try:
+            _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _CACHE_FILE.write_text(json.dumps(apps, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+    return apps
+
+
+def _is_app_installed(name_or_bin: str) -> bool:
+    """Check whether a binary or app name is directly reachable on the system."""
+    if not name_or_bin:
+        return False
+    if shutil.which(name_or_bin) or shutil.which(name_or_bin.split(".")[0]):
+        return True
+    installed = _scan_installed_apps()
+    k = name_or_bin.lower()
+    if k in installed:
+        return True
+    for app_name in installed:
+        if k == app_name or k in app_name:
+            return True
+    return False
+
+
+def _resolve_app(requested: str) -> tuple[str, str | None]:
+    """
+    Intelligently resolves requested app with 4-stage search:
+    1. Exact alias or system path check
+    2. Substring match across 160+ installed apps
+    3. Fuzzy string matching (difflib)
+    4. Category fallback (e.g. Chrome not found -> open Brave or Edge)
+    Returns (launch_target, note_if_fallback)
+    """
+    key = requested.lower().strip()
+    installed = _scan_installed_apps()
+
+    # Stage 1: Category fallback first (handles "browser", "editor", or missing specific app like "chrome" -> "brave")
+    if key in _CATEGORY_FALLBACKS:
+        for candidate in _CATEGORY_FALLBACKS[key]:
+            if candidate == key:
+                if candidate in installed:
+                    return installed[candidate], None
+                cand_bin = _APP_ALIASES.get(candidate, {}).get(_SYSTEM, candidate)
+                if _is_app_installed(cand_bin):
+                    real_target = installed.get(candidate, installed.get(cand_bin.lower(), cand_bin))
+                    return real_target, None
+                continue
+            cand_target = _APP_ALIASES.get(candidate, {}).get(_SYSTEM, candidate)
+            if _is_app_installed(cand_target):
+                real_target = installed.get(candidate, installed.get(cand_target.lower(), cand_target))
+                note = f"'{requested}' install nahi mila, toh maine aapka alternate ({candidate.capitalize()}) open kar diya"
+                return real_target, note
+            for app_name, app_id in installed.items():
+                if candidate in app_name:
+                    note = f"'{requested}' install nahi mila, toh maine aapka alternate ({app_name.title()}) open kar diya"
+                    return app_id, note
+
+    # Stage 2: Direct match in installed applications
+    if key in installed:
+        return installed[key], None
+
+    # Stage 3: Exact alias on system
     if key in _APP_ALIASES:
-        return _APP_ALIASES[key].get(_SYSTEM, raw)
+        target = _APP_ALIASES[key].get(_SYSTEM, requested)
+        if _is_app_installed(target):
+            real_launch_target = installed.get(key, installed.get(target.lower(), target))
+            return real_launch_target, None
 
+    # Check if executable directly exists on PATH
+    if shutil.which(key) or shutil.which(key.split(".")[0]):
+        return key, None
+
+    # Substring match across installed apps
+    for app_name, app_id in installed.items():
+        if key in app_name or app_name in key:
+            return app_id, None
+
+    # Stage 4: Fuzzy matching against installed apps
+    all_names = list(installed.keys())
+    close = difflib.get_close_matches(key, all_names, n=1, cutoff=0.6)
+    if close:
+        matched_name = close[0]
+        return installed[matched_name], f"'{requested}' ki jagah '{matched_name}' mila"
+
+    # Fallback to normalized alias or raw string
     for alias_key, os_map in _APP_ALIASES.items():
         if alias_key in key or key in alias_key:
-            return os_map.get(_SYSTEM, raw)
+            return os_map.get(_SYSTEM, requested), None
 
-    return raw  
+    return requested, None
+
 
 def _launch_windows(app_name: str) -> bool:
+    """Launch application on Windows via path, AppID, shell protocol, or Start Menu."""
+    # 1. Direct path to .lnk or .exe
+    if app_name.endswith(".lnk") or app_name.endswith(".exe") and os.path.exists(app_name):
+        try:
+            subprocess.Popen(f'start "" "{app_name}"', shell=True)
+            time.sleep(1.0)
+            return True
+        except Exception:
+            pass
 
+    # 2. Direct binary on PATH
     if shutil.which(app_name) or shutil.which(app_name.split(".")[0]):
         try:
             subprocess.Popen(
@@ -87,12 +255,13 @@ def _launch_windows(app_name: str) -> bool:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            time.sleep(1.5)
+            time.sleep(1.2)
             return True
         except Exception as e:
             print(f"[open_app] subprocess failed: {e}")
 
-    if ":" in app_name:
+    # 3. Protocol handler (e.g. ms-settings:)
+    if ":" in app_name and not ("\\" in app_name or "/" in app_name):
         try:
             subprocess.Popen(f"start {app_name}", shell=True)
             time.sleep(1.0)
@@ -100,6 +269,16 @@ def _launch_windows(app_name: str) -> bool:
         except Exception:
             pass
 
+    # 4. Windows Store / Get-StartApps AppID via shell:AppsFolder
+    if app_name:
+        try:
+            subprocess.Popen(f'explorer.exe "shell:AppsFolder\\\\{app_name}"', shell=True)
+            time.sleep(1.2)
+            return True
+        except Exception:
+            pass
+
+    # 5. Last resort: Start Menu keyboard automation
     try:
         import pyautogui
         pyautogui.PAUSE = 0.1
@@ -108,7 +287,7 @@ def _launch_windows(app_name: str) -> bool:
         pyautogui.write(app_name, interval=0.05)
         time.sleep(0.9)
         pyautogui.press("enter")
-        time.sleep(2.5)
+        time.sleep(2.0)
         return True
     except Exception as e:
         print(f"[open_app] Start Menu search failed: {e}")
@@ -117,12 +296,8 @@ def _launch_windows(app_name: str) -> bool:
 
 
 def _launch_macos(app_name: str) -> bool:
-
     try:
-        result = subprocess.run(
-            ["open", "-a", app_name],
-            capture_output=True, timeout=8
-        )
+        result = subprocess.run(["open", "-a", app_name], capture_output=True, timeout=8)
         if result.returncode == 0:
             time.sleep(1.0)
             return True
@@ -130,10 +305,7 @@ def _launch_macos(app_name: str) -> bool:
         pass
 
     try:
-        result = subprocess.run(
-            ["open", "-a", f"{app_name}.app"],
-            capture_output=True, timeout=8
-        )
+        result = subprocess.run(["open", "-a", f"{app_name}.app"], capture_output=True, timeout=8)
         if result.returncode == 0:
             time.sleep(1.0)
             return True
@@ -143,11 +315,7 @@ def _launch_macos(app_name: str) -> bool:
     binary = shutil.which(app_name) or shutil.which(app_name.lower())
     if binary:
         try:
-            subprocess.Popen(
-                [binary],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
+            subprocess.Popen([binary], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(1.0)
             return True
         except Exception:
@@ -174,8 +342,6 @@ _LINUX_TERMINAL_FALLBACKS = [
 ]
 
 def _launch_linux(app_name: str) -> bool:
-
-    # terminal emulators: try common ones in order
     if app_name in ("x-terminal-emulator", "gnome-terminal", "terminal"):
         for term in _LINUX_TERMINAL_FALLBACKS:
             if shutil.which(term):
@@ -194,21 +360,14 @@ def _launch_linux(app_name: str) -> bool:
     )
     if binary:
         try:
-            subprocess.Popen(
-                [binary],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
+            subprocess.Popen([binary], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(1.0)
             return True
         except Exception:
             pass
 
     try:
-        subprocess.run(
-            ["xdg-open", app_name],
-            capture_output=True, timeout=5
-        )
+        subprocess.run(["xdg-open", app_name], capture_output=True, timeout=5)
         return True
     except Exception:
         pass
@@ -219,10 +378,7 @@ def _launch_linux(app_name: str) -> bool:
         app_name.lower().replace(" ", ""),
     ]:
         try:
-            result = subprocess.run(
-                ["gtk-launch", desktop_name],
-                capture_output=True, timeout=5
-            )
+            result = subprocess.run(["gtk-launch", desktop_name], capture_output=True, timeout=5)
             if result.returncode == 0:
                 return True
         except Exception:
@@ -260,6 +416,42 @@ def list_running_apps() -> list[str]:
     return sorted(list(user_apps))
 
 
+def _close_app(app_name: str) -> str:
+    """Gracefully terminate or kill a running application process."""
+    if not app_name:
+        return "No application specified to close."
+
+    clean_target = app_name.lower().strip().replace(".exe", "")
+    closed_count = 0
+
+    if _PSUTIL:
+        for proc in psutil.process_iter(['name', 'pid']):
+            try:
+                pname = (proc.info.get('name') or "").lower().replace(".exe", "")
+                if clean_target == pname or clean_target in pname:
+                    proc.terminate()
+                    closed_count += 1
+            except Exception:
+                pass
+
+    if closed_count > 0:
+        return f"{app_name.capitalize()} band kar diya gaya hai ({closed_count} process closed)."
+
+    # Fallback to taskkill on Windows
+    if _SYSTEM == "Windows":
+        try:
+            res = subprocess.run(
+                ["taskkill", "/IM", f"{clean_target}.exe", "/F"],
+                capture_output=True, text=True, timeout=5
+            )
+            if res.returncode == 0:
+                return f"{app_name.capitalize()} band kar diya gaya hai."
+        except Exception:
+            pass
+
+    return f"{app_name.capitalize()} abhi chal nahi raha tha."
+
+
 def open_app(
     parameters=None,
     response=None,
@@ -267,7 +459,6 @@ def open_app(
     session_memory=None,
 ) -> str:
     params = parameters or {}
-    # Support both "app_name" (Gemini Cloud) and "name" (Needle 2) keys
     app_name = (params.get("app_name") or params.get("name") or "").strip()
     action = params.get("action", "open").strip().lower()
 
@@ -281,22 +472,30 @@ def open_app(
     if not app_name:
         return "No application name provided."
 
+    if action in ("close", "kill", "quit", "band", "exit"):
+        return _close_app(app_name)
+
     launcher = _OS_LAUNCHERS.get(_SYSTEM)
     if launcher is None:
         return f"Unsupported operating system: {_SYSTEM}"
 
-    normalized = _normalize(app_name)
-    print(f"[open_app] Launching: '{app_name}' → '{normalized}' ({_SYSTEM})")
+    resolved_target, fallback_note = _resolve_app(app_name)
+    print(f"[open_app] Launching: '{app_name}' → '{resolved_target}' (Note: {fallback_note})")
 
     if player:
         player.write_log(f"[open_app] {app_name}")
 
     try:
-        if launcher(normalized):
+        if launcher(resolved_target):
+            if fallback_note:
+                return f"{fallback_note}, aur successfully open kar diya!"
             return f"Opened {app_name}."
-        if normalized.lower() != app_name.lower():
+
+        # Secondary attempt with raw app_name
+        if resolved_target.lower() != app_name.lower():
             if launcher(app_name):
                 return f"Opened {app_name}."
+
         return (
             f"Could not confirm that {app_name} launched. "
             f"It may still be loading, or it might not be installed."
@@ -309,17 +508,17 @@ def open_app(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "open_app",
-    "description": "Opens any application on the computer, or lists active running applications. Use this whenever the user asks to open/launch an app or ask what apps are currently open/running.",
+    "description": "Opens any application on the computer, closes apps, or lists active running applications. Supports intelligent auto-discovery of all installed apps and smart category fallbacks (e.g. opens Brave if Chrome is not installed).",
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "app_name": {
                 "type": "STRING",
-                "description": "Exact name of the application (e.g. 'WhatsApp', 'Chrome', 'Spotify') or 'list' to see running apps."
+                "description": "Exact or colloquial name of the application (e.g. 'Chrome', 'Notepad', 'Brave', 'Browser', 'Terminal') or 'list' to see running apps."
             },
             "action": {
                 "type": "STRING",
-                "description": "'open' to launch an app, or 'list' to list all currently running applications."
+                "description": "'open' to launch an app, 'close' to terminate an app, or 'list' to list currently running applications."
             }
         },
         "required": [

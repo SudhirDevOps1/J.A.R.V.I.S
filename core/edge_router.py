@@ -137,10 +137,16 @@ class NeedleToolRouter:
         except Exception:
             pass
 
-        # -- Autonomous Sub-Agent Swarm ---------------------------------------
-        # "subagent chalao" / "multi agent research" / "swarm task" / "swarm run"
-        if re.search(r"\b(subagent chalao|multi agent|swarm run|swarm task|background research|deep reverse engineer)\b", clean):
-            task_text = re.sub(r"\b(subagent\s*chalao|multi\s*agent|swarm\s*run|swarm\s*task|background\s*research|deep\s*reverse\s*engineer|karo|do|please|par)\b", "", clean).strip()
+        # -- Autonomous Sub-Agent Swarm (Ultra-Resilient Speech Parsing) ------
+        # "subagent chalao" / "multi agent research" / "swarm run" / "background research"
+        m_swarm = re.search(r"\b(subagent|multi\s*agent|multiagent|swarm|background\s*research)\b", clean)
+        if m_swarm:
+            task_text = clean
+            task_text = re.sub(r"\b(subagent\s*(?:chalao|chala\s*do|start\s*karo|start\s*kro|run|kholo)?|multi\s*agent|multiagent|swarm\s*(?:run|task|mode)?|background\s*research)\b", " ", task_text)
+            task_text = re.sub(r"\b(yaar|bhai|sir|please|plz|zara|jara|abhi|jaldi\s*se|jaldi|kripya|ek|aur|par|pe|me|mein)\b", " ", task_text)
+            task_text = re.sub(r"\b(background\s*me|background\s*mein|background|start\s*karo|start\s*kro|chalu\s*karo|chalao|chala\s*do|karo|kar\s*do|kro|do|de|dena)\b", " ", task_text)
+            task_text = re.sub(r"\b(krke\s*report\s*do|karke\s*report\s*do|report\s*do|krke|karke|report\s*banao|report|batao|dikhao)\b", " ", task_text)
+            task_text = " ".join(task_text.split()).strip()
             return _dispatch("subagent_swarm", {"task": task_text or "live web research"})
 
         # -- Dynamic API Sniffer & Reverse Engineer ---------------------------
@@ -168,9 +174,9 @@ class NeedleToolRouter:
         if re.search(r"\b(show desktop|desktop dikhao|sab minimize)\b", clean):
             return _dispatch("computer_settings", {"action": "show_desktop"})
 
-        # Matches: "open chrome", "launch notepad", "chrome kholo", "notepad chalao"
-        m_open_en = re.search(r"\b(open|launch|start|run)\s+([a-zA-Z0-9_\-\.]+)", clean)
-        m_open_hi = re.search(r"\b([a-zA-Z0-9_\-\.]+)\s+(kholo|chalao|start karo|open karo)\b", clean)
+        # Matches: "open chrome", "launch notepad", "chrome kholo", "notepad chalao", "code editor kholo"
+        m_open_en = re.search(r"\b(open|launch|start|run)\s+([a-zA-Z0-9_\-\.]+(?:\s+[a-zA-Z0-9_\-\.]+)?)\b", clean)
+        m_open_hi = re.search(r"\b([a-zA-Z0-9_\-\.]+(?:\s+[a-zA-Z0-9_\-\.]+)?)\s+(kholo|chalao|start karo|open karo)\b", clean)
         if m_open_en or m_open_hi:
             app_target = (m_open_en.group(2) if m_open_en else m_open_hi.group(1)).strip()
             _folder_words = ("storage", "camera", "c drive", "d drive", "video", "youtube",
@@ -183,8 +189,8 @@ class NeedleToolRouter:
                     return _dispatch("open_app", {"action": "open", "name": app_target})
 
         # Matches: "close chrome", "kill notepad", "chrome band karo", "spotify band"
-        m_close_en = re.search(r"\b(close|kill|exit)\s+([a-zA-Z0-9_\-\.]+)", clean)
-        m_close_hi = re.search(r"\b([a-zA-Z0-9_\-\.]+)\s+(band karo|band|close karo)\b", clean)
+        m_close_en = re.search(r"\b(close|kill|exit)\s+([a-zA-Z0-9_\-\.]+(?:\s+[a-zA-Z0-9_\-\.]+)?)\b", clean)
+        m_close_hi = re.search(r"\b([a-zA-Z0-9_\-\.]+(?:\s+[a-zA-Z0-9_\-\.]+)?)\s+(band karo|band|close karo)\b", clean)
         if m_close_en or m_close_hi:
             app_target = (m_close_en.group(2) if m_close_en else m_close_hi.group(1)).strip()
             if not any(k in app_target for k in ("storage", "camera", "window", "tab", "pc", "computer", "wifi", "internet")):
@@ -785,9 +791,11 @@ class LFMChatEngine:
             return f"sniff api {target}", "api_sniffer"
 
         # Semantic Mapping 21: Autonomous Sub-Agent Swarm
-        if any(w in clean for w in ("subagent chalao", "multi agent", "swarm run", "background research")):
-            task = re.sub(r"\b(subagent\s*chalao|multi\s*agent|swarm\s*run|background\s*research|par|karo|do)\b", "", clean).strip()
-            return f"subagent chalao {task}", "subagent_swarm"
+        if any(w in clean for w in ("subagent", "multi agent", "multiagent", "swarm", "background research")):
+            task = re.sub(r"\b(subagent\s*(?:chalao|chala\s*do|start\s*karo|run|kholo)?|multi\s*agent|multiagent|swarm\s*(?:run|task|mode)?|background\s*research|par|pe|karo|kar\s*do|do|please|zara|jara|yaar|bhai)\b", " ", clean)
+            task = re.sub(r"\b(background\s*me|background\s*mein|background|start\s*karo|start\s*kro|chalu\s*karo|chalao|krke\s*report\s*do|report\s*do|report|batao|dikhao)\b", " ", task)
+            task = " ".join(task.split()).strip()
+            return f"subagent chalao {task or 'research'}", "subagent_swarm"
 
         # Semantic Mapping 22: Mouse & Click Actions
         if any(w in clean for w in ("double click", "do baar click")):
