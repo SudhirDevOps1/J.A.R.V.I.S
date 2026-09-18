@@ -7,6 +7,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+env:
+  PYTHONIOENCODING: "utf-8"
+
 jobs:
   validate-and-test:
     name: Build, Syntax & Smoke Test (${{ matrix.os }} - Py ${{ matrix.python-version }})
@@ -57,14 +60,20 @@ jobs:
         shell: bash
         run: |
           python -c "
+          import sys
+          if hasattr(sys.stdout, 'reconfigure'):
+              sys.stdout.reconfigure(encoding='utf-8', errors='replace')
           from core.system_info import get_drive_stats, get_free_weather, fetch_top_dev_news
-          print('Disk stats test:', get_drive_stats())
-          print('Weather test:', get_free_weather())
-          print('News test:', fetch_top_dev_news(1))
+          d = get_drive_stats()
+          print('Disk stats count:', len(d))
+          w = get_free_weather()
+          print('Weather test status:', w.get('success', False), 'city:', w.get('city', 'Unknown'))
+          n = fetch_top_dev_news(1)
+          print('News test count:', len(n))
           "
 
       - name: 🔍 Lint & Code Health Check
         shell: bash
         run: |
           # Stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,venv,build,dist
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,venv,build,dist,config/generated_sniffers

@@ -59,6 +59,9 @@ import numpy as np
 from google import genai
 from google.genai import types
 
+from memory.config_manager import get_app_name
+APP_VERSION = get_app_name()
+
 # Windows AppUserModelID registration (Taskbar Icon)
 if sys.platform == "win32":
     try:
@@ -1799,7 +1802,7 @@ class JarvisLive:
         cur_persona = get_persona_mode()
         pref_lang   = get_preferred_language()
         cfg_user    = get_user_name()
-        u_name      = cfg_user or name
+        u_name      = cfg_user or _val("name") or "Sir"
 
         now      = datetime.now()
         day_str  = now.strftime("%A")            # e.g., Thursday

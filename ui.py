@@ -2293,8 +2293,9 @@ class ProviderSettingsOverlay(QWidget):
                             self._edge_test_stat.setStyleSheet("color: #00d4ff;")
                         ))
                 except Exception as ex:
-                    QTimer.singleShot(0, lambda: (
-                        self._edge_test_stat.setText(f"[ERR] Reflex error: {str(ex)[:35]}"),
+                    err_str = str(ex)[:35]
+                    QTimer.singleShot(0, lambda msg=err_str: (
+                        self._edge_test_stat.setText(f"[ERR] Reflex error: {msg}"),
                         self._edge_test_stat.setStyleSheet("color: #ff4444;")
                     ))
             threading.Thread(target=_run, daemon=True).start()
