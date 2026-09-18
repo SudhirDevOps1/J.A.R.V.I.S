@@ -2,6 +2,32 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [2026-09-18 12:20] — GitHub Actions CI/CD Hardening, Husky Removal & Native Python Hooks
+
+### 🚀 Production CI/CD & Static Analysis Hardening
+1. **Flake8 Strict Compliance**:
+   - Resolved undefined name (`F821`) errors in `main.py` and `ui.py` (fixed `APP_VERSION`, `name` scope in greetings, and exception closure scope in UI edge reflex test).
+   - Flake8 now passes with **0 errors** across all project directories.
+2. **Windows Runner UTF-8 Encoding Guard**:
+   - Added `PYTHONIOENCODING: "utf-8"` in `.github/workflows/ci.yml` matrix.
+   - Guarded console output for weather telemetry and emojis to prevent Windows `cp1252` `UnicodeEncodeError` on GitHub Actions runners.
+
+### 🛡️ Husky Removal & Native Python Git Hooks
+1. **Husky & Node Artifact Elimination**:
+   - Fully removed `.husky/`, `package.json`, `package-lock.json`, and `node_modules/` to eliminate JavaScript bloat from a pure Python project.
+   - Reset `core.hooksPath` to default Git configuration.
+2. **Pure Python Git Hooks (`.git/hooks/pre-commit`, `.git/hooks/pre-push`)**:
+   - **`pre-commit`**: Automatically checks for committed secrets (`config/api_keys.json`, `.env`), verifies Python syntax via `py_compile` & `compileall`, and runs `flake8` before every commit.
+   - **`pre-push`**: Executes automated smoke tests on drive stats, weather, and dev news feeds prior to pushing upstream.
+   - **Zero External Dependencies**: Works out-of-the-box on every developer machine with pure Python.
+
+### ⚡ Tri-Tier Edge AI Architecture Verification (`core/edge_router.py`)
+1. **Tier 1 (Needle 2 Reflex)**: 45M parameters (~28MB RAM), sub-15ms local tool-calling reflex for system commands with 0 token consumption.
+2. **Tier 2 (LFM 2.5 Chat)**: 230M parameters (~180MB RAM), on-device foundation chat for offline interactions.
+3. **Tier 3 (Gemini Cloud)**: Deep multimodal vision and complex reasoning via Gemini Live and high-speed provider matrix.
+
+---
+
 ## [2026-09-17 16:30] — Robust Auto-Setup Launcher, Desktop Shortcut Fix, & Custom Arc Reactor Icon
 
 ### 🚀 Self-Healing Auto-Setup Batch Launcher (`start_jarvis.bat`)

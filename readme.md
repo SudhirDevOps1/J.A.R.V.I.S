@@ -1,22 +1,34 @@
-# ⚙️ J.A.R.V.I.S. (SudhirDevOps1 AI)
-### The Ultimate Cross-Platform Personal AI Assistant — By SudhirDevOps1
+<div align="center">
+  <img src="config/jarvis.png" width="160" height="160" alt="J.A.R.V.I.S. Arc Reactor Logo" />
+  <h1>⚙️ J.A.R.V.I.S. (Mark-LIII)</h1>
+  <p><b>The Ultimate Production-Ready Cross-Platform Personal AI Assistant</b></p>
+  <p><i>Tri-Tier Edge AI Architecture: Needle 2 (Reflex) ➔ LFM 2.5 (Chat) ➔ Gemini Cloud (Reasoning)</i></p>
+  <p><i>Engineered by <a href="https://github.com/SudhirDevOps1">SudhirDevOps1</a></i></p>
 
-[![GitHub Release](https://img.shields.io/github/v/release/SudhirDevOps1/J.A.R.V.I.S?color=00ffff&label=release)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/releases)
-[![CI/CD](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions/workflows/ci.yml/badge.svg)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+  [![GitHub Release](https://img.shields.io/github/v/release/SudhirDevOps1/J.A.R.V.I.S?color=00ffff&label=release)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/releases)
+  [![CI/CD](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions/workflows/ci.yml/badge.svg)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+  [![Edge Reflex](https://img.shields.io/badge/Edge%20AI-Needle%202%20%7C%2028MB%20RAM-00ffaa.svg)](#-tri-tier-edge-ai-architecture)
+  [![Code Style: Flake8](https://img.shields.io/badge/code%20style-flake8%20clean-green.svg)](https://flake8.pycqa.org/)
+</div>
 
-A real-time voice AI that can hear, see, understand, and control your computer — on any OS. Supports Windows, macOS, and Linux. Built on the Gemini Live API for native audio streaming, delivering zero subscriptions and total digital autonomy.
+---
+
+A real-time, production-grade voice AI that can hear, see, understand, and control your computer — on any OS. Powered by a high-efficiency **Tri-Tier Edge AI Architecture** (Needle 2 on-device reflex, LFM 2.5 offline chat, and Gemini Live cloud reasoning) with native audio streaming, zero paid subscriptions, and total digital autonomy.
 
 ---
 
 ## ✨ Overview
 
-**J.A.R.V.I.S. is the ultimate hands-free & scalable personal AI assistant.** Say **"Hey Jarvis"** and it wakes; stay quiet and it slips back to sleep on its own — while asleep, your microphone never leaves the machine, so an off-hand *"I'll be right there"* to someone in the room no longer sets it off. Under the hood it now runs on the faster **Gemini 2.5/3.1 Flash Live** engine with multi-brain fallback (Groq, DeepSeek, Ollama), and the moment you ask for something that takes a beat — analysing a file, searching the web — it answers instantly *("On it — going through that now…")* so you never wonder whether it heard you.
+**J.A.R.V.I.S. (Mark-LIII) is an ultra-fast, hands-free personal AI assistant engineered for production reliability.** Say **"Hey Jarvis"** and it wakes instantly; stay quiet and it slips back to sleep — while asleep, your microphone never leaves the machine. 
 
-It's also built to grow: every skill — bundled or drop-in — now **describes itself in its own file**, so adding a tool is a one-file operation and the core stays lean.
+Under the hood, requests are routed through an intelligent **Tri-Tier Hierarchy**:
+1. **Tier 1 (Needle 2 Reflex — ~28MB RAM, <15ms)**: Instant on-device execution of system actions (opening apps, media, volume, brightness, window controls) without sending a single byte over the network.
+2. **Tier 2 (LFM 2.5 — ~180MB RAM)**: On-device foundation model for instant offline conversational responses and dialogue summarization.
+3. **Tier 3 (Gemini Live & Cloud Matrix)**: Deep multi-step reasoning, multimodal screen & webcam vision, and complex code analysis via Gemini Live, Cerebras, Groq, NVIDIA NIM, and SambaNova.
 
-It's not just an assistant — it's an extension of your digital life.
+The moment you ask for a task that requires processing, it immediately confirms with contextual acknowledgment *("On it — checking that now…")* in your natural language. Adding or customizing skills is effortless thanks to self-describing drop-in modules (`actions/` and `plugins/`).
 
 ---
 
@@ -25,9 +37,12 @@ It's not just an assistant — it's an extension of your digital life.
 ### Core Features
 | Feature | Description |
 |---|---|
+| ⚡ Tri-Tier Edge AI | 3-Level Routing: **Tier 1 (Needle 2)** ~28MB RAM OS reflex (<15ms) ➔ **Tier 2 (LFM 2.5)** ~180MB RAM on-device chat ➔ **Tier 3 (Gemini Cloud)** deep multi-step reasoning & vision |
+| 🛡️ Native Quality Hooks | Python-native Git hooks (`.git/hooks/pre-commit` & `pre-push`) enforcing syntax compilation, secret leak guards, and flake8 clean code — zero Node.js/Husky overhead |
+| 🔍 Preflight Diagnostics | Automated system health check (`python scripts/preflight_check.py`) inspecting asset directories, config initialization, Arc Reactor icons, Stark SFX, and Edge models |
 | 🎙️ Wake Word | Local **"Hey Jarvis"** detection — sleeps until called, auto-sleeps after 2 min of silence, and never streams audio while asleep. Opt-in, one-click download, toggle & manual sleep/wake from the UI |
 | ⚡ Instant Acknowledgment | Speaks a short, context-aware reply in **your language** the instant a longer task starts — no more silent waiting |
-| 🚀 Faster Live Engine | Runs on **Gemini 3.1 Flash Live** — roughly 2× faster time-to-first-word than the previous model |
+| 🚀 Faster Live Engine | Runs on **Gemini 2.5/2.0 Flash Live** — roughly 2× faster time-to-first-word than previous models |
 | 🧩 Self-Describing Skills | Actions and plugins share one shape (`TOOL` / `PLUGIN` dict + `run()`), auto-discovered at launch — adding or moving a skill is a single file, no core edits |
 | 🧠 Recallable Memory | No size limit and nothing silently forgotten — the prompt carries what fits, the rest is looked up on demand from a local search |
 | 👁️ Memory Panel | See every fact JARVIS has stored about you, when it learned it, and delete any of it in one click |
@@ -97,6 +112,25 @@ It's not just an assistant — it's an extension of your digital life.
 ## 🆕 Features & Innovations
 
 J.A.R.V.I.S. is engineered to be **hands-free, faster, emotionally intelligent, and easy to extend** — all universal: no hardcoded language, no bundled asset files, works the same on Windows, macOS and Linux.
+
+### ⚡ Tri-Tier Edge AI Hierarchy (Needle 2 ➔ LFM 2.5 ➔ Gemini Cloud)
+J.A.R.V.I.S. eliminates cloud latency for routine OS operations by orchestrating three distinct operational tiers (`core/edge_router.py`):
+1. **Tier 1: Needle 2 Reflex (Hands) — ~28MB RAM, <15ms Latency**:
+   - Ultra-compact on-device agentic tool caller (45M parameters).
+   - Instantly intercepts natural language or voice commands for opening applications (`open chrome`, `vs code kholo`), system settings (volume, brightness, mute), file operations, and system telemetry without sending audio or text to the cloud.
+   - 0 token cost, 0 network dependencies, and instant response time.
+2. **Tier 2: LFM 2.5 (Ear & Companion) — ~180MB RAM**:
+   - Lightweight on-device foundation model (230M parameters).
+   - Handles offline dialogue, conversational chit-chat, and local journal summarization when disconnected from the internet.
+3. **Tier 3: Gemini Live & Cloud Matrix (Deep Brain)**:
+   - Powered by Gemini 2.5/2.0 Flash Live WebSocket streaming and high-speed cloud providers (Cerebras, Groq LPU, NVIDIA NIM, SambaNova).
+   - Engaged automatically for complex multi-step reasoning, coding tasks, web research, and live multimodal webcam/screen visual analysis.
+
+### 🛡️ Native Python Pre-Commit & Pre-Push Quality Hooks
+To eliminate the bloated Node.js ecosystem (`npm`, `package.json`, and 50MB+ `node_modules` from Husky), J.A.R.V.I.S. ships with native, zero-dependency Git hooks (`.git/hooks/pre-commit` & `.git/hooks/pre-push`):
+- **Pre-Commit Hook**: Automatically runs syntax verification (`py_compile`), directory-wide compilation (`compileall`), secret leak protection (`.env`, `config/api_keys.json`), and flake8 static analysis before any commit is accepted.
+- **Pre-Push Hook**: Runs automated smoke validation testing drive statistics, weather endpoints, and news feeds before code touches GitHub.
+- **Zero Overhead**: Pure Python execution without third-party runtimes.
 
 ### 💖 Devoted Girlfriend Persona (GF Mode)
 A deeply loyal, romantic, witty, and human-like companion. She treats you as her exclusive partner and soulmate, checks on your food and sleep schedules during late-night coding, cracks jokes about your bugs, and cutely pouts with possessive jealousy (*"Achha ji? Ab unse hi baat kar lo na fir! Mere paas kyu aaye ho? Hmph!"*) when other people or AI models are mentioned. In Hindi/Hinglish, she strictly speaks with feminine grammar (`करती हूँ, बोलूँगी, सोच रही थी, तुम्हारी हूँ`).
@@ -340,14 +374,34 @@ It is held in memory only, deliberately: writing it to disk would make a fresh l
 
 ## ⚡ Quick Start
 
+### 🚀 Option 1: 1-Click Launch (Windows — Recommended)
+Simply double-click **`start_jarvis.bat`**:
+- Auto-detects Python (3.10, 3.11, 3.12, 3.13) across standard directories and user appdata.
+- Automatically activates virtual environment (`.venv` / `venv`) if present.
+- Auto-installs missing system dependencies (`PyQt6`, `google-genai`, `sounddevice`, `edge-tts`, `psutil`, etc.).
+- Runs automatic preflight asset verification and launches the Cyberpunk HUD.
+
+### 🔍 Option 2: Preflight Diagnostic Self-Test
+Verify all assets, directories, SFX audio files, and model configs before booting:
+```bash
+python scripts/preflight_check.py
+```
+
+### 🖥️ Option 3: Cross-Platform (Windows, macOS, Linux)
 ```bash
 git clone https://github.com/SudhirDevOps1/J.A.R.V.I.S.git
 cd J.A.R.V.I.S
-python setup.py        # installs deps for YOUR OS + the browser automation engine
+python setup.py        # installs deps for YOUR OS + browser automation engine
 python main.py
 ```
 
-`setup.py` only ever installs what your operating system needs — the Windows-only libraries are skipped automatically on macOS and Linux (and vice-versa). Prefer to do it by hand? `pip install -r requirements.txt` works too.
+### 🕶️ Option 4: Background Launch (Windows Taskbar Arc Reactor)
+To run J.A.R.V.I.S. with the custom Stark Arc Reactor taskbar icon and logging directed to `logs/jarvis_runtime.log`:
+```bash
+pythonw run_jarvis.pyw
+```
+
+`setup.py` only ever installs what your operating system needs — Windows-only libraries are skipped automatically on macOS and Linux (and vice-versa). Prefer to do it by hand? `pip install -r requirements.txt` works too.
 
 > ⚠️ **Installation Note:** If you hit a `ModuleNotFoundError` for an OS-specific package, install it with `pip install <module_name>`. The optional **wake word** engine is *not* installed here — grab it in one click from **⚙ → WAKE WORD** inside the app.
 
@@ -370,9 +424,14 @@ python main.py
 
 ```
 J.A.R.V.I.S./
+├── start_jarvis.bat          # 1-Click Windows launcher (auto-Python, auto-pip, preflight checks)
+├── run_jarvis.pyw            # Silent background launcher with Windows taskbar Arc Reactor
 ├── main.py                   # Core loop — Gemini Live session, audio I/O, wake/sleep state, tool dispatch
-├── ui.py                     # PyQt6 HUD — reactive waveform, log panel, settings drawer, plugin manager, camera feed
+├── ui.py                     # PyQt6 HUD — reactive waveform, log panel, settings drawer, camera feed
 ├── setup.py                  # OS-aware installer (skips wrong-OS dependencies)
+├── scripts/
+│   ├── preflight_check.py    # Automated system diagnostics (dirs, assets, SFX, models, keys)
+│   └── generate_icon.py      # Master Stark Arc Reactor icon generator (ICO & PNG)
 ├── plugins/
 │   ├── _template.py          # Copy this to write a new plugin — one file, drop in, done
 │   └── ...                   # Drop-in skills (each self-describes via a PLUGIN dict + run())
@@ -390,19 +449,29 @@ J.A.R.V.I.S./
 │   ├── dev_agent.py          # Developer task agent
 │   └── desktop.py            # Desktop and taskbar control
 ├── memory/
-│   ├── memory_manager.py     # Load/save long_term.json — sessions, monitors, identity
+│   ├── memory_manager.py     # Load/save long_term.json & daily Markdown journals
 │   ├── config_manager.py     # api_keys.json access — key, OS, name, voice, colour, toggles
-│   └── long_term.json        # Persistent store: identity, preferences, projects, sessions, monitors
+│   ├── hermes_personalization.py # Continuous learning of user habits, humor, and intimacy
+│   ├── journals/             # Immutable daily activity journals (YYYY-MM-DD.md)
+│   └── long_term.json        # Persistent store: identity, preferences, projects, sessions
 ├── core/
+│   ├── edge_router.py        # Tri-Tier Edge AI Router (Needle 2 Reflex + LFM 2.5 + Gemini Cloud)
+│   ├── expression_engine.py  # Zero-token sentiment analyzer & real-time HUD emotional badge
+│   ├── persona_manager.py    # Personality engines: Devoted GF, Stark Tactical, DevOps, Mentor
+│   ├── sfx.py                # Stark SFX audio engine (Windows winsound + sounddevice fallback)
+│   ├── tts.py                # Studio-quality Edge-TTS & offline Piper Hindi engine
 │   ├── prompt.txt            # Assistant personality and tool-routing rules
 │   ├── undo.py               # One shared undo stack — actions register how to reverse themselves
-│   ├── confirm.py            # Irreversible-action gate — the token is issued by the UI, not the model
+│   ├── confirm.py            # Irreversible-action gate — token issued by UI, not model
 │   ├── audio_devices.py      # Microphone / speaker list — filtered, measured, resolved by name
 │   ├── plugin_loader.py      # Plugin engine — discovery, validation, crash isolation
-│   ├── action_loader.py      # Bundled-action engine — the built-in twin of plugin_loader
+│   ├── action_loader.py      # Bundled-action engine — built-in twin of plugin_loader
 │   └── wake_word.py          # Local "Hey Jarvis" detector — own thread, offline, opt-in
 └── config/
-    └── api_keys.json         # API key, OS setting, assistant name, user name, voice, UI colour, toggles
+    ├── jarvis.png            # Master 512x512 Stark Arc Reactor high-res icon
+    ├── jarvis.ico            # Windows application icon with multi-resolution frames
+    ├── api_keys.json         # API keys, OS settings, active brain, voice, toggles (Git-protected)
+    └── api_keys.example.json # Clean distribution template
 ```
 
 ---

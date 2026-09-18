@@ -42,6 +42,12 @@ This document outlines the **architectural blueprint, dependency requirements, t
 ├────────────────────────────────────────────────────────────────────────┤
 │ 13. 🚀 AUTO-SETUP BATCH LAUNCHER & DESKTOP ARC REACTOR ICON (COMPLETED)│
 │ Self-healing dependencies, run_jarvis.pyw, taskbar AppUserModelID      │
+├────────────────────────────────────────────────────────────────────────┤
+│ 14. ⚡ TRI-TIER EDGE AI ROUTER: NEEDLE 2 & LFM 2.5 (COMPLETED)         │
+│ 28MB RAM Needle 2 reflex (<15ms) + LFM2.5 offline chat + Gemini Cloud  │
+├────────────────────────────────────────────────────────────────────────┤
+│ 15. 🛡️ PYTHON-NATIVE PRE-COMMIT HOOKS & CI/CD HARDENING (COMPLETED)   │
+│ Zero-Node git hooks (.git/hooks/pre-commit & pre-push) + flake8 clean   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
