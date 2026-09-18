@@ -1,37 +1,45 @@
 # 🛠️ J.A.R.V.I.S. — NEXT PATCH ROADMAP & IMPLEMENTATION SPECIFICATION
-> **Document:** `nextpatch.md`  
-> **Status:** Research & Architecture Plan (Ready for Phase-Wise Development)  
-> **Target System:** J.A.R.V.I.S. (SudhirDevOps1 AI)  
+> **Document:** `nextpatch.md`
+> **Status:** Research & Architecture Plan (Ready for Phase-Wise Development)
+> **Target System:** J.A.R.V.I.S. (SudhirDevOps1 AI)
 > **Engine:** Gemini Live + Multi-Brain Matrix + PyQt6 Cyberpunk HUD
+> **Last Updated:** 2026-09-18
 
 ---
 
 ## 🎯 Executive Overview
 
-J.A.R.V.I.S. already possesses high-speed bidirectional voice streaming, offline wake-word detection (`openwakeword`), an interactive PyQt6 Cyberpunk HUD, an undo system, and 16 bundled system actions. 
+J.A.R.V.I.S. ships with:
+- **27 bundled actions** in `actions/` (browser, browser control, file ops, code helper, game updater, flight finder, obsidian, BM25, swarm, and more)
+- **Tri-Tier Edge AI Router** (`core/edge_router.py`) — Needle 2 Reflex → LFM 2.5 offline → Gemini Cloud
+- **22+ free LLM providers** with round-robin key rotation and SQLite cache
+- **PyQt6 Cyberpunk HUD** with 4 avatar modes, emotional expression badges, and live theming
+- **Offline Whisper STT** (`core/stt.py`) + **Piper Hindi TTS** (`core/tts.py`) fallback stack
+- **Native Python Git hooks** — zero Node.js overhead
+- **Subagent swarm orchestrator** (`core/subagent_swarm.py`) — Researcher, ReverseEngineer, SelfHealer, Reporter agents
 
-This document outlines the **architectural blueprint, dependency requirements, technical design, and implementation steps** for the feature sets. By leveraging J.A.R.V.I.S.'s self-describing **`plugins/` system** and modular **`actions/` architecture**, these features can be dropped in without risking the stability of the core loop in `main.py`.
+This document outlines the **architectural blueprint, dependency requirements, and implementation steps** for upcoming features. All additions use the self-describing `plugins/` / `actions/` drop-in architecture — no core `main.py` edits required.
 
 ---
 
-## 📋 Comprehensive Feature Breakdown (Items 1 to 8)
+## 📋 Feature Breakdown — Phases 1–15
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        J.A.R.V.I.S. NEXT PATCH ARCHITECTURE            │
+│                    J.A.R.V.I.S. NEXT PATCH ARCHITECTURE                │
 ├──────────────────┬──────────────────┬─────────────────┬────────────────┤
 │ 1. SMART HOME    │ 2. GESTURES      │ 3. SENTRY/FACE  │ 4. WORKSPACE   │
 │ Tuya/Home Assist │ MediaPipe Vision │ DeepFace & Cam  │ Cal, Notion,   │
 │ & Room Lighting  │ Air Navigation   │ Telegram Alerts │ Spotify API    │
 ├──────────────────┼──────────────────┼─────────────────┼────────────────┤
-│ 5. PHONE SYNC    │ 6. GAMING / OBS  │ 7. STARK SFX    │ 8. OFFLINE LLM │
+│ 5. PHONE SYNC    │ 6. GAMING / OBS  │ 7. STARK SFX+   │ 8. OFFLINE LLM │
 │ Call/SMS Alerts  │ "Clip That" OBS  │ Arc Reactor WAV │ Ollama / Llama │
 │ & Ring My Phone  │ & Discord Hook   │ & Voice Cloning │ Fallback Core  │
 ├──────────────────┴──────────────────┴─────────────────┴────────────────┤
-│ 9. 🇮🇳 NATIVE HINDI & HINGLISH DUAL-LANGUAGE SYSTEM (CODE-SWITCHING)   │
+│ 9. 🇮🇳 NATIVE HINDI & HINGLISH DUAL-LANGUAGE SYSTEM (IN PROGRESS)      │
 │ Natural Hindi/Hinglish speech, bilingual auto-adapt, tech term mapping │
 ├────────────────────────────────────────────────────────────────────────┤
-│ 10. 🎙️ OFFLINE PIPER HINDI TTS ENGINE (DEVANAGARI SCRIPT OPTIMIZATION) │
+│ 10. 🎙️ OFFLINE PIPER HINDI TTS ENGINE (COMPLETED — IN PRODUCTION)     │
 │ hi_IN Pratham/Rohan models, Devanagari text synthesis, zero cloud cost │
 ├────────────────────────────────────────────────────────────────────────┤
 │ 11. 🎭 REAL-TIME EMOTIONAL AVATAR EXPRESSIONS (COMPLETED)              │
@@ -47,9 +55,50 @@ This document outlines the **architectural blueprint, dependency requirements, t
 │ 28MB RAM Needle 2 reflex (<15ms) + LFM2.5 offline chat + Gemini Cloud  │
 ├────────────────────────────────────────────────────────────────────────┤
 │ 15. 🛡️ PYTHON-NATIVE PRE-COMMIT HOOKS & CI/CD HARDENING (COMPLETED)   │
-│ Zero-Node git hooks (.git/hooks/pre-commit & pre-push) + flake8 clean   │
+│ Zero-Node git hooks (.git/hooks/pre-commit & pre-push) + flake8 clean  │
+├────────────────────────────────────────────────────────────────────────┤
+│ 16. 🔌 PLUGIN LIBRARY EXPANSION (QUEUED — HIGH PRIORITY)               │
+│ Spotify control, Pomodoro timer, Gmail reader, stock prices            │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🆕 Phase 16 — Priority Improvements (Next Release)
+
+### 16a. 🎤 Offline Whisper STT — Wire Into Main Audio Loop
+- **Status:** `core/stt.py` has `WhisperSTT` and `VoskSTT` fully implemented but not wired into `main.py`'s audio pipeline.
+- **Goal:** When Gemini Live is unavailable or offline, automatically fall back to local `faster-whisper base.en` for 100% offline voice input.
+- **Implementation:** Add `stt_fallback` mode flag to `config/api_keys.json`; if Gemini Live WebSocket fails 3× → route mic audio to `WhisperSTT.transcribe()` → send text to LLM tier.
+- **Dependencies:** `faster-whisper` (already in `requirements.txt`)
+
+### 16b. 🔌 First Real Plugins — High-Impact Utilities
+**Files to create in `plugins/` (each self-describes, zero core edits):**
+
+| Plugin File | What It Does | Dependencies |
+|-------------|-------------|--------------|
+| `plugins/spotify_control.py` | Play, pause, next, prev, queue, like — Spotify Web API via `spotipy` | `spotipy` |
+| `plugins/pomodoro_timer.py` | Voice-started focus timer with SFX alert at end | None (stdlib only) |
+| `plugins/focus_mode.py` | Block distracting sites via `hosts` file + Pomodoro integration | stdlib |
+| `plugins/stock_price.py` | Live NSE/BSE/global stock lookup via `yfinance` | `yfinance` |
+
+### 16c. 🎵 Expanded Stark SFX Pack
+- **Status:** Only `boot.wav`, `wake.wav`, `ack.wav`, `confirm.wav` exist.
+- **Add:** `error.wav`, `success.wav`, `thinking.wav` (looping ambient) — all NumPy-synthesized, no third-party audio files.
+- **File:** Extend `core/sfx.py` `_ensure()` function.
+
+### 16d. ✅ Unit Tests Foundation
+- **Status:** No tests exist anywhere in the project.
+- **Create:**
+  - `tests/test_edge_router.py` — intent routing, tier selection logic
+  - `tests/test_tts.py` — speech sanitizer, clean_speech_text()
+  - `tests/test_memory.py` — load/save/recall round-trip
+- **CI:** Add `pytest --tb=short tests/` step to `.github/workflows/ci.yml`
+
+### 16e. 🔒 API Key Encryption at Rest
+- **Status:** `config/api_keys.json` stored plain text.
+- **Goal:** Encrypt with `cryptography.fernet` + machine-specific hardware fingerprint key.
+- **Design:** Decrypt only at runtime; disk always stays encrypted. Fallback to plain text if key file missing (first-run migration).
 
 ---
 

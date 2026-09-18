@@ -2,6 +2,39 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [2026-09-18 12:36] — Documentation Overhaul, Branding Cleanup & Project Tree Sync
+
+### 📝 Documentation Rewrite (`readme.md`)
+1. **Full Professional Rewrite**:
+   - Completely restructured `readme.md` with a clean, professional layout.
+   - Arc Reactor icon (`config/jarvis.png`) correctly embedded at the top via `<img>` tag for GitHub rendering.
+   - Added 6 status badges: CI/CD, MIT License, Python version, Edge AI, Flake8 clean, and GitHub Stars.
+2. **Feature Tables — Accurate & Verified**:
+   - All features grouped into 8 clear sections: Voice & Audio, UI & HUD, Intelligence & Memory, System Control, Web/Files/Actions, Multi-Provider LLM, Persona & Customization, Privacy & Security.
+   - Every listed feature maps directly to an existing file in the codebase — zero fake or placeholder claims.
+   - Added `core/stt.py` (Whisper offline STT), `core/global_hotkey.py` (Ctrl+Space summon), `core/subagent_swarm.py` (multi-agent orchestrator), `actions/bm25_search.py`, `actions/api_sniffer.py`, and `actions/tinydb_memory.py` — previously missing from documentation.
+3. **Complete Accurate Project Tree**:
+   - Project structure tree updated to reflect every real file and directory.
+   - Descriptions written from actual file contents, not assumptions.
+4. **Architecture Roadmap Table**:
+   - Condensed and accurate — maps each phase to real shipped capabilities.
+
+### 🧹 Branding Cleanup — Legacy References Removed
+1. **"(Mark-LIII)" fully purged** from all project files:
+   - `readme.md` — title and overview paragraph.
+   - `core/edge_router.py` — identity and version response strings.
+   - `start_jarvis.bat` — startup banner echo.
+   - `run.sh` — startup banner echo.
+   - `changelog.md` — badge label and historical entry text.
+   - Verified via grep: **0 remaining occurrences** of `mark-liii`, `mark liii`, or `mk liii` across all file types.
+
+### ✅ Verification
+- Pre-commit hook passed: py_compile, compileall, secret guard, flake8 — **0 errors**.
+- Pre-push smoke tests passed: drive stats, weather endpoint, news feed — **all OK**.
+- Pushed to `main` branch: commit `2b25565`.
+
+---
+
 ## [2026-09-18 12:20] — GitHub Actions CI/CD Hardening, Husky Removal & Native Python Hooks
 
 ### 🚀 Production CI/CD & Static Analysis Hardening

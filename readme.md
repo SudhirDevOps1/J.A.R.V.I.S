@@ -1,422 +1,221 @@
-<div align="center">
+﻿<div align="center">
   <img src="config/jarvis.png" width="160" height="160" alt="J.A.R.V.I.S. Arc Reactor Logo" />
   <h1>⚙️ J.A.R.V.I.S.</h1>
-  <p><b>The Ultimate Production-Ready Cross-Platform Personal AI Assistant</b></p>
-  <p><i>Tri-Tier Edge AI Architecture: Needle 2 (Reflex) ➔ LFM 2.5 (Chat) ➔ Gemini Cloud (Reasoning)</i></p>
-  <p><i>Engineered by <a href="https://github.com/SudhirDevOps1">SudhirDevOps1</a></i></p>
+  <p><b>Production-Ready Personal AI Assistant — Engineered for Real Developers</b></p>
+  <p><i>Tri-Tier Edge AI: Needle 2 Reflex (28MB) ➔ LFM 2.5 Offline Chat ➔ Gemini Live Cloud</i></p>
+  <p><i>Built by <a href="https://github.com/SudhirDevOps1">SudhirDevOps1</a></i></p>
 
-  [![GitHub Release](https://img.shields.io/github/v/release/SudhirDevOps1/J.A.R.V.I.S?color=00ffff&label=release)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/releases)
   [![CI/CD](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions/workflows/ci.yml/badge.svg)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
-  [![Edge Reflex](https://img.shields.io/badge/Edge%20AI-Needle%202%20%7C%2028MB%20RAM-00ffaa.svg)](#-tri-tier-edge-ai-architecture)
-  [![Code Style: Flake8](https://img.shields.io/badge/code%20style-flake8%20clean-green.svg)](https://flake8.pycqa.org/)
+  [![Edge AI](https://img.shields.io/badge/Edge%20AI-Needle%202%20%7C%2028MB%20RAM-00ffaa.svg)](#-tri-tier-edge-ai-architecture)
+  [![Flake8 Clean](https://img.shields.io/badge/flake8-0%20errors-brightgreen.svg)](https://flake8.pycqa.org/)
+  [![Stars](https://img.shields.io/github/stars/SudhirDevOps1/J.A.R.V.I.S?color=gold)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/stargazers)
 </div>
 
 ---
 
-A real-time, production-grade voice AI that can hear, see, understand, and control your computer — on any OS. Powered by a high-efficiency **Tri-Tier Edge AI Architecture** (Needle 2 on-device reflex, LFM 2.5 offline chat, and Gemini Live cloud reasoning) with native audio streaming, zero paid subscriptions, and total digital autonomy.
+A real-time, production-grade voice AI that can **hear, see, understand, and control your computer** — on Windows, macOS, and Linux. Powered by an efficient **Tri-Tier Edge AI Architecture** that runs critical operations fully offline, supports 22+ free LLM providers, and requires zero paid subscriptions to get started.
 
 ---
 
 ## ✨ Overview
 
-**J.A.R.V.I.S. is an ultra-fast, hands-free personal AI assistant engineered for production reliability.** Say **"Hey Jarvis"** and it wakes instantly; stay quiet and it slips back to sleep — while asleep, your microphone never leaves the machine. 
+Say **"Hey Jarvis"** — it wakes instantly via a local offline detector. Stay quiet and it auto-sleeps after 2 minutes, never streaming audio to the cloud while idle.
 
-Under the hood, requests are routed through an intelligent **Tri-Tier Hierarchy**:
-1. **Tier 1 (Needle 2 Reflex — ~28MB RAM, <15ms)**: Instant on-device execution of system actions (opening apps, media, volume, brightness, window controls) without sending a single byte over the network.
-2. **Tier 2 (LFM 2.5 — ~180MB RAM)**: On-device foundation model for instant offline conversational responses and dialogue summarization.
-3. **Tier 3 (Gemini Live & Cloud Matrix)**: Deep multi-step reasoning, multimodal screen & webcam vision, and complex code analysis via Gemini Live, Cerebras, Groq, NVIDIA NIM, and SambaNova.
+Under the hood, every request is intelligently routed through three tiers:
 
-The moment you ask for a task that requires processing, it immediately confirms with contextual acknowledgment *("On it — checking that now…")* in your natural language. Adding or customizing skills is effortless thanks to self-describing drop-in modules (`actions/` and `plugins/`).
+| Tier | Engine | RAM | Latency | Role |
+|------|--------|-----|---------|------|
+| **Tier 1** | Needle 2 Reflex | ~28 MB | < 15 ms | On-device OS tool calling — zero network, zero tokens |
+| **Tier 2** | LFM 2.5 Chat | ~180 MB | Local | Offline dialogue, summarization, and journal queries |
+| **Tier 3** | Gemini Live + Cloud | Cloud | Streaming | Deep reasoning, coding, vision, web research |
 
----
-
-## 🚀 Capabilities
-
-### Core Features
-| Feature | Description |
-|---|---|
-| ⚡ Tri-Tier Edge AI | 3-Level Routing: **Tier 1 (Needle 2)** ~28MB RAM OS reflex (<15ms) ➔ **Tier 2 (LFM 2.5)** ~180MB RAM on-device chat ➔ **Tier 3 (Gemini Cloud)** deep multi-step reasoning & vision |
-| 🛡️ Native Quality Hooks | Python-native Git hooks (`.git/hooks/pre-commit` & `pre-push`) enforcing syntax compilation, secret leak guards, and flake8 clean code — zero Node.js/Husky overhead |
-| 🔍 Preflight Diagnostics | Automated system health check (`python scripts/preflight_check.py`) inspecting asset directories, config initialization, Arc Reactor icons, Stark SFX, and Edge models |
-| 🎙️ Wake Word | Local **"Hey Jarvis"** detection — sleeps until called, auto-sleeps after 2 min of silence, and never streams audio while asleep. Opt-in, one-click download, toggle & manual sleep/wake from the UI |
-| ⚡ Instant Acknowledgment | Speaks a short, context-aware reply in **your language** the instant a longer task starts — no more silent waiting |
-| 🚀 Faster Live Engine | Runs on **Gemini 2.5/2.0 Flash Live** — roughly 2× faster time-to-first-word than previous models |
-| 🧩 Self-Describing Skills | Actions and plugins share one shape (`TOOL` / `PLUGIN` dict + `run()`), auto-discovered at launch — adding or moving a skill is a single file, no core edits |
-| 🧠 Recallable Memory | No size limit and nothing silently forgotten — the prompt carries what fits, the rest is looked up on demand from a local search |
-| 👁️ Memory Panel | See every fact JARVIS has stored about you, when it learned it, and delete any of it in one click |
-| ↩️ Undo | Take back what the assistant did — files it moved, renamed, created or wrote, and settings it changed |
-| ⚠️ Real Confirmation | Shutdown, restart and WiFi wait for a button **you** press — the model cannot confirm its own irreversible actions |
-| 🎧 Audio Device Picker | Choose the microphone and speakers by name, filtered to the short list your OS shows — and measured, so every entry actually works |
-| 🔗 Session Continuity | A dropped connection, a voice change or a device change no longer wipes the conversation |
-| 🧩 Plugin System | Drop a single `.py` file into `plugins/` — JARVIS learns a new skill on next launch |
-| 🎙️ Real-time Voice | Ultra-low latency conversation in any language via Gemini Live API |
-| 🎨 Live Theming | Recolour the entire HUD from a hue wheel or hex — applied instantly across every panel |
-| 🎭 Emotional Expressions | Real-time visual mood badge and HUD color-pulse reactions (`LOVE`, `JEALOUS`, `EXCITED`, `CARING`, `TACTICAL`) with zero tokens |
-| ✨ 1-Click Vibe Presets | 1-click all-in-one setup (GF Soulmate, Stark Tactical, DevOps Beast, Mentor & Guru) with 100% restart persistence |
-| 🚀 1-Click Auto-Setup | Self-healing `.bat` launcher — first-time automatic Python check, pip dependency install, preflight asset verification, and crash protection |
-| 🖥️ Desktop App & Taskbar | Background `run_jarvis.pyw` launcher with registered Windows `AppUserModelID`, custom Arc Reactor taskbar icon, and runtime logging |
-| 〰️ Reactive HUD & Arc Reactor | 4 distinct avatar modes (`reactor`, `celestial`, `orb`, `matrix`) featuring authentic continuous ambient idling hum, rotating copper coils, vibrating core glow, and real-time voice reactivity |
-| 🔊 Stark SFX Engine | Zero-latency boot and UI sound effects (`boot`, `wake`, `confirm`, `ack`) backed by Windows native `winsound` and `sounddevice` |
-| 🎙️ Voice Picker | Choose from 5 native Gemini voices and switch live from the UI — no restart |
-| ♾️ Unlimited Sessions | Sliding-window context compression — one conversation can last for hours |
-| 🖥️ System Control | Launch apps, adjust volume/brightness, WiFi, shortcuts, power — all by voice |
-| 🧩 Autonomous Tasks | High-level planning for complex multi-step goals via agent mode |
-| 👁️ Visual Awareness | Real-time screen capture and webcam vision piped into your main Gemini session |
-| 🧠 Persistent Memory | Deeply remembers projects, preferences, and personal context across sessions |
-| ⌨️ Hybrid Input | Seamlessly switch between keyboard typing and voice commands |
-| 🌅 Morning Briefing | On first boot: greets you, reads the time, recaps yesterday, and fetches live news |
-| 🔔 Proactive 2.0 | Time-aware, context-aware check-ins — knows the time of day, your projects, and what you've been discussing |
-| 🗓️ Session Memory | Summarises each conversation and mentions it naturally next morning — consumed after use, never repeats |
-| 👁️‍🗨️ Background Monitoring | User-configured topic watching — checks for new headlines once a day and alerts naturally |
-| 📊 Hardware Monitoring | Continuous CPU, RAM, GPU and temperature telemetry with localized voice alerts |
-| 🌐 Telemetry & APIs Dashboard | 5-card cyberpunk dashboard: Geo-Location & Network, Live Weather (Open-Meteo), Multi-Drive Storage, Hardware Telemetry, HackerNews Feed — all free APIs, zero tokens, scrollable UI |
-| 🌤️ Weather Report | Live weather data for your city, personalized from memory |
-| 🗺️ Dynamic Content Panel | Scrollable display layer beneath the HUD that renders web results, news, and search data |
-| 🔍 Multi-Mode Web Search | `news` / `research` / `price` / `compare` / `search` — Gemini Grounded first, DDG fallback |
-| ⏰ Smart Reminders | OS-native scheduled notifications (Windows Task Scheduler / macOS LaunchAgent / Linux systemd) |
-| ✈️ Flight Finder | Live flight price and availability lookup |
-| 🎮 Game Updater | Checks and triggers game updates on Steam and Epic Games on demand |
-| 📂 File Processor | Read, summarize, and answer questions about local files |
-| 💻 Code Helper | Inline code review, debugging, and generation |
-| 🌐 Browser Control | Open URLs, navigate tabs, and interact with the browser by voice |
-| 📨 Send Message | Compose and send messages through WhatsApp, Telegram, and more |
-| 🎬 YouTube Control | Search, play, and control YouTube playback by voice |
-| 🖱️ Desktop Control | Taskbar, window management, and desktop-level operations |
-| 🧑‍💻 Silent Language Memory | Detects spoken language on first use — all future sessions adapt automatically |
-| 📱 Remote Dashboard | Control the assistant from your phone via QR code pairing |
-| ⚡ Auto-Start on Boot | Registers with the OS startup system (registry / LaunchAgent / .desktop) |
-| 📋 Clipboard Intelligence | Copy any text → floating panel with Translate / Summarise / Explain / Fix |
-| 🪪 Assistant Customization | Change the assistant name, your name, voice, and colour from the UI — takes effect immediately |
-| 💖 Devoted Girlfriend Mode | 100% human girlfriend persona: exclusively loyal, romantic, playful banter, cute jealousy & possessiveness ("jalnous ho", anti-ChatGPT/Alexa), celebration mode, natural vocal fillers ("hmm", "achhaaa", "hawww", "sun na"), time-of-day mood rhythms, care routines, and strict feminine Hindi verb grammar |
-| 🌅 Calendar & Clock Greeting | Announces full Day, Date, Month, Year, and Time on first boot with natural human cadence, time-of-day warmth, day-of-week context, and zero robotic monotone |
-| 🏷️ Voice Name Adaptability | Renaming via voice (*"Tumhara naam ab se Maya hai"*) instantly updates HUD, window title, and memory live without restarting |
-| 🔮 Obsidian Second Brain | Dual-mode note sync with Obsidian Local REST API + offline Markdown vault integration |
-| ⚡ Smart Token Efficiency | Crisp, high-bandwidth responses (1–3 natural sentences for dialogue) that preserve context without wasting tokens |
-| 🎙️ Neural Edge-TTS | Studio-grade, natural voices for Hindi (Madhur, Swara) and English (Chris, Jenny) with offline Piper fallback |
-| 🎚️ Dynamic Pitch & Tone | Customizable pitch presets (`+8Hz Cute GF`, `+14Hz Sweet`, `-8Hz Deep`, `0Hz Default`) or custom Hz/rate via UI or voice command |
-| 🧠 Hermes Personalization | Continuous background learning of schedule, habits, inside jokes, and intimacy stages stored in `user_persona.json` and mirrored dynamically |
-| 🌐 Language Locking | Dedicated UI buttons for Hinglish, Hindi, English, and Auto with guaranteed persistence across restarts |
-| ⚡ 100% Free Gemini Proxy | Built-in reverse-engineered web proxy: run `gemini-3.7-flash` with zero API key, no credit card, and 100% free anonymous access |
-| 🍪 Google Account Cookies | Drop `config/gemini_cookies.json` to unleash `gemini-2.0-pro` with Google Search grounding and persistent context |
-| 🔄 OmniRoute Gateway | Auto-detects local OmniRoute server (`localhost:20128`) for 350+ free models (Llama, DeepSeek, Qwen) with zero config |
-| ⚡ SQLite Smart Cache | Fast LRU query caching (`config/llm_cache.db`) for weather, facts, news, and search queries, saving tokens and network latency |
-| 🔒 Privacy & Git Shield | Built-in `.gitignore` automatically seals all keys, cookies, caches, and memory files away from git repositories |
-| 👁️ HUD Camera & Vision | Instant webcam view on HUD ("camera kholo" / "camera band karo") and visual inspection ("camera dekho" / "screen dekho") with free Gemini AI Studio integration |
-| 🎙️ Crystal-Clear Hindi Speech | Studio-quality neural voice (`hi-IN-SwaraNeural` / `hi-IN-MadhurNeural`) tuned at `+0Hz` natural pitch with Devanagari text formatting and offline Piper fallback |
-
+Adding a new skill is one file dropped into `actions/` or `plugins/` — no core edits required.
 
 ---
 
-## 🆕 Features & Innovations
+## 🚀 Core Capabilities
 
-J.A.R.V.I.S. is engineered to be **hands-free, faster, emotionally intelligent, and easy to extend** — all universal: no hardcoded language, no bundled asset files, works the same on Windows, macOS and Linux.
+### 🎙️ Voice & Audio
 
-### ⚡ Tri-Tier Edge AI Hierarchy (Needle 2 ➔ LFM 2.5 ➔ Gemini Cloud)
-J.A.R.V.I.S. eliminates cloud latency for routine OS operations by orchestrating three distinct operational tiers (`core/edge_router.py`):
-1. **Tier 1: Needle 2 Reflex (Hands) — ~28MB RAM, <15ms Latency**:
-   - Ultra-compact on-device agentic tool caller (45M parameters).
-   - Instantly intercepts natural language or voice commands for opening applications (`open chrome`, `vs code kholo`), system settings (volume, brightness, mute), file operations, and system telemetry without sending audio or text to the cloud.
-   - 0 token cost, 0 network dependencies, and instant response time.
-2. **Tier 2: LFM 2.5 (Ear & Companion) — ~180MB RAM**:
-   - Lightweight on-device foundation model (230M parameters).
-   - Handles offline dialogue, conversational chit-chat, and local journal summarization when disconnected from the internet.
-3. **Tier 3: Gemini Live & Cloud Matrix (Deep Brain)**:
-   - Powered by Gemini 2.5/2.0 Flash Live WebSocket streaming and high-speed cloud providers (Cerebras, Groq LPU, NVIDIA NIM, SambaNova).
-   - Engaged automatically for complex multi-step reasoning, coding tasks, web research, and live multimodal webcam/screen visual analysis.
+| Feature | What It Does |
+|---------|-------------|
+| **Wake Word "Hey Jarvis"** | Local offline `openwakeword` detector — mic audio stays on-device while asleep. Auto-sleeps after 2 min. One-click download: ⚙ → WAKE WORD |
+| **Real-Time Voice Chat** | Gemini Live bidirectional audio WebSocket streaming — ultra-low latency in any language |
+| **Offline Whisper STT** | `faster-whisper` offline speech-to-text (base/small model) as local fallback when internet is unavailable |
+| **Neural TTS — Edge & Piper** | `hi-IN-SwaraNeural` / `hi-IN-MadhurNeural` (Hindi) and `en-US-ChristopherNeural` / `en-US-JennyNeural` (English) via EdgeTTS. Fully offline Piper Hindi fallback (`hi_IN-pratham-medium`) |
+| **5 Gemini Voices** | Switch voice live from the UI — no restart needed |
+| **Dynamic Pitch & Tone** | UI sliders and voice commands: `+8Hz Cute`, `+14Hz Sweet`, `-8Hz Deep`, `0Hz Natural` |
+| **Audio Device Picker** | Lists only real, probe-validated devices. Filtered from ~41 OS entries to ~8 usable ones. Saved by name, not by index |
+| **Smart Speech Sanitizer** | Auto-strips markdown, code fences, URLs, brackets, and emojis before TTS — zero robotic artifacts |
+| **Instant Acknowledgment** | Speaks one short natural confirmation the moment a long task starts — no silent gaps |
+| **Stark SFX Engine** | Synthesized boot, wake, ack, and confirm sounds via Windows `winsound` (zero latency) + `sounddevice` fallback |
 
-### 🛡️ Native Python Pre-Commit & Pre-Push Quality Hooks
-To eliminate the bloated Node.js ecosystem (`npm`, `package.json`, and 50MB+ `node_modules` from Husky), J.A.R.V.I.S. ships with native, zero-dependency Git hooks (`.git/hooks/pre-commit` & `.git/hooks/pre-push`):
-- **Pre-Commit Hook**: Automatically runs syntax verification (`py_compile`), directory-wide compilation (`compileall`), secret leak protection (`.env`, `config/api_keys.json`), and flake8 static analysis before any commit is accepted.
-- **Pre-Push Hook**: Runs automated smoke validation testing drive statistics, weather endpoints, and news feeds before code touches GitHub.
-- **Zero Overhead**: Pure Python execution without third-party runtimes.
+### 🖥️ UI & HUD
 
-### 💖 Devoted Girlfriend Persona (GF Mode)
-A deeply loyal, romantic, witty, and human-like companion. She treats you as her exclusive partner and soulmate, checks on your food and sleep schedules during late-night coding, cracks jokes about your bugs, and cutely pouts with possessive jealousy (*"Achha ji? Ab unse hi baat kar lo na fir! Mere paas kyu aaye ho? Hmph!"*) when other people or AI models are mentioned. In Hindi/Hinglish, she strictly speaks with feminine grammar (`करती हूँ, बोलूँगी, सोच रही थी, तुम्हारी हूँ`).
+| Feature | What It Does |
+|---------|-------------|
+| **PyQt6 Cyberpunk HUD** | Full-screen dark HUD with neon aesthetic, reactive waveform, log panel, settings drawer, and camera feed |
+| **Stark Arc Reactor HUD** | 4 avatar modes: `reactor`, `celestial`, `orb`, `matrix` — ambient idling hum, rotating coils, vibrating core glow, real-time voice amplitude |
+| **Live Theming** | Recolour the entire HUD from a hue wheel or hex value — applied instantly |
+| **Emotional Expression Badges** | Zero-token real-time sentiment maps conversation tone to HUD color-pulse + mood badges: `💖 LOVE`, `😤 JEALOUS`, `✨ EXCITED`, `🌸 CARING`, `⚡ TACTICAL` |
+| **1-Click Vibe Presets** | GF Soulmate, Stark Tactical, DevOps Beast, Mentor & Guru — 100% restart persistent |
+| **Memory Panel** | ⚙ → 🧠 MEMORY — see every stored fact, when it was learned, delete any entry in one click |
+| **Camera Feed on HUD** | `"camera kholo"` / `"open camera"` opens live webcam directly on the HUD |
+| **5-Card Telemetry Dashboard** | Geo & Network, Live Weather, Multi-Drive Storage, Hardware Telemetry, HackerNews — all free APIs, zero tokens |
+| **Dynamic Content Panel** | Scrollable display layer beneath the HUD for web results, news, and search data |
+| **Taskbar Arc Reactor Icon** | Windows `AppUserModelID` registered — Arc Reactor icon in taskbar and Alt-Tab |
+| **Background Silent Launch** | `run_jarvis.pyw` via `pythonw.exe` — no console window, logs to `logs/jarvis_runtime.log` |
 
-### 🌅 First-Boot Calendar & Clock Greeting
-Every morning or on first launch of the day, the assistant greets you naturally with the complete calendar and clock coordinates: **Day, Date, Month, Year, and Time** (e.g. *"Arey Jaan! Aaj Thursday, 17 September 2026 hai aur abhi time 02:35 PM ho raha hai..."*). Delivered in a warm human voice with zero teleprompter bullet points.
+### 🧠 Intelligence & Memory
 
-### 🏷️ Natural Custom Naming (UI + Voice)
-Personalize your assistant with any name you choose (*Maya, Pari, Shreya, Friday, etc.*). Set it through the HUD Studio UI, or simply say it aloud: *"Tumhara naam ab se Maya hai"* — the system updates its internal memory, window header, HUD title, and prompt identity live in real time.
+| Feature | What It Does |
+|---------|-------------|
+| **Recallable Long-Term Memory** | No size cap. Core facts in prompt; full store searched on demand via `recall_memory` (local, < 1ms). Key index prevents invisible misses |
+| **Hermes Personalization Engine** | Continuous background learning of schedule, habits, inside jokes, intimacy stage, nicknames — stored in `memory/user_persona.json` |
+| **Session Memory & Summaries** | Summarises each conversation; mentions it naturally next morning. Consumed after use, never repeats |
+| **Morning Briefing** | First boot: greets with Day, Date, Time, yesterday's recap, and live top news |
+| **Proactive 2.0** | Time-aware, context-aware proactive check-ins based on projects and conversation history |
+| **Background Topic Monitor** | User-configured topic watching — daily DDG headline check and natural-language alerts |
+| **Sliding-Window Compression** | Sessions last hours — core in prompt, rest compressed and searchable |
+| **Language Auto-Detection** | Detects your preferred language on first message; all future sessions adapt automatically |
 
-### ⚡ Smart Token Efficiency & High-Bandwidth Speech
-Responses are optimized for conversational punch: vivid, warm, and concise (typically 1 to 3 natural sentences) to conserve tokens and reduce latency. Elaborations and deep analysis are reserved for when you explicitly ask for technical explanations or multi-step execution.
+### 🛠️ System Control
 
-### 🔮 Obsidian Second-Brain Dual-Sync
-Connects directly to your local Obsidian vault via the **Local REST API** or file-system Markdown fallback. Search your notes, log thoughts, append to your daily journal, and query past activity seamlessly.
+| Feature | What It Does |
+|---------|-------------|
+| **Tri-Tier Edge Router** | `core/edge_router.py` routes every command through Needle 2 → LFM 2.5 → Gemini Cloud — lowest cost first |
+| **App Launcher** | Open any application by voice: "VS Code kholo", "open Chrome", "Spotify chalaao" |
+| **Volume / Brightness / WiFi** | All system controls by voice |
+| **Real Confirmation Gate** | Shutdown, restart, WiFi: HUD banner + your button press required. The model cannot self-confirm |
+| **Undo System** | "Undo" reverses: file moves, renames, creates, copies, writes, volume, brightness changes. Files > 1 MB excluded and stated |
+| **Clipboard Intelligence** | Copy any text → floating panel with Translate / Summarise / Explain / Fix |
+| **Global Hotkey Summon** | `Ctrl+Space` or `Alt+J` summons JARVIS from any active application |
+| **Auto-Start on Boot** | Registers with OS startup (Windows registry / macOS LaunchAgent / Linux .desktop) |
+| **Computer Settings (56 Actions)** | Named action set — difflib fuzzy matching handles spelling tolerance locally |
 
-### 🎙️ Wake Word — "Hey Jarvis"
-JARVIS can now sit quietly until you call it. Turn on **⚙ → WAKE WORD** (a one-click, opt-in download of a tiny local model) and it goes to sleep: the microphone is processed **only on your machine** by a local detector, and nothing is sent to the cloud until it hears **"Hey Jarvis."** Once awake it listens normally, then **auto-sleeps after 2 minutes** of silence. You can also **sleep/wake it by clicking** in the settings. Because it's a *local* gate, background chatter — *"I'm coming!"* to someone at home — never wakes it. It costs **zero** when off (the model isn't even loaded), and the detection runs in its own thread, so nothing else in the app slows down.
+### 🌐 Web, Files & Actions
 
-### ⚡ Instant Acknowledgment
-No more silent gaps. When you ask for something that takes a moment — reading an uploaded file, a web/research search, building code — JARVIS **immediately** says one short, natural sentence *in your language* (*"Right away — going through that file now."*) and *then* runs the tool. Instant actions (opening an app, volume) stay snappy with no chatter.
+| Feature | What It Does |
+|---------|-------------|
+| **Multi-Mode Web Search** | `news` / `research` / `price` / `compare` — Gemini Grounded first, DDG fallback |
+| **Browser Control** | Open URLs, navigate tabs, click, fill forms — `playwright` powered |
+| **File Processor** | Read, summarise, and answer questions about local documents |
+| **Code Helper** | Inline code review, debugging, and generation |
+| **Developer Agent** | Multi-step developer task planning and execution |
+| **YouTube Control** | Search, play, and control YouTube by voice |
+| **Flight Finder** | Live flight price and availability lookup |
+| **Game Updater** | Steam and Epic Games update trigger by voice |
+| **Send Message** | WhatsApp Web and Telegram via `playwright` |
+| **Smart Reminders** | OS-native scheduled notifications (Task Scheduler / LaunchAgent / systemd) |
+| **Weather Report** | Open-Meteo live weather — free, no API key |
+| **Screen & Webcam Capture** | `screen_processor.py` captures display and webcam for multimodal AI visual analysis |
+| **Obsidian Second Brain** | Dual-mode: Local REST API + offline Markdown vault sync |
+| **Desktop Control** | Taskbar, window management, desktop-level operations |
+| **BM25 Local Search** | Full-text BM25 search over memory and local documents |
+| **API Sniffer** | Network API discovery and schema extraction |
+| **Subagent Swarm** | Concurrent multi-agent orchestration: Researcher, ReverseEngineer, SelfHealer, Reporter |
 
-### 🚀 Faster Live Engine — Gemini Live + Multi-Brain Matrix
-The live session is powered by **Gemini Live**, with multi-provider backup across Cerebras, Groq, NVIDIA NIM, OpenRouter, Mistral, GitHub Models, SambaNova, DeepSeek, and local Ollama, cutting latency while keeping tools, voices, transcription, and sliding-window compression intact.
+### 🤖 Multi-Provider LLM Engine
 
-### ⚡ Supported High-Speed Free LLM Providers & Gateways (22+ Engines)
+| Feature | What It Does |
+|---------|-------------|
+| **22+ Free LLM Providers** | Cerebras, Groq, Gemini, OpenRouter, NVIDIA NIM, Mistral, SambaNova, GitHub Models, Hugging Face, DeepSeek, Cloudflare, and more |
+| **Built-in Free Gemini Proxy** | `core/gemini_free_proxy.py` on port 8081 — `gemini-3.7-flash` with zero API key |
+| **Google Cookie Mode** | Drop `config/gemini_cookies.json` → unlock `gemini-2.0-pro`, Google Search grounding |
+| **OmniRoute Gateway** | Auto-detects `localhost:20128` — 350+ free models, auto-failover |
+| **SQLite LLM Cache** | `config/llm_cache.db` — identical queries answered in < 2ms, zero network |
+| **Multi-Key Gemini Rotation** | Round-robin across multiple keys — automatic rate limit avoidance |
+| **Live Provider Test** | ⚡ TEST button in ⚙ → AI PROVIDERS pings live latency per provider |
 
-J.A.R.V.I.S. now supports 22+ high-speed, free-tier LLM providers, aggregators, and local gateways. Every provider can be configured directly from the Cyberpunk HUD Settings (`⚙ → AI PROVIDERS`), complete with a **dynamic model selector** and instant **`⚡ TEST` latency ping**.
+### 🧩 Persona & Customization
 
-| Provider | Free Tier (Approx) | Highlights | Why Use It in J.A.R.V.I.S.? |
-|---|---|---|---|
-| **Cerebras Cloud** | 1M tokens/day, 30 RPM | World's fastest AI inference (~2,000 tok/s, 20x faster than OpenAI) | Real-time conversational responses with zero delay. |
-| **Groq LPU** | 30 RPM, 1K RPD | Ultra-fast LPU inference (350–1000 tok/s) | Rock-solid reliability and speed for long dialogues and coding. |
-| **OpenRouter** | 20+ free models, 50 req/day | Unified API for 200+ models with `:free` tag | Testing and comparing different open models with one key. |
-| **Google Gemini** | 1M tokens/min (free tier) | 1M+ token context window, native multimodal input | Extended memory, full documents, and live screen/webcam vision. |
-| **NVIDIA NIM** | 1,000 free calls/month | 70+ models hosted on enterprise NVIDIA DGX Cloud | Access to Nemotron, Llama 3.3 70B, and DeepSeek R1. |
-| **Mistral AI** | 1B tokens/month, 500K TPM | European open-weights leader, Codestral programming model | Outstanding code generation and GDPR-compliant reasoning. |
-| **Cloudflare Workers AI** | 10,000 Neurons/day free | Globally distributed serverless inference at the edge | Lightweight, fast queries with zero credit card setup. |
-| **Cohere** | 1,000 calls/month free | Specialized Command-R+ model with native search grounding | RAG citations, structured outputs, and factual retrieval. |
-| **Zhipu AI (GLM)** | GLM-4-Flash permanently free | High-speed model with 200K context, zero expiration | Permanent free fallback brain with zero token anxiety. |
-| **GitHub Models** | Free access with GitHub PAT | Direct access to GPT-4o, DeepSeek-R1, and Llama 3.3 | Use your existing developer GitHub account with no new signup. |
-| **Hugging Face** | Serverless free inference API | 500,000+ open-source models with community endpoints | Testing novel architectures and niche fine-tunes. |
-| **SambaNova Cloud** | 20 RPM, 200K tokens/day | Full-precision Llama 3.1 405B and 70B available free | Mammoth 405B parameter reasoning at blistering speeds. |
-| **Kluster AI** | $5 free credits + permanent tier | Low-latency inference for DeepSeek R1 and Qwen 2.5 | Fast batch tasks and complex multi-step reasoning. |
-| **LLM7.io** | 30–120 RPM free | Instant access, zero-friction, no signup required | Instant out-of-the-box operation with zero registration. |
-| **FreeLLMAPI** | 1.7B tokens/month shared | Aggregator with automatic failover across 14+ providers | Eliminates 429 rate limit errors automatically. |
-| **OrcaRouter** | $0 / token free tier | Auto-routing across top free community models | Zero markup smart router for free models. |
-| **Vercel AI Gateway** | Unified free gateway tier | Failover routing with custom BYOK support | Edge failover orchestration for reliable uptime. |
-| **FreeTheAi** | 60+ models free forever | Community-backed initiative for unrestricted free AI | 100% free models with zero subscription gates. |
-| **OmniRoute Gateway** | Universal local proxy | Connects to 352+ providers and 1,200+ models on `localhost:20128` | All-in-one local aggregator with automatic fallback. |
-| **Gemini Web Proxy** | 100% Free Built-in | Reverse-engineered web endpoints (`gemini-3.7-flash` on `:8081`) | Autonomous local proxy, works out-of-the-box without keys. |
-| **DeepSeek Direct** | Official Free Tier | Official DeepSeek V3 and DeepSeek Reasoner R1 | Ultra-smart reasoning and mathematical problem solving. |
-| **Custom / Local AI** | Unlimited offline | Local Ollama, LM Studio, vLLM, or private OpenAI endpoint | Complete offline privacy with zero external internet dependencies. |
+| Feature | What It Does |
+|---------|-------------|
+| **Devoted Girlfriend Mode** | Loyal, romantic, witty companion with feminine Hindi grammar, cute jealousy when other AIs are mentioned, care routines, and time-of-day mood rhythms |
+| **Stark Tactical Mode** | Iron Man-style tactical DevOps assistant — sharp, precise, mission-focused |
+| **DevOps Beast Mode** | Production engineering assistant — CI/CD, Docker, Kubernetes, cloud-first |
+| **Mentor & Guru Mode** | Patient, pedagogical guide — explains complex topics clearly |
+| **Voice Name Adaptability** | "Tumhara naam ab se Maya hai" → HUD title, window, and memory update live |
+| **Language Buttons** | Hinglish / Hindi / English / Auto — guaranteed persistence across restarts |
 
-#### 🎛️ Individual Provider & Model Selection in Settings:
-1. Open the HUD settings by clicking the **⚙ (Gear)** icon on the Cyberpunk HUD.
-2. Select the **🤖 AI PROVIDERS** tab.
-3. Choose your desired provider from the **ACTIVE BRAIN / LLM PROVIDER** dropdown.
-4. The **ACTIVE MODEL FOR SELECTED PROVIDER** combobox will automatically populate with that provider's models (e.g. `llama-3.3-70b` for Cerebras, `meta/llama-3.3-70b-instruct` for NVIDIA NIM, `Meta-Llama-3.1-405B-Instruct` for SambaNova).
-5. You can pick any model from the dropdown or type in any custom model name.
-6. Click **⚡ TEST** next to your API key to verify latency and connectivity in real time (e.g. `🟢 Cerebras Live • 142ms`).
-7. Click **SAVE & CLOSE** — your active provider, chosen models, and API keys are safely recorded in `config/api_keys.json` with zero git leakage.
+### 🔒 Privacy & Security
 
-
-### 🧩 Self-Describing Skills — a Scalable Core
-Every bundled **action** now carries its own `TOOL` declaration in its own file (exactly like a drop-in **plugin's** `PLUGIN` dict), and the core auto-discovers them at launch. `main.py` no longer holds a giant list of tool definitions and dispatch branches — it shrank by hundreds of lines. Adding a new built-in skill, or promoting an `actions/*.py` file into a shareable plugin, is now just… moving a file.
-
-### 🌐 100% Free AI Architecture (Zero Subscriptions, No API Key Required)
-
-J.A.R.V.I.S. features an autonomous free AI pipeline that requires zero paid subscriptions and zero credit cards.
-
-#### 1. Built-in Gemini Free Web Proxy (Anonymous Mode)
-- **Architecture**: J.A.R.V.I.S. includes an embedded proxy server (`core/gemini_free_proxy.py`) running on port `8081`. It routes requests directly through Google's public web endpoints using reverse-engineered Batchexecute RPCs.
-- **Model**: Delivers `gemini-3.7-flash` and `gemini-2.0-flash` completely free.
-- **API Key**: None required (`"Authorization": "Bearer none"`).
-- **Daily Rate Limits**: Google applies IP-based rate limits (~10-15 requests per minute, rolling hourly quota). To maximize uptime, J.A.R.V.I.S. automatically pairs the proxy with the SQLite Smart Cache to prevent duplicate queries from consuming quota.
-
-#### 2. Enhanced Mode: With Free Google Account Cookies (`gemini_cookies.json`)
-For power users who want `gemini-2.0-pro` with Google Search grounding and practically unlimited requests without paying:
-1. Open your browser (Chrome, Edge, or Firefox) and log into [gemini.google.com](https://gemini.google.com).
-2. Press `F12` to open Developer Tools, then go to **Application** (or **Storage**) → **Cookies** → `https://gemini.google.com`.
-3. Locate and copy the values for:
-   - `__Secure-1PSID`
-   - `__Secure-1PSIDTS`
-4. Create or edit `config/gemini_cookies.json`:
-```json
-{
-  "__Secure-1PSID": "your_secure_1psid_here",
-  "__Secure-1PSIDTS": "your_secure_1psidts_here"
-}
-```
-5. When J.A.R.V.I.S. starts, the free proxy automatically attaches these cookies. You instantly unlock `gemini-2.0-pro`, Google Search grounding, image generation capabilities, and significantly higher request ceilings!
-
-#### 3. OmniRoute Gateway Integration (`localhost:20128`)
-- If you have [OmniRoute](https://github.com/dani-garcia/vaultwarden) installed (`npm install -g omniroute`), J.A.R.V.I.S. automatically detects the gateway on `http://localhost:20128/v1`.
-- Provides instant, zero-cost access to over 350+ free models (DeepSeek R1/V3, Llama 3.3 70B, Qwen 2.5, Mistral) with auto-failover.
-
-#### 4. Smart SQLite LLM Cache (`config/llm_cache.db`)
-- To protect your quotas and eliminate network latency, all deterministic queries (weather reports, news recaps, fact retrieval, system status checks) are cached in a local SQLite database (`config/llm_cache.db`) with adaptive TTL (Time-To-Live).
-- Identical questions are answered in **< 2 milliseconds** with zero network round trips.
-
-#### 5. Absolute Privacy & Git Protection
-- Your privacy is guaranteed. All configuration files containing personal credentials, browser cookies, local caches, and memory stores (`config/api_keys.json`, `config/gemini_cookies.json`, `config/llm_cache.db`, and `memory/long_term.json`) are strictly excluded in `.gitignore`.
-- You can safely commit and share your code without ever leaking keys or conversations.
+| Feature | What It Does |
+|---------|-------------|
+| **Git Secret Shield** | `.gitignore` seals `api_keys.json`, `gemini_cookies.json`, `llm_cache.db`, and all memory — safe to commit and share |
+| **Native Python Git Hooks** | `pre-commit`: syntax check, `py_compile`, `compileall`, secret leak guard, flake8. `pre-push`: smoke tests before every GitHub push |
+| **Offline Mic Gate** | While sleeping with wake word active, mic audio is processed only on-device — nothing sent to cloud until "Hey Jarvis" |
+| **UI Confirmation Gate** | Shutdown, restart, WiFi require physical button press — token issued by UI, not by the model |
 
 ---
 
-### 👁️ Real-Time Camera & Vision Guide
+## ⚡ Supported LLM Providers (22+ Engines)
 
-J.A.R.V.I.S. features native visual awareness that works across both keyboard chat and voice commands:
-
-- **HUD Camera Commands**:
-  - Say or type `"camera kholo"`, `"open camera"`, `"webcam on"`, or `"show camera"` — the real-time webcam feed launches directly on the Cyberpunk HUD.
-  - Say or type `"camera band karo"`, `"close camera"`, or `"stop camera"` — the webcam feed closes immediately.
-- **Visual Inspection & Analysis**:
-  - Say or type `"camera dekho"` or `"look at camera"` — J.A.R.V.I.S. opens the camera stream and captures the active frame.
-  - Say or type `"screen dekho"`, `"look at screen"`, or `"what is on my screen"` — captures the primary display and analyzes open windows, code, or errors.
-- **Multimodal Vision Modes**:
-  - **Free Mode / Anonymous Proxy**: Displays live real-time video stream on the HUD.
-  - **Gemini AI Studio Mode (100% Free)**: For automated live AI visual analysis of objects, code, and screen context, simply generate a free API key from [Google AI Studio](https://aistudio.google.com/) (costs ₹0, requires no credit card) and save it in `config/api_keys.json`. J.A.R.V.I.S. will automatically analyze your webcam and screen with multimodal precision!
-
----
-
-### 🎙️ Natural Voice Synthesis (Zero Robotic Accent)
-
-To ensure the assistant sounds like an authentic human being and never mechanical:
-1. **Natural Pitch Calibration**: The pitch is calibrated to `+0Hz` (natural native pitch). Higher artificial pitch boosts (`+14Hz`) have been eliminated to avoid metallic phase-distortion.
-2. **Devanagari Script Delivery**: For Hindi and Hinglish dialogues, text is synthesized using clean Devanagari Hindi. Azure Neural TTS (`hi-IN-SwaraNeural` and `hi-IN-MadhurNeural`) and Piper Hindi (`hi_IN-pratham-medium`) are phonologically tuned for Devanagari, producing warm, emotional Indian human cadence with zero English spelling artifacts.
-3. **Smart Speech Sanitization**: All markdown formatting (`**bold**`, `*italic*`), code fences (`` ```python ... ``` ``), bracketed metadata, URLs, and emojis are automatically scrubbed before reaching the speech engine, ensuring clean, uninterrupted vocal flow.
-4. **Offline Piper Fallback**: If EdgeTTS experiences any network disruption, speech automatically and seamlessly switches to the local Piper Hindi engine without crashing.
-
----
-
-## 🔄 Core Architectural Foundation
-
-Designed with high stability and modularity so new capabilities never compromise core functionality. No new dependencies. No bundled asset files. No hardcoded language, and nothing that assumes one operating system.
-
-### 🧠 A memory that actually remembers
-
-The store was capped at **2,200 characters — the whole memory, not per entry** — because all of it was pasted into the system prompt on every connect, so growing the memory grew every request. When it filled, the oldest entries were deleted and one line was printed to a console nobody reads. An assistant advertised as remembering "projects, preferences and personal context" was in practice a two-page notepad that quietly forgot your sister's name after a few weeks.
-
-Storage and prompt budget are now separate problems:
-
-* **Nothing is deleted.** The cap is a runaway guard normal use never approaches, and if it is ever hit it says so in the activity log instead of on stdout.
-* **The prompt carries a core, not a dump.** Identity in full, then the most recently updated facts, budgeted — measured at **971 characters on a memory holding 62 stored facts.** That is *smaller* than the old whole-store cap, so sessions now connect with fewer tokens than before.
-* **The rest is fetched on demand.** A `recall_memory` tool searches the full store locally — no network, no second model, well under a millisecond.
-
-The part that is easy to get wrong: **a model cannot look something up if it doesn't know the thing exists.** So the prompt also carries an **index of the keys** it had no room for. Without it, "who is Ayşe?" gets "I don't know" while `ayse_sister` sits on disk unread. That index interleaves categories rather than sorting by recency — sorted like the core, a memory with forty preferences pushed the one entry the index existed for off the end.
-
-⚙ → **🧠 MEMORY** shows every stored fact, when it was learned, and a ✕ to forget it. Everything stays in `memory/long_term.json` on your machine.
-
-### ↩️ Undo — it can take back what it did
-
-JARVIS moves files, renames them, writes to them and changes your settings. None of that had a way back; if it misheard you, the only remedy was to fix it by hand.
-
-Say **"undo"** — in any language — and it reverses its own last action:
-
-| | |
-|---|---|
-| **Files** | move · rename · create · copy · write · delete · organize desktop |
-| **Settings** | volume · brightness · dark mode |
-
-Three things it deliberately does *not* do:
-
-* **It does not guess.** Settings undo reads the current value *before* changing it. Where a platform won't report that value, nothing is registered — an undo that restores a guess is worse than no undo.
-* **It does not hoard.** Undoing a write means keeping the old contents in memory, so files over 1 MB are excluded and it says so rather than holding a 200 MB log for the session.
-* **It does not delete your files to undo a copy.** The reverse of a copy is removing the copy; the reverse of "create a folder" is removing it *only while it's still empty*.
-
-`organize_desktop` gets special treatment — one command that moves dozens of files, which made it the least reversible thing the assistant could do. It journals every move and puts all of them back in one go, cleaning up the folders it created if they're still empty.
-
-**Undo costs nothing at runtime.** It appends a closure to a list; nothing in it runs unless you ask.
-
-### ⚠️ A confirmation the model can't forge
-
-The old gate read like this:
-
-```python
-if action in _DANGEROUS_ACTIONS:            # {"restart", "shutdown"}
-    confirmed = str(params.get("confirmed", "")).lower()
-```
-
-`confirmed` is a **tool parameter, which means the model fills it in.** Nothing stopped it sending `confirmed=yes` on the first call and nothing checked that a human was ever involved. It was a convention, not a gate. And its coverage was two actions — so `toggle_wifi`, which cuts the assistant's own connection to the Live API and therefore *cannot be asked to undo itself*, went through with no gate at all.
-
-The token is now issued by the interface. Shutdown, restart and WiFi put a banner on the HUD and **return immediately**; the action runs only if you press CONFIRM. Nothing blocks — JARVIS keeps talking while the banner is up — so this is **cheaper than the old gate**, which burned two tool round trips on every power command.
-
-> The split between the two mechanisms is about reversibility, not about how alarming a word sounds. Anything undoable is done at once; only the genuinely irreversible asks. An assistant that checks with you before turning the volume down is one you stop talking to.
-
-### 🎧 It finally asks which microphone
-
-Both audio streams opened with no device argument at all, so they always took whatever the OS called "default" — and on Windows that *moves on its own* the moment you plug a headset in. "JARVIS can't hear me" almost always meant "JARVIS is listening to the webcam".
-
-⚙ → **🎧 AUDIO DEVICES** lets you pick the microphone and the speakers by name. Two things matter more than the dropdown:
-
-**The list is short.** `query_devices()` returns one entry per *device × host API*, not per device — measured on an ordinary Windows machine, **41 entries for what the sound settings show as 4 microphones and 4 speakers.** The same microphone appears four times, under MME, DirectSound, WASAPI and WDM-KS, with nothing to say which is which. That is not a choice, it's a quiz. The picker takes one host API per direction, drops the "Sound Mapper" and "Primary Sound Driver" pseudo-devices that just mean "default", and deduplicates. **41 → 8.**
-
-**Every entry has been measured, not assumed.** The obvious approach is to pick the host API with the nicest names — WASAPI on Windows, which in shared mode **doesn't resample**, so with 16 kHz in and 24 kHz out against 48 kHz hardware every open failed. Adding a rate check and moving to DirectSound passes that test on both sides, and PortAudio's DirectSound **output is a silent sink**: the stream opens, every write returns success in ~0 ms, and not one sample reaches the speakers.
-
-| | write(2.0 s) took | |
-|---|---|---|
-| MME | **2.02 s** | consumed in real time |
-| DirectSound | **0.00 s** | swallowed instantly |
-
-No capability flag reports that. So the app measures it — once per host API per direction, on a background thread at startup, using silence. Two consequences worth stating plainly:
-
-* **Each direction picks its own host API.** On Windows this lands on DirectSound for the microphone and MME for the speakers — a split no amount of reasoning would have produced.
-* **The probe runs in the mode the app actually ships.** DirectSound input passes a callback stream and fails a blocking read; probing the wrong mode rejected a microphone that works perfectly.
-
-Your choice is stored **by name, not by index** — indices shift whenever something is plugged in. If the saved device is gone, it falls back to the system default and says so in the log rather than failing to start.
-
-### 🔗 It stops forgetting the conversation when the connection drops
-
-`session_resumption` was switched on in the config and the handle the server sent back was **never read** — so every reconnect started an empty session. A dropped packet, or simply changing the voice, wiped the conversation. "Unlimited sessions" leaked through exactly this hole.
-
-The handle is captured and replayed now. A network blip, or switching your microphone, keeps the conversation intact.
-
-It is held in memory only, deliberately: writing it to disk would make a fresh launch continue yesterday's chat, which sounds appealing but breaks the session-summary flow — a conversation that never ends never produces a summary, and the "yesterday we talked about…" line in the morning briefing silently disappears. Changing the **voice** also starts clean on purpose, since resuming restores the server's session state and would likely bring the old voice back with it.
-
-### 🩹 Fixes that came with it
-
-* **The assistant could die on a log line.** Status lines carry emoji and arrows (`📤 file_controller → Moved: a.txt → Documents/`). On a non-UTF-8 console — cp1254 on a Turkish Windows, cp1251 on a Russian one, cp932 on a Japanese one — printing one raises `UnicodeEncodeError`, and because that print sits *after* the tool's own `try/except`, it escaped into the receive loop and took the session down.
-* **Every computer command paid for two model round trips.** `computer_settings` made an *entire second Gemini call, inside the tool*, purely to translate the request into one of its own action names — because the declaration only said "The action to perform", so the model rarely filled it in. When that second call failed, the fallback was `description.lower().replace(" ", "_")`, which turns the Turkish for "turn it down" into `sesi_kis` and straight into "Unknown action". The declaration now names all 56 actions and the rest is spelling tolerance handled locally by `difflib` in microseconds. When nothing matches it suggests real action names instead of dead-ending.
-* An unresolvable saved audio device, or one the driver refuses to open, falls back to the system default and says so — on both the microphone and the speakers.
-* A rejected session-resumption handle is dropped after one attempt, so an expired handle can never be replayed on every retry and prevent the reconnect it exists to protect.
-
-
-
----
-
-### 🗺️ Evolution & Architecture Roadmap
-
-| Phase | Capabilities |
-|---|---|
-| **Core Base** | Auto-start · clipboard intelligence · assistant customization |
-| **Telemetry** | Session memory · background monitoring · proactive 2.0 · instant vision |
-| **Ecosystem** | Plugin system · affective dialog · proactive audio · unlimited sessions |
-| **HUD & Voice** | Voice picker · live theming · reactive HUD · recallable memory · undo · real confirmation · audio device picker · session continuity |
-| **Intelligence**| Wake word · Gemini Live + Groq Llama-3.3 70B + DeepSeek · instant acknowledgment · self-describing action/plugin architecture |
-| **Offline Lab** | Offline Piper Hindi TTS (Devanagari) · Stark SFX · Zero-token drive gauges & Open-Meteo weather |
+| Provider | Free Tier | Best For |
+|----------|-----------|---------|
+| **Cerebras** | 1M tokens/day | World's fastest inference (~2,000 tok/s) |
+| **Groq LPU** | 30 RPM, 1K RPD | Rock-solid speed for long dialogues |
+| **Google Gemini** | 1M tokens/min | 1M+ context, multimodal vision |
+| **OpenRouter** | 20+ free models | 200+ models with one key |
+| **NVIDIA NIM** | 1,000 calls/month | Nemotron, Llama 3.3 70B, DeepSeek R1 |
+| **Mistral AI** | 1B tokens/month | Code (Codestral), GDPR-compliant |
+| **SambaNova** | 200K tokens/day | Llama 3.1 405B full-precision free |
+| **GitHub Models** | Free with PAT | GPT-4o, DeepSeek-R1 on existing account |
+| **Hugging Face** | Serverless API | 500,000+ open-source models |
+| **DeepSeek Direct** | Official free tier | Reasoning, math, code |
+| **Cloudflare Workers AI** | 10,000 Neurons/day | Zero-setup edge inference |
+| **Zhipu AI (GLM)** | GLM-4-Flash forever free | 200K context, permanent free fallback |
+| **Gemini Web Proxy** | 100% built-in | Zero API key, zero credit card |
+| **OmniRoute Gateway** | Local universal proxy | 352+ providers, 1,200+ models |
+| **Custom / Local AI** | Unlimited offline | Ollama, LM Studio, vLLM, private endpoints |
 
 ---
 
 ## ⚡ Quick Start
 
-### 🚀 Option 1: 1-Click Launch (Windows — Recommended)
-Simply double-click **`start_jarvis.bat`**:
-- Auto-detects Python (3.10, 3.11, 3.12, 3.13) across standard directories and user appdata.
-- Automatically activates virtual environment (`.venv` / `venv`) if present.
-- Auto-installs missing system dependencies (`PyQt6`, `google-genai`, `sounddevice`, `edge-tts`, `psutil`, etc.).
-- Runs automatic preflight asset verification and launches the Cyberpunk HUD.
+### Option 1 — 1-Click Windows Launch *(Recommended)*
+Double-click **`start_jarvis.bat`**:
+- Auto-detects Python 3.10 / 3.11 / 3.12 / 3.13
+- Activates `.venv` / `venv` if present
+- Auto-installs missing dependencies
+- Runs preflight diagnostics and launches the HUD
 
-### 🔍 Option 2: Preflight Diagnostic Self-Test
-Verify all assets, directories, SFX audio files, and model configs before booting:
+### Option 2 — Preflight Diagnostic Self-Test
 ```bash
 python scripts/preflight_check.py
 ```
+Verifies all directories, SFX files, icons, Edge model configs, and API key templates before booting.
 
-### 🖥️ Option 3: Cross-Platform (Windows, macOS, Linux)
+### Option 3 — Cross-Platform (Windows / macOS / Linux)
 ```bash
 git clone https://github.com/SudhirDevOps1/J.A.R.V.I.S.git
 cd J.A.R.V.I.S
-python setup.py        # installs deps for YOUR OS + browser automation engine
+python setup.py        # OS-aware installer — skips wrong-OS packages automatically
 python main.py
 ```
 
-### 🕶️ Option 4: Background Launch (Windows Taskbar Arc Reactor)
-To run J.A.R.V.I.S. with the custom Stark Arc Reactor taskbar icon and logging directed to `logs/jarvis_runtime.log`:
+### Option 4 — Background Launch with Arc Reactor Taskbar Icon *(Windows)*
 ```bash
 pythonw run_jarvis.pyw
 ```
+Runs silently, logs to `logs/jarvis_runtime.log`, shows Arc Reactor icon in Windows taskbar.
 
-`setup.py` only ever installs what your operating system needs — Windows-only libraries are skipped automatically on macOS and Linux (and vice-versa). Prefer to do it by hand? `pip install -r requirements.txt` works too.
-
-> ⚠️ **Installation Note:** If you hit a `ModuleNotFoundError` for an OS-specific package, install it with `pip install <module_name>`. The optional **wake word** engine is *not* installed here — grab it in one click from **⚙ → WAKE WORD** inside the app.
+> **API Key:** Free Gemini API key from [Google AI Studio](https://aistudio.google.com/) (no credit card) is the fastest way to start. The built-in Gemini Web Proxy (`core/gemini_free_proxy.py`) works even without any key.
 
 ---
 
 ## 📋 Requirements
 
 | Requirement | Details |
-| --- | --- |
+|-------------|---------|
 | **OS** | Windows 10/11, macOS, or Linux |
 | **Python** | 3.11 or 3.12 |
-| **Microphone** | Required for voice interaction (and for the "Hey Jarvis" wake word) |
+| **Microphone** | Required for voice interaction |
 | **Speakers** | Required for voice replies |
-| **API Key** | Free Gemini / Groq API key (entered on first launch → `config/api_keys.json`) |
-| **Wake word** *(optional)* | One-click download from ⚙ → WAKE WORD (`openwakeword`, fully local) |
+| **API Key** | Free Gemini key — entered on first launch, saved to `config/api_keys.json` |
+| **Wake Word** *(optional)* | One-click download: ⚙ → WAKE WORD (`openwakeword`, fully local, offline) |
 
 ---
 
@@ -424,55 +223,110 @@ pythonw run_jarvis.pyw
 
 ```
 J.A.R.V.I.S./
-├── start_jarvis.bat          # 1-Click Windows launcher (auto-Python, auto-pip, preflight checks)
-├── run_jarvis.pyw            # Silent background launcher with Windows taskbar Arc Reactor
-├── main.py                   # Core loop — Gemini Live session, audio I/O, wake/sleep state, tool dispatch
-├── ui.py                     # PyQt6 HUD — reactive waveform, log panel, settings drawer, camera feed
-├── setup.py                  # OS-aware installer (skips wrong-OS dependencies)
+├── start_jarvis.bat              # 1-Click Windows launcher (auto-Python, auto-pip, preflight)
+├── run_jarvis.bat                # Minimal Windows run shortcut
+├── run_jarvis.pyw                # Silent background launcher — Arc Reactor taskbar icon
+├── run.sh                        # Linux / macOS launcher
+├── launch_silent.vbs             # VBScript for invisible Windows background launch
+├── main.py                       # Core loop — Gemini Live, audio I/O, wake/sleep, tool dispatch
+├── ui.py                         # PyQt6 HUD — waveform, log panel, settings drawer, camera
+├── setup.py                      # OS-aware dependency installer
+│
 ├── scripts/
-│   ├── preflight_check.py    # Automated system diagnostics (dirs, assets, SFX, models, keys)
-│   └── generate_icon.py      # Master Stark Arc Reactor icon generator (ICO & PNG)
+│   ├── preflight_check.py        # Diagnostics: dirs, SFX, icons, models, API key template
+│   └── generate_icon.py          # Arc Reactor icon generator (ICO + PNG, multi-resolution)
+│
+├── actions/                      # Bundled skills (TOOL dict + handler, auto-discovered)
+│   ├── web_search.py             # Gemini Grounded + DDG search
+│   ├── browser_control.py        # Playwright browser automation
+│   ├── computer_control.py       # Keyboard, mouse, OS-level control
+│   ├── computer_settings.py      # Volume, brightness, WiFi, dark mode — 56 actions
+│   ├── file_controller.py        # File move, rename, create, delete, copy
+│   ├── file_processor.py         # Read and analyse local documents
+│   ├── open_app.py               # Launch installed applications by voice
+│   ├── screen_processor.py       # Screen and webcam capture for vision
+│   ├── background_monitor.py     # Daily topic watching and alerts
+│   ├── proactive.py              # Time/context-aware proactive check-ins
+│   ├── send_message.py           # WhatsApp Web and Telegram
+│   ├── weather_report.py         # Open-Meteo live weather (free, no key)
+│   ├── flight_finder.py          # Real-time flight price search
+│   ├── youtube_video.py          # YouTube playback control
+│   ├── game_updater.py           # Steam and Epic Games updates
+│   ├── code_helper.py            # Code review, debug, generation
+│   ├── dev_agent.py              # Multi-step developer task agent
+│   ├── reminder.py               # OS-native scheduled reminders
+│   ├── desktop.py                # Taskbar and window management
+│   ├── todo_agent.py             # Task list management
+│   ├── obsidian_brain.py         # Obsidian vault REST + Markdown sync
+│   ├── system_monitor.py         # CPU, RAM, GPU, temperature telemetry
+│   ├── bm25_search.py            # Local BM25 full-text search
+│   ├── api_sniffer.py            # Network API discovery
+│   ├── tinydb_memory.py          # TinyDB structured memory
+│   └── subagent_swarm.py         # Multi-agent swarm interface
+│
 ├── plugins/
-│   ├── _template.py          # Copy this to write a new plugin — one file, drop in, done
-│   └── ...                   # Drop-in skills (each self-describes via a PLUGIN dict + run())
-├── actions/                  # Bundled skills — each self-describes via a TOOL dict + handler
-│   ├── web_search.py         # Gemini + DDG parallel search (news, research, price, compare)
-│   ├── screen_processor.py   # Screen & webcam capture for vision
-│   ├── background_monitor.py # User-configured topic watching — daily DDG check, no crypto
-│   ├── proactive.py          # Proactive 2.0 — time/context/rotation-aware check-ins
-│   ├── send_message.py       # Messaging integration
-│   ├── weather_report.py     # Live weather data
-│   ├── flight_finder.py      # Flight search
-│   ├── youtube_video.py      # YouTube playback control
-│   ├── game_updater.py       # Game update management (Steam / Epic)
-│   ├── code_helper.py        # Code review and generation
-│   ├── dev_agent.py          # Developer task agent
-│   └── desktop.py            # Desktop and taskbar control
-├── memory/
-│   ├── memory_manager.py     # Load/save long_term.json & daily Markdown journals
-│   ├── config_manager.py     # api_keys.json access — key, OS, name, voice, colour, toggles
-│   ├── hermes_personalization.py # Continuous learning of user habits, humor, and intimacy
-│   ├── journals/             # Immutable daily activity journals (YYYY-MM-DD.md)
-│   └── long_term.json        # Persistent store: identity, preferences, projects, sessions
+│   └── _template.py              # Copy this → new plugin in one file, no core edits
+│
 ├── core/
-│   ├── edge_router.py        # Tri-Tier Edge AI Router (Needle 2 Reflex + LFM 2.5 + Gemini Cloud)
-│   ├── expression_engine.py  # Zero-token sentiment analyzer & real-time HUD emotional badge
-│   ├── persona_manager.py    # Personality engines: Devoted GF, Stark Tactical, DevOps, Mentor
-│   ├── sfx.py                # Stark SFX audio engine (Windows winsound + sounddevice fallback)
-│   ├── tts.py                # Studio-quality Edge-TTS & offline Piper Hindi engine
-│   ├── prompt.txt            # Assistant personality and tool-routing rules
-│   ├── undo.py               # One shared undo stack — actions register how to reverse themselves
-│   ├── confirm.py            # Irreversible-action gate — token issued by UI, not model
-│   ├── audio_devices.py      # Microphone / speaker list — filtered, measured, resolved by name
-│   ├── plugin_loader.py      # Plugin engine — discovery, validation, crash isolation
-│   ├── action_loader.py      # Bundled-action engine — built-in twin of plugin_loader
-│   └── wake_word.py          # Local "Hey Jarvis" detector — own thread, offline, opt-in
+│   ├── edge_router.py            # Tri-Tier AI Router (Needle 2 + LFM 2.5 + Gemini Cloud)
+│   ├── multi_llm.py              # 22+ provider LLM engine with key rotation
+│   ├── gemini_free_proxy.py      # Built-in free Gemini proxy (port 8081, zero API key)
+│   ├── llm_cache.py              # SQLite LLM cache with adaptive TTL
+│   ├── llm_client.py             # Unified LLM client with fallback logic
+│   ├── expression_engine.py      # Zero-token sentiment → HUD emotional badge
+│   ├── persona_manager.py        # GF Soulmate, Tactical, DevOps, Mentor personas
+│   ├── tts.py                    # EdgeTTS studio voices + offline Piper Hindi
+│   ├── stt.py                    # faster-whisper offline STT + Vosk streaming
+│   ├── sfx.py                    # Stark SFX engine (boot/wake/ack/confirm)
+│   ├── audio_devices.py          # Mic/speaker probe, filter, resolve by name
+│   ├── wake_word.py              # Local "Hey Jarvis" offline detector
+│   ├── global_hotkey.py          # Ctrl+Space / Alt+J system-wide summon
+│   ├── subagent_swarm.py         # Autonomous multi-agent orchestrator
+│   ├── intent_classifier.py      # Pre-route intent classification
+│   ├── confirm.py                # Irreversible-action UI gate
+│   ├── undo.py                   # Shared undo stack
+│   ├── plugin_loader.py          # Plugin discovery, validation, crash isolation
+│   ├── action_loader.py          # Built-in action discovery
+│   ├── native_hacks.py           # OS-native notifications and API calls
+│   ├── installer.py              # Runtime dependency installer
+│   ├── version.py                # Project version constant
+│   └── prompt.txt                # Core personality and routing system prompt
+│
+├── memory/
+│   ├── memory_manager.py         # Long-term store + daily journal management
+│   ├── config_manager.py         # api_keys.json — all settings and toggles
+│   ├── hermes_personalization.py # Continuous learning: schedule, habits, intimacy
+│   ├── journals/                 # Daily activity journals (YYYY-MM-DD.md)
+│   └── long_term.json            # Persistent store: identity, preferences, sessions
+│
+├── dashboard/
+│   └── server.py                 # FastAPI local HTTP dashboard — WebSocket, QR, file upload
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml                # GitHub Actions CI — flake8, syntax, UTF-8 guard
+│
 └── config/
-    ├── jarvis.png            # Master 512x512 Stark Arc Reactor high-res icon
-    ├── jarvis.ico            # Windows application icon with multi-resolution frames
-    ├── api_keys.json         # API keys, OS settings, active brain, voice, toggles (Git-protected)
-    └── api_keys.example.json # Clean distribution template
+    ├── jarvis.png                 # 512×512 Stark Arc Reactor PNG icon
+    ├── jarvis.ico                 # Windows multi-resolution ICO (16→512px)
+    ├── api_keys.json              # Runtime config — keys, settings, toggles (Git-protected)
+    └── api_keys.example.json      # Clean distribution template
 ```
+
+---
+
+## 🔄 Architecture Roadmap
+
+| Phase | What Was Built |
+|-------|---------------|
+| **Core Base** | Auto-start · clipboard · customization · undo · confirmation gate |
+| **Telemetry** | Session memory · background monitoring · proactive 2.0 · screen/webcam vision |
+| **Ecosystem** | Plugin system · 22+ LLM providers · affective dialog · unlimited sessions |
+| **HUD & Voice** | Voice picker · live theming · reactive HUD · memory panel · audio device picker · session continuity |
+| **Intelligence** | Wake word · instant acknowledgment · self-describing action/plugin architecture |
+| **Offline Lab** | Whisper STT · Piper Hindi TTS · Stark SFX · zero-token drive gauges · Open-Meteo weather |
+| **Edge AI** | Tri-Tier Router · Needle 2 Reflex (28MB / <15ms) · LFM 2.5 offline · Gemini Cloud |
+| **CI/CD** | Native Python Git hooks · flake8 clean · GitHub Actions · smoke test pre-push |
 
 ---
 
@@ -482,10 +336,11 @@ Licensed under the **[MIT License](LICENSE)**. Open-source and free for all deve
 
 ---
 
-## 👤 Connect with the Creator
+## 👤 Creator
 
-Engineered by SudhirDevOps1.
+Engineered by **SudhirDevOps1**.
 
 | Platform | Link |
-| --- | --- |
-| GitHub | [@SudhirDevOps1](https://github.com/SudhirDevOps1) |
+|----------|------|
+| **GitHub** | [@SudhirDevOps1](https://github.com/SudhirDevOps1) |
+| **Repository** | [J.A.R.V.I.S.](https://github.com/SudhirDevOps1/J.A.R.V.I.S) |
