@@ -269,7 +269,8 @@ def check_python_packages(verbose=True):
     missing = []
     for mod_name, pip_name in core_packages:
         try:
-            importlib.import_module(mod_name)
+            if importlib.util.find_spec(mod_name) is None:
+                missing.append(pip_name)
         except Exception:
             missing.append(pip_name)
             
