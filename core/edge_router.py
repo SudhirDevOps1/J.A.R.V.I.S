@@ -921,11 +921,11 @@ class LFMChatEngine:
 
         # Identity & Creator
         if any(w in clean for w in ("tum kaun ho", "who are you", "tera naam kya hai", "apna parichay do")):
-            return "Main J.A.R.V.I.S. (Mark-LIII) hoon — aapka ultra-fast personal AI assistant. Needle 2 aur LFM2.5 ke sath poora on-device control mere pas hai, sir."
+            return "Main J.A.R.V.I.S. hoon — aapka ultra-fast personal AI assistant. Needle 2 aur LFM2.5 ke sath poora on-device control mere pas hai, sir."
         if any(w in clean for w in ("tumhe kisne banaya", "who created you", "who made you", "tera malik kaun", "creator")):
             return "Mujhe mere boss (Aapne) banaya hai — ek powerful, intelligent aur fully automated personal desktop assistant ke roop me!"
         if any(w in clean for w in ("version kya hai", "which version", "tumhara version")):
-            return "Main J.A.R.V.I.S. Mark-LIII (Needle 2 + LFM2.5 Tri-Tier Edge Edition) par chal raha hoon."
+            return "Main J.A.R.V.I.S. (Needle 2 + LFM2.5 Tri-Tier Edge Edition) par chal raha hoon."
 
         # Status & Feelings
         if any(w in clean for w in ("kya haal hai", "kaise ho", "how are you", "sab theek hai")):

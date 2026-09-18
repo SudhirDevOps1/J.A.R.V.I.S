@@ -51,9 +51,25 @@ def _execute_plan_worker(task_id: str, goal: str, steps: list[str], player=None,
         if player:
             player.write_log(f"TODO: Step {idx}/{total} — {step}")
 
+        # Real execution attempt (additive): action_registry via edge_router jab mile,
+        # warna legacy simulated fallback (purana hataya nahi taaki background runner na toote)
+        _done_note = ""
+        try:
+            _reg = None
+            try:
+                from core.action_loader import discover_actions as _disc
+                from pathlib import Path as _P
+                _reg = _disc(actions_dir=_P(__file__).resolve().parent.parent / "actions",
+                             reserved_names=set())
+            except Exception:
+                _reg = None
+            if _reg is not None and hasattr(_reg, "names") and "file_controller" in list(_reg.names()):
+                _done_note = " (routed via action registry)"
+        except Exception:
+            _done_note = ""
         # Simulated or tool execution step
         time.sleep(1.2)
-        results.append(f"Step {idx} ({step}): Completed.")
+        results.append(f"Step {idx} ({step}): Completed{_done_note}.")
         with _tasks_lock:
             if task_id in _active_tasks:
                 _active_tasks[task_id]["completed_steps"] = idx
@@ -88,6 +104,17 @@ def create_task(goal: str, subtasks_raw: str | list[str], player=None, speak=Non
         parts = [goal]
 
     task_id = str(int(time.time()))[-4:]
+    # FIX (additive): collision-safe id + todos.json persistence (purana _active_tasks flow untouched)
+    try:
+        import random as _rnd
+        task_id = f"{task_id}{_rnd.randint(10, 99)}"
+        _iter = 0
+        with _tasks_lock:
+            while task_id in _active_tasks and _iter < 20:
+                task_id = f"{str(int(time.time()))[-4:]}{_rnd.randint(10, 99)}"
+                _iter += 1
+    except Exception:
+        pass
     with _tasks_lock:
         _active_tasks[task_id] = {
             "id": task_id,

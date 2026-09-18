@@ -379,8 +379,8 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ### 🚀 Enhancements & Bug Fixes
 
-1. **Complete Removal of Legacy "Mark LIII" Nomenclature**
-   - Cleanly replaced all legacy references to "Mark LIII", "Mark XL", and version suffixes across `readme.md`, `LICENSE`, `changelog.md`, `nextpatch.md`, `core/tts.py`, `core/installer.py`, `core/llm_client.py`, and `ui.py`.
+1. **Branding Unification — Legacy Version Nomenclature Removed**
+   - Cleanly replaced all legacy version suffixes across `readme.md`, `LICENSE`, `changelog.md`, `nextpatch.md`, `core/tts.py`, `core/installer.py`, `core/llm_client.py`, and `ui.py`.
    - Unified official project naming under **J.A.R.V.I.S. (SudhirDevOps1 AI)**.
 
 2. **License Transition to Standard Permissive MIT License (`LICENSE`)**
@@ -422,7 +422,7 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
    - Removed the vacant `lay.addStretch()` black hole below system metrics.
    - Integrated **Live Drive Storage Gauges**: Auto-detects all mounted Windows drives (C:, D:, E:) and renders color-coded progress bars (Normal < 75%, Warning 75-90%, Critical > 90%).
    - Integrated **Live Atmosphere Weather Card**: Direct Open-Meteo API connection displaying auto-detected City, Temp (°C), Sky Conditions, and Wind Speed with zero API keys and 0 LLM tokens.
-   - Redesigned compact horizontal telemetry status badges (`[AI CORE: ONLINE]`, `[SEC: OK]`, `[PROTO: MK LIII]`).
+   - Redesigned compact horizontal telemetry status badges (`[AI CORE: ONLINE]`, `[SEC: OK]`, `[PROTO: ACTIVE]`).
 
 2. **Quick Action Cyber Matrix (`ui.py`)**
    - Added a high-tech 4-button quick action toolbar directly on the right panel:

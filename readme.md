@@ -1,6 +1,6 @@
 <div align="center">
   <img src="config/jarvis.png" width="160" height="160" alt="J.A.R.V.I.S. Arc Reactor Logo" />
-  <h1>⚙️ J.A.R.V.I.S. (Mark-LIII)</h1>
+  <h1>⚙️ J.A.R.V.I.S.</h1>
   <p><b>The Ultimate Production-Ready Cross-Platform Personal AI Assistant</b></p>
   <p><i>Tri-Tier Edge AI Architecture: Needle 2 (Reflex) ➔ LFM 2.5 (Chat) ➔ Gemini Cloud (Reasoning)</i></p>
   <p><i>Engineered by <a href="https://github.com/SudhirDevOps1">SudhirDevOps1</a></i></p>
@@ -21,7 +21,7 @@ A real-time, production-grade voice AI that can hear, see, understand, and contr
 
 ## ✨ Overview
 
-**J.A.R.V.I.S. (Mark-LIII) is an ultra-fast, hands-free personal AI assistant engineered for production reliability.** Say **"Hey Jarvis"** and it wakes instantly; stay quiet and it slips back to sleep — while asleep, your microphone never leaves the machine. 
+**J.A.R.V.I.S. is an ultra-fast, hands-free personal AI assistant engineered for production reliability.** Say **"Hey Jarvis"** and it wakes instantly; stay quiet and it slips back to sleep — while asleep, your microphone never leaves the machine. 
 
 Under the hood, requests are routed through an intelligent **Tri-Tier Hierarchy**:
 1. **Tier 1 (Needle 2 Reflex — ~28MB RAM, <15ms)**: Instant on-device execution of system actions (opening apps, media, volume, brightness, window controls) without sending a single byte over the network.

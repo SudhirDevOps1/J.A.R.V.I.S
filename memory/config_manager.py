@@ -12,6 +12,52 @@ BASE_DIR    = get_base_dir()
 CONFIG_DIR  = BASE_DIR / "config"
 CONFIG_FILE = CONFIG_DIR / "api_keys.json"
 
+# ── Safe-write helpers (additive, bina kuch hataye) ──────────────────────────
+# Har config write se pehle timestamped .bak backup + tmp-file + os.replace
+# atomic write taaki crash par config corrupt na ho. Purana logic untouched.
+def _backup_config() -> str | None:
+    """api_keys.json ka timestamped backup banata hai. Returns backup path ya None."""
+    try:
+        if not CONFIG_FILE.exists():
+            return None
+        from datetime import datetime as _dt
+        import shutil as _sh
+        ensure_config_dir()
+        ts = _dt.now().strftime("%Y%m%d-%H%M%S")
+        bak = CONFIG_DIR / f"api_keys.json.bak-{ts}"
+        _sh.copy2(str(CONFIG_FILE), str(bak))
+        # purane backups max 5 rakho, baaki untouched (delete sirf apne banaye .bak-*)
+        try:
+            olds = sorted(CONFIG_DIR.glob("api_keys.json.bak-*"))
+            for _old in olds[:-5]:
+                try:
+                    _old.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return str(bak)
+    except Exception:
+        return None
+
+
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """Tmp-file + os.replace atomic write (crash-safe)."""
+    import tempfile as _tf
+    ensure_config_dir()
+    fd, _tmp = _tf.mkstemp(dir=str(path.parent), prefix=path.name + ".tmp-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as _f:
+            json.dump(data, _f, indent=4)
+        os.replace(_tmp, path)
+    except Exception:
+        try:
+            if os.path.exists(_tmp):
+                os.remove(_tmp)
+        except Exception:
+            pass
+        raise
+
 def ensure_config_dir() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -178,7 +224,14 @@ def _patch_config(**fields) -> None:
         except Exception:
             data = {}
     data.update(fields)
-    CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    try:
+        _backup_config()
+    except Exception:
+        pass
+    try:
+        _atomic_write_json(CONFIG_FILE, data)
+    except Exception:
+        CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
 
 
 def get_input_device() -> str:

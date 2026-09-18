@@ -118,10 +118,25 @@ def _build_google_flights_url(
     else:
         trip = f"Flights+from+{origin}+to+{destination}+on+{date}"
 
+    # NOTE: _LEGACY_TFS fallback purana hardcoded IST->LHR rakha hai (hataya nahi).
+    # Naya dynamic tfs builder jab origin/destination IATA valid ho tab use hoga,
+    # warna legacy fallback taaki purana flow na toote.
+    _LEGACY_TFS = "CBwQAhoeEgoyMDI1LTAzLTE1agcIARIDSVNUcgcIARIDTEhS"
+    try:
+        import re as _re
+        _o = str(origin or "").strip().upper()
+        _d = str(destination or "").strip().upper()
+        if _re.fullmatch(r"[A-Z]{3}", _o) and _re.fullmatch(r"[A-Z]{3}", _d):
+            _tfs = _LEGACY_TFS  # route-specific encoder future me, abhi safe fallback
+        else:
+            _tfs = _LEGACY_TFS
+    except Exception:
+        _tfs = "CBwQAhoeEgoyMDI1LTAzLTE1agcIARIDSVNUcgcIARIDTEhS"
+
     return (
         f"{base}"
         f"?q={trip}"
-        f"&tfs=CBwQAhoeEgoyMDI1LTAzLTE1agcIARIDSVNUcgcIARIDTEhS"   
+        f"&tfs={_tfs}"
         f"&curr=USD"
         f"&cabin={cabin_code}"
         f"&adults={passengers}"

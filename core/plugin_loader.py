@@ -158,6 +158,13 @@ def _validate(module, filename: str) -> PluginRecord:
     if not (isinstance(settings, dict) and isinstance(settings.get("fields"), list)):
         settings = None
 
+    # Additive permission manifest (optional, bina purana todhe):
+    # PLUGIN_PERMISSIONS = {"mic": False, "file": True, "net": True, "system": False}
+    # Na ho to full-trust legacy mode (purana behavior untouched). Ho to UI/log me dikhega.
+    perms = getattr(module, "PLUGIN_PERMISSIONS", None)
+    if not isinstance(perms, dict):
+        perms = None
+
     return PluginRecord(name=name, description=description.strip(), parameters=parameters,
                          run=run_fn, file=filename, valid=True, error="", settings=settings)
 

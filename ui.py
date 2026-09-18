@@ -6213,13 +6213,19 @@ class MainWindow(QMainWindow):
             try:
                 from core.multi_llm import test_llm_provider
                 cfg = _read_full_config()
-                p = cfg.get("active_provider", "groq")
+                # FIX: canonical key preferred_llm_provider (active_provider legacy fallback rakha hai, hataya nahi)
+                p = (cfg.get("preferred_llm_provider") or cfg.get("active_provider") or "groq")
                 k = cfg.get(f"{p}_api_key", "")
-                ok, lat, err = test_llm_provider(p, k)
+                # FIX: test_llm_provider returns (bool,str,float) = (ok,msg,lat)
+                ok, msg, lat = test_llm_provider(p, k)
+                try:
+                    _lat = float(lat)
+                except Exception:
+                    _lat = 0.0
                 if ok:
-                    self._log.append_log(f"PROVIDER: {p.upper()} reachable ({lat:.0f}ms) [OK]")
+                    self._log.append_log(f"PROVIDER: {p.upper()} reachable ({_lat:.0f}ms) [OK]")
                 else:
-                    self._log.append_log(f"PROVIDER: {p.upper()} ping failed: {err}")
+                    self._log.append_log(f"PROVIDER: {p.upper()} ping failed: {msg}")
             except Exception as e:
                 self._log.append_log(f"PROVIDER: Ping error: {e}")
         threading.Thread(target=_run, daemon=True).start()
@@ -7543,6 +7549,15 @@ class MainWindow(QMainWindow):
     def _on_setup_done(self, key: str, os_name: str):
         os.makedirs(CONFIG_DIR, exist_ok=True)
         data = _read_full_config()
+        # Safety: timestamped backup before first write (bina kuch hataye)
+        try:
+            import shutil as _sh
+            from datetime import datetime as _dt
+            if API_FILE.exists():
+                _ts = _dt.now().strftime("%Y%m%d-%H%M%S")
+                _sh.copy2(str(API_FILE), str(CONFIG_DIR / f"api_keys.json.bak-{_ts}"))
+        except Exception:
+            pass
         data["os_system"] = os_name
         if key:
             data["gemini_api_key"] = key

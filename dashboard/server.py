@@ -372,6 +372,8 @@ class DashboardServer:
         self._ip                          = _local_ip()
         self._tokens: set[str]            = set()
         self._token_keys: dict[str, str]  = {}   # auth_token → session_key
+        self._token_created: dict[str, float] = {}  # auth_token → epoch (24h TTL sweep, purane turant invalid nahi)
+        self._login_attempts: dict[str, list[float]] = {}  # ip → [timestamps] (10/min rate-limit, additive)
         self._aes_cache:  dict[str, bytes]= {}   # session_key → AES bytes
         self._clients: set[WebSocket]     = set()
         self._history: list[dict]         = []
@@ -483,11 +485,35 @@ class DashboardServer:
             body    = await req.json()
             entered = str(body.get("pin", "")).strip().upper()
             now     = time.time()
+            # Additive rate-limit: 10 attempts/min per IP (bina purana flow hataye)
+            try:
+                _ip = (req.client.host if req.client else "lan")
+                _hits = [t for t in self._login_attempts.get(_ip, []) if now - t < 60]
+                if len(_hits) >= 10:
+                    return {"ok": False, "error": "Too many attempts, try after a minute."}
+                _hits.append(now)
+                self._login_attempts[_ip] = _hits[-10:]
+            except Exception:
+                pass
+            # Additive TTL sweep: 24h se purane bearer tokens safai (active untouched)
+            try:
+                _old = [t for t, ts in list(self._token_created.items()) if now - ts > 86400]
+                for t in _old:
+                    self._tokens.discard(t)
+                    self._token_keys.pop(t, None)
+                    self._token_created.pop(t, None)
+                    self._aes_cache.pop(t, None)
+            except Exception:
+                pass
             if entered in self._pending_keys and self._pending_keys[entered] > now:
                 del self._pending_keys[entered]          # one-time use
                 tok = secrets.token_urlsafe(32)
                 self._tokens.add(tok)
                 self._token_keys[tok] = entered
+                try:
+                    self._token_created[tok] = now
+                except Exception:
+                    pass
                 self._aes_key(entered)                   # pre-derive & cache
                 if self._connect_callback:
                     self._connect_callback()

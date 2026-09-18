@@ -8,7 +8,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "======================================================================"
-echo "         * SUDHIRDEVOPS1 AI ASSISTANT (J.A.R.V.I.S. MARK LIII) *"
+echo "            * SUDHIRDEVOPS1 AI ASSISTANT (J.A.R.V.I.S.) *"
 echo "======================================================================"
 echo ""
 

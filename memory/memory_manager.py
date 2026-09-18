@@ -456,8 +456,55 @@ def save_session_summary(summary: str, language: str = "") -> None:
 
 def pop_last_session() -> dict | None:
     """
-    Return the most recent session entry without destroying it.
+    Pop + return the most recent session entry and persist (never repeated).
+    Safe: backup + atomic write. Empty/corrupt par None.
     """
+    with _lock:
+        if not MEMORY_PATH.exists():
+            return None
+        try:
+            memory   = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
+            sessions = memory.get("sessions", [])
+            if not isinstance(sessions, list) or not sessions:
+                return None
+            last = sessions.pop()
+            memory["sessions"] = sessions
+            try:
+                from datetime import datetime as _dt
+                import shutil as _sh
+                _ts = _dt.now().strftime("%Y%m%d-%H%M%S")
+                _bak = MEMORY_PATH.parent / f"long_term.json.bak-{_ts}"
+                _sh.copy2(str(MEMORY_PATH), str(_bak))
+            except Exception:
+                pass
+            try:
+                import tempfile as _tf
+                import os as _os
+                _fd, _tmp = _tf.mkstemp(dir=str(MEMORY_PATH.parent), prefix="long_term.json.tmp-")
+                try:
+                    with _os.fdopen(_fd, "w", encoding="utf-8") as _f:
+                        json.dump(memory, _f, indent=2, ensure_ascii=False)
+                    _os.replace(_tmp, MEMORY_PATH)
+                except Exception:
+                    try:
+                        if _os.path.exists(_tmp):
+                            _os.remove(_tmp)
+                    except Exception:
+                        pass
+                    raise
+            except Exception:
+                MEMORY_PATH.write_text(
+                    json.dumps(memory, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            return last
+        except Exception as e:
+            print(f"[Memory] ⚠️ pop_last_session error: {e}")
+            return None
+
+
+def get_last_session() -> dict | None:
+    """Legacy read-only peek (pop nahi karta). Purane callers ke liye rakha hai, hataya nahi."""
     with _lock:
         if not MEMORY_PATH.exists():
             return None

@@ -4,7 +4,7 @@ cd /d "%~dp0"
 color 0B
 
 echo ======================================================================
-echo          * SUDHIRDEVOPS1 AI ASSISTANT (J.A.R.V.I.S. MARK LIII) *
+echo             * SUDHIRDEVOPS1 AI ASSISTANT (J.A.R.V.I.S.) *
 echo ======================================================================
 echo.
 

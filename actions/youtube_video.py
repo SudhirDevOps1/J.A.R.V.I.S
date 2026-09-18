@@ -313,7 +313,10 @@ def _handle_summarize(parameters: dict, player, speak) -> str:
     if not _TRANSCRIPT_OK:
         return "youtube-transcript-api is not installed. Run: pip install youtube-transcript-api"
 
-    url = _ask_for_url("Please paste the YouTube video URL:")
+    # FIX (additive): parameters["url"] first, dialog sirf fallback (purana flow hataya nahi)
+    url = str((parameters or {}).get("url", "") or "").strip()
+    if not url:
+        url = _ask_for_url("Please paste the YouTube video URL:")
     if not url:
         return "No URL provided, sir. Summary cancelled."
     if not _is_valid_youtube_url(url):

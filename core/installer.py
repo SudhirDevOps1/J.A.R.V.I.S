@@ -33,6 +33,17 @@ _CORE: list[tuple[str, str]] = [
     ("send2trash",         "send2trash"),
     ("pptx",               "python-pptx"),
     ("youtube_transcript_api", "youtube-transcript-api"),
+    # ADDITIVE SYNC (purana hataya nahi): requirements.txt me hain, installer me missing the
+    ("genai",              "google-genai"),
+    ("edge_tts",           "edge-tts"),
+    ("tinydb",             "tinydb"),
+    ("bm25",               "rank-bm25"),
+    ("thefuzz",            "thefuzz"),
+    ("sklearn",            "scikit-learn"),
+    ("fastapi",            "fastapi"),
+    ("uvicorn",            "uvicorn"),
+    ("cryptography",       "cryptography"),
+    ("openpyxl",           "openpyxl"),
 ]
 
 # Windows-only (pywinauto, pycaw, win10toast, comtypes)
