@@ -11,18 +11,30 @@ echo.
 :: 1. Auto-Detect Python
 where python >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
+    if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python313;%LOCALAPPDATA%\Programs\Python\Python313\Scripts;%PATH%"
+    ) else if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
         set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;%PATH%"
     ) else if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
         set "PATH=%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts;%PATH%"
     ) else if exist "%LOCALAPPDATA%\Programs\Python\Python310\python.exe" (
         set "PATH=%LOCALAPPDATA%\Programs\Python\Python310;%LOCALAPPDATA%\Programs\Python\Python310\Scripts;%PATH%"
+    ) else if exist "C:\Program Files\Python313\python.exe" (
+        set "PATH=C:\Program Files\Python313;C:\Program Files\Python313\Scripts;%PATH%"
+    ) else if exist "C:\Program Files\Python312\python.exe" (
+        set "PATH=C:\Program Files\Python312;C:\Program Files\Python312\Scripts;%PATH%"
+    ) else if exist "C:\Program Files\Python311\python.exe" (
+        set "PATH=C:\Program Files\Python311;C:\Program Files\Python311\Scripts;%PATH%"
+    ) else if exist "C:\Python313\python.exe" (
+        set "PATH=C:\Python313;C:\Python313\Scripts;%PATH%"
     ) else if exist "C:\Python312\python.exe" (
         set "PATH=C:\Python312;C:\Python312\Scripts;%PATH%"
     ) else if exist "C:\Python311\python.exe" (
         set "PATH=C:\Python311;C:\Python311\Scripts;%PATH%"
+    ) else if exist "C:\Python310\python.exe" (
+        set "PATH=C:\Python310;C:\Python310\Scripts;%PATH%"
     ) else (
-        echo [!] Python nahi mila. Testing 'py' launcher...
+        echo [!] Python PATH me nahi mila. Testing 'py' launcher...
         py --version >nul 2>&1
         if %ERRORLEVEL% EQU 0 (
             set "PYTHON_EXE=py"

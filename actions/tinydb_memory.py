@@ -88,6 +88,8 @@ def _get_db():
         return TinyDB(str(_STORE_FILE))
     return _SimpleNoSQL(_STORE_FILE)
 
+get_db = _get_db
+
 
 def add_task_reminder(task: str, due: str = "soon", category: str = "general") -> str:
     """Save a task/reminder to TinyDB."""

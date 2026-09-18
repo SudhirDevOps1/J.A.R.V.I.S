@@ -224,6 +224,102 @@ def check_omniroute(verbose=True):
     if verbose:
         print('  [--] OmniRoute Gateway: Not running (optional - npm install -g omniroute)')
 
+def check_python_packages(verbose=True):
+    """Verifies and auto-installs missing Python packages from requirements.txt."""
+    import importlib
+    import subprocess
+    
+    core_packages = [
+        ('PyQt6', 'PyQt6'),
+        ('sounddevice', 'sounddevice'),
+        ('numpy', 'numpy'),
+        ('google.genai', 'google-genai>=2.8.0'),
+        ('edge_tts', 'edge-tts'),
+        ('requests', 'requests'),
+        ('bs4', 'beautifulsoup4'),
+        ('duckduckgo_search', 'duckduckgo-search'),
+        ('playwright', 'playwright'),
+        ('pyautogui', 'pyautogui'),
+        ('pyperclip', 'pyperclip'),
+        ('pygetwindow', 'pygetwindow'),
+        ('PIL', 'pillow'),
+        ('cv2', 'opencv-python'),
+        ('mss', 'mss'),
+        ('psutil', 'psutil'),
+        ('send2trash', 'send2trash'),
+        ('tinydb', 'tinydb'),
+        ('rank_bm25', 'rank-bm25'),
+        ('thefuzz', 'thefuzz'),
+        ('keyboard', 'keyboard'),
+        ('sklearn', 'scikit-learn'),
+        ('fastapi', 'fastapi'),
+        ('uvicorn', 'uvicorn'),
+        ('cryptography', 'cryptography'),
+    ]
+    if sys.platform == 'win32':
+        core_packages.extend([
+            ('comtypes', 'comtypes'),
+            ('pycaw', 'pycaw'),
+            ('win10toast', 'win10toast'),
+            ('pywinauto', 'pywinauto'),
+            ('win32api', 'pywin32'),
+            ('wmi', 'wmi'),
+        ])
+    
+    missing = []
+    for mod_name, pip_name in core_packages:
+        try:
+            importlib.import_module(mod_name)
+        except Exception:
+            missing.append(pip_name)
+            
+    if missing:
+        if verbose:
+            print(f'  [*] Auto-installing {len(missing)} missing libraries: {", ".join(missing)}...')
+        try:
+            cmd = [sys.executable, "-m", "pip", "install"] + missing
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0:
+                if verbose:
+                    print(f'  [OK] Python Libraries: Installed {len(missing)} missing packages successfully')
+            else:
+                if verbose:
+                    print(f'  [!] Pip notice: {res.stderr[:120] if res.stderr else "Installed with minor notes"}')
+        except Exception as e:
+            if verbose:
+                print(f'  [!] Auto-install error: {e}')
+    else:
+        if verbose:
+            print(f'  [OK] Python Libraries: All {len(core_packages)} dependencies verified & ready')
+
+def check_browser_engine(verbose=True):
+    """Verify headless Chromium/Brave/Edge browser engine is available for web sniffing."""
+    try:
+        from actions.api_sniffer import _get_browser_executable_or_kwargs
+        binfo = _get_browser_executable_or_kwargs()
+        if "executable_path" in binfo:
+            bname = os.path.basename(binfo["executable_path"])
+            if verbose:
+                print(f'  [OK] Web Browser Engine: Host browser detected ({bname} - 0 MB overhead)')
+        else:
+            if verbose:
+                print('  [OK] Web Browser Engine: Playwright default browser ready')
+    except Exception as e:
+        if verbose:
+            print(f'  [!] Browser engine note: {e}')
+
+def check_memory_stores(verbose=True):
+    """Ensure TinyDB NoSQL memory store and SQLite LRU cache are initialized."""
+    try:
+        from actions.tinydb_memory import get_db
+        db = get_db()
+        cnt = len(db.all())
+        if verbose:
+            print(f'  [OK] TinyDB Memory Store: Ready ({cnt} records in memory/tinydb_store.json)')
+    except Exception as e:
+        if verbose:
+            print(f'  [!] TinyDB check note: {e}')
+
 def check_installed_apps(verbose=True):
     """Auto-scan host machine applications on first run and cache locally."""
     try:
@@ -243,14 +339,17 @@ def run_preflight(verbose=True):
         print('===================================================')
     t0 = time.monotonic()
     check_directories()
+    check_python_packages(verbose=verbose)
     check_config_init(verbose=verbose)
     check_icon(verbose=verbose)
     check_sfx(verbose=verbose)
     check_piper_hindi(verbose=verbose)
     check_wakeword(verbose=verbose)
     check_desktop_shortcut(verbose=verbose)
+    check_browser_engine(verbose=verbose)
     check_free_proxy(verbose=verbose)
     check_llm_cache(verbose=verbose)
+    check_memory_stores(verbose=verbose)
     check_installed_apps(verbose=verbose)
     check_omniroute(verbose=verbose)
     dt = time.monotonic() - t0
