@@ -34,6 +34,7 @@ memory/obsidian_vault/
 memory/*.db
 memory/*.sqlite*
 config/weather_cache.json
+config/installed_apps.json
 
 # ── Large Neural Models & Voice Weights ────────────────────────────────────────
 *.onnx

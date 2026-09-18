@@ -162,6 +162,10 @@ class NeedleToolRouter:
         if re.search(r"\b(running apps|active apps|kaun se app|open apps|konsa app)\b", clean):
             return _dispatch("open_app", {"action": "list_running"})
 
+        # Refresh/rescan installed apps: "apps refresh karo", "scan apps", "refresh installed apps"
+        if re.search(r"\b(refresh apps|scan apps|rescan apps|apps refresh|apps scan|update apps|rescan installed apps)\b", clean):
+            return _dispatch("open_app", {"action": "refresh", "name": "apps"})
+
         # Calculator: "calculator kholo", "calc kholo", "hisaab kholo"
         if re.search(r"\b(calculator|calc|hisaab)\b", clean) and any(w in clean for w in ("kholo", "open", "chalao", "start", "on")):
             return _dispatch("open_app", {"action": "open", "name": "calculator"})

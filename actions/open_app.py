@@ -94,13 +94,16 @@ _INSTALLED_APPS_CACHE: dict[str, str] = {}
 _CACHE_FILE = Path(__file__).resolve().parent.parent / "config" / "installed_apps.json"
 
 
-def _scan_installed_apps() -> dict[str, str]:
-    """Scan and index all installed desktop and Store applications on Windows."""
+def _scan_installed_apps(force_refresh: bool = False) -> dict[str, str]:
+    """
+    Dynamically scans and indexes all installed applications on the host computer.
+    Runs automatically on first run on any machine, and refreshes on-demand or when needed.
+    """
     global _INSTALLED_APPS_CACHE
-    if _INSTALLED_APPS_CACHE:
+    if not force_refresh and _INSTALLED_APPS_CACHE:
         return _INSTALLED_APPS_CACHE
 
-    if _CACHE_FILE.exists():
+    if not force_refresh and _CACHE_FILE.exists():
         try:
             data = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
             if data and isinstance(data, dict):
@@ -124,9 +127,9 @@ def _scan_installed_apps() -> dict[str, str]:
                     if name and appid:
                         apps[name.lower()] = appid
         except Exception as e:
-            print(f"[open_app] Get-StartApps note: {e}")
+            print(f"[open_app] Get-StartApps scan note: {e}")
 
-        # Also index Start Menu shortcut directories
+        # Index Start Menu shortcut directories (both System-wide and Current User)
         start_menu_dirs = [
             Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
             Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
@@ -141,13 +144,41 @@ def _scan_installed_apps() -> dict[str, str]:
                 except Exception:
                     pass
 
+    elif _SYSTEM == "Darwin":
+        # macOS application scanner (/Applications and ~/Applications)
+        mac_dirs = [Path("/Applications"), Path("/System/Applications"), Path.home() / "Applications"]
+        for md in mac_dirs:
+            if md.exists():
+                try:
+                    for app_path in md.glob("*.app"):
+                        apps[app_path.stem.lower()] = app_path.name
+                except Exception:
+                    pass
+
+    elif _SYSTEM == "Linux":
+        # Linux .desktop application scanner
+        linux_dirs = [
+            Path("/usr/share/applications"),
+            Path.home() / ".local" / "share" / "applications",
+        ]
+        for ld in linux_dirs:
+            if ld.exists():
+                try:
+                    for dt in ld.glob("*.desktop"):
+                        name = dt.stem.lower()
+                        apps[name] = dt.stem
+                except Exception:
+                    pass
+
     _INSTALLED_APPS_CACHE = apps
     if apps:
         try:
             _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
             _CACHE_FILE.write_text(json.dumps(apps, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+            print(f"[open_app] Auto-scanned & indexed {len(apps)} installed applications on this machine.")
+        except Exception as e:
+            print(f"[open_app] Cache write note: {e}")
+
     return apps
 
 
@@ -167,13 +198,14 @@ def _is_app_installed(name_or_bin: str) -> bool:
     return False
 
 
-def _resolve_app(requested: str) -> tuple[str, str | None]:
+def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | None]:
     """
-    Intelligently resolves requested app with 4-stage search:
-    1. Exact alias or system path check
-    2. Substring match across 160+ installed apps
-    3. Fuzzy string matching (difflib)
-    4. Category fallback (e.g. Chrome not found -> open Brave or Edge)
+    Intelligently resolves requested app with 4-stage search + dynamic self-healing rescan:
+    1. Category fallback first (e.g. Chrome not found -> open Brave or Edge)
+    2. Direct match in installed applications
+    3. Exact alias or system path check
+    4. Substring & fuzzy string matching
+    Self-healing: If an app is not found, automatically triggers an on-demand rescan once.
     Returns (launch_target, note_if_fallback)
     """
     key = requested.lower().strip()
@@ -227,12 +259,19 @@ def _resolve_app(requested: str) -> tuple[str, str | None]:
         matched_name = close[0]
         return installed[matched_name], f"'{requested}' ki jagah '{matched_name}' mila"
 
+    # Self-healing on-demand rescan: If not found, perhaps user recently installed it
+    if allow_rescan:
+        print(f"[open_app] '{requested}' not found in cache. Running dynamic on-demand system rescan...")
+        _scan_installed_apps(force_refresh=True)
+        return _resolve_app(requested, allow_rescan=False)
+
     # Fallback to normalized alias or raw string
     for alias_key, os_map in _APP_ALIASES.items():
         if alias_key in key or key in alias_key:
             return os_map.get(_SYSTEM, requested), None
 
     return requested, None
+
 
 
 def _launch_windows(app_name: str) -> bool:
@@ -462,6 +501,10 @@ def open_app(
     app_name = (params.get("app_name") or params.get("name") or "").strip()
     action = params.get("action", "open").strip().lower()
 
+    if action in ("refresh", "rescan", "refresh_apps", "scan_apps", "update_apps") or app_name.lower() in ("refresh", "refresh apps", "scan apps", "rescan", "sync apps", "apps refresh", "scan"):
+        discovered = _scan_installed_apps(force_refresh=True)
+        return f"System scan complete: {len(discovered)} installed applications indexed successfully on this computer."
+
     if action in ("list", "list_running", "running_apps") or app_name.lower() in ("list", "running", "all", "all apps", "running apps", "apps"):
         apps = list_running_apps()
         if not apps:
@@ -508,17 +551,17 @@ def open_app(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "open_app",
-    "description": "Opens any application on the computer, closes apps, or lists active running applications. Supports intelligent auto-discovery of all installed apps and smart category fallbacks (e.g. opens Brave if Chrome is not installed).",
+    "description": "Opens any application on the computer, closes apps, lists active running applications, or refreshes installed apps cache. Supports intelligent dynamic auto-discovery on any PC and smart category fallbacks (e.g. opens Brave if Chrome is not installed).",
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "app_name": {
                 "type": "STRING",
-                "description": "Exact or colloquial name of the application (e.g. 'Chrome', 'Notepad', 'Brave', 'Browser', 'Terminal') or 'list' to see running apps."
+                "description": "Exact or colloquial name of the application (e.g. 'Chrome', 'Notepad', 'Brave', 'Browser', 'Terminal'), 'list' to see running apps, or 'refresh' to scan system apps."
             },
             "action": {
                 "type": "STRING",
-                "description": "'open' to launch an app, 'close' to terminate an app, or 'list' to list currently running applications."
+                "description": "'open' to launch an app, 'close' to terminate an app, 'list' to list running applications, or 'refresh' to dynamically rescan installed applications."
             }
         },
         "required": [
