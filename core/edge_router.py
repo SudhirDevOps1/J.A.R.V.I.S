@@ -31,6 +31,22 @@ except ImportError:
     _NEEDLE_AVAILABLE = False
 
 
+def _get_user_location() -> str:
+    """Retrieve user city from long_term.json memory if available."""
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        lt_path = os.path.join(base_dir, "memory", "long_term.json")
+        if os.path.exists(lt_path):
+            with open(lt_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                val = data.get("identity", {}).get("location", {}).get("value", "")
+                if val:
+                    return val.split(",")[0].strip()
+    except Exception:
+        pass
+    return "Delhi"
+
+
 class NeedleToolRouter:
     """Tier 1: Needle 2 Reflex Engine.
     Runs in ~28 MB RAM. Converts spoken or typed natural language commands
@@ -41,6 +57,7 @@ class NeedleToolRouter:
         self._enabled = True
         self._needle_loaded = False
         self._needle_instance = None
+        self._last_tool_call: Optional[Tuple[str, Dict[str, Any]]] = None
 
         if _NEEDLE_AVAILABLE:
             try:
@@ -84,10 +101,48 @@ class NeedleToolRouter:
 
         clean = text.strip().lower()
 
+        # -- Universal Hinglish/Hindi Filler Word Stripper (~0ms) ---------------
+        # Strips leading/trailing/embedded fillers so patterns match cleanly.
+        # E.g. "yaar bhai bas downloads dikhao na zara" → "downloads dikhao"
+        _FILLERS = (
+            r"\b(yaar|yar|bhai|bro|dost|sir|sir ji|jaan|janeman)\b",
+            r"\b(please|plz|pls|kripya|meherbani)\b",
+            r"\b(bas|sirf|only|just|thoda|thodi|ek baar)\b",
+            r"\b(zara|zaraa|zara sa|thoda sa)\b",
+            r"\b(na|naa|re|ji|haan|hmm|ok|okay)\b",
+            r"^(ek kaam karo|sun|suno|dekho|bol|bata)[,\s]+",
+            r"[,\s]+(na|naa|please|plz|re|ji|yaar|bhai)$",
+        )
+        for _fp in _FILLERS:
+            clean = re.sub(_fp, " ", clean).strip()
+        clean = re.sub(r"\s{2,}", " ", clean).strip()
+
+        # Helper to record and return tool execution for repeat command support
+        def _dispatch(tool_name: str, tool_args: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+            self._last_tool_call = (tool_name, tool_args)
+            return (tool_name, tool_args)
+
+        # -- Improvement 5: Repeat Last Tool Command --------------------------
+        if re.search(r"\b(wahi dobara|wahi phir se|wahi kholo|dobara karo|phir se karo|repeat karo|repeat that|once more|repeat command)\b", clean):
+            if self._last_tool_call is not None:
+                return self._last_tool_call
+
         # 2. Ultra-fast local reflex pattern matching (deterministic edge reflex in ~1ms)
         # -- App Management ---------------------------------------------------
         if re.search(r"\b(running apps|active apps|kaun se app|open apps|konsa app)\b", clean):
-            return ("open_app", {"action": "list_running"})
+            return _dispatch("open_app", {"action": "list_running"})
+
+        # Calculator: "calculator kholo", "calc kholo", "hisaab kholo"
+        if re.search(r"\b(calculator|calc|hisaab)\b", clean) and any(w in clean for w in ("kholo", "open", "chalao", "start", "on")):
+            return _dispatch("open_app", {"action": "open", "name": "calculator"})
+
+        # File Explorer / This PC: "file explorer kholo", "my computer kholo"
+        if re.search(r"\b(file explorer|my computer|this pc|explorer kholo)\b", clean):
+            return _dispatch("computer_settings", {"action": "file_explorer"})
+
+        # Desktop: "desktop dikhao", "show desktop", "desktop screen dikhao"
+        if re.search(r"\b(show desktop|desktop dikhao|sab minimize)\b", clean):
+            return _dispatch("computer_settings", {"action": "show_desktop"})
 
         # Matches: "open chrome", "launch notepad", "chrome kholo", "notepad chalao"
         m_open_en = re.search(r"\b(open|launch|start|run)\s+([a-zA-Z0-9_\-\.]+)", clean)
@@ -95,56 +150,56 @@ class NeedleToolRouter:
         if m_open_en or m_open_hi:
             app_target = (m_open_en.group(2) if m_open_en else m_open_hi.group(1)).strip()
             _folder_words = ("storage", "camera", "c drive", "d drive", "video", "youtube",
-                             "downloads", "desktop", "documents", "pictures", "music", "folder")
+                             "downloads", "desktop", "documents", "pictures", "music", "folder",
+                             "setting", "settings", "calc", "calculator", "tab", "window", "screen",
+                             "explorer", "file explorer")
             if not any(k in app_target for k in _folder_words):
                 app_target = re.sub(r"\s+(karo|do|please|now)$", "", app_target).strip()
                 if app_target:
-                    return ("open_app", {"action": "open", "name": app_target})
+                    return _dispatch("open_app", {"action": "open", "name": app_target})
 
         # Matches: "close chrome", "kill notepad", "chrome band karo", "spotify band"
         m_close_en = re.search(r"\b(close|kill|exit)\s+([a-zA-Z0-9_\-\.]+)", clean)
         m_close_hi = re.search(r"\b([a-zA-Z0-9_\-\.]+)\s+(band karo|band|close karo)\b", clean)
         if m_close_en or m_close_hi:
             app_target = (m_close_en.group(2) if m_close_en else m_close_hi.group(1)).strip()
-            if not any(k in app_target for k in ("storage", "camera", "window")):
+            if not any(k in app_target for k in ("storage", "camera", "window", "tab", "pc", "computer", "wifi", "internet")):
                 app_target = re.sub(r"\s+(karo|do|please|now)$", "", app_target).strip()
                 if app_target:
-                    return ("open_app", {"action": "close", "name": app_target})
+                    return _dispatch("open_app", {"action": "close", "name": app_target})
 
         # -- Storage & Disk Analysis ------------------------------------------
         if re.search(r"\b(storage|disk usage|c drive|d drive|space kitna|kitna space|badi files|largest files)\b", clean):
             if re.search(r"\b(badi file|largest|heavy file|size)\b", clean):
                 path = "C:\\" if "c" in clean else "downloads"
-                return ("file_controller", {"action": "largest", "path": path, "count": 5})
+                return _dispatch("file_controller", {"action": "largest", "path": path, "count": 5})
             drive = "C:" if "c" in clean else ("D:" if "d" in clean else "all")
-            return ("file_controller", {"action": "disk_usage", "path": drive})
+            return _dispatch("file_controller", {"action": "disk_usage", "path": drive})
 
         # -- System Settings (Volume, Brightness, Wifi) ------------------------
         if "volume" in clean or "awaaz" in clean or "sound" in clean:
             m_vol = re.search(r"\b(\d{1,3})\b", clean)
-            if "mute" in clean:
-                return ("computer_settings", {"action": "volume_mute"})
-            elif "unmute" in clean:
-                return ("computer_settings", {"action": "volume_unmute"})
-            elif "up" in clean or "badhao" in clean or "increase" in clean:
-                return ("computer_settings", {"action": "volume_up"})
-            elif "down" in clean or "kam" in clean or "decrease" in clean:
-                return ("computer_settings", {"action": "volume_down"})
+            if "up" in clean or "badhao" in clean or "tez" in clean:
+                return _dispatch("computer_settings", {"action": "volume_up"})
+            elif "down" in clean or "kam" in clean or "dheemi" in clean:
+                return _dispatch("computer_settings", {"action": "volume_down"})
+            elif "mute" in clean or "chup" in clean:
+                return _dispatch("computer_settings", {"action": "mute"})
             elif m_vol:
-                return ("computer_settings", {"action": "set_volume", "value": m_vol.group(1)})
+                return _dispatch("computer_settings", {"action": "set_volume", "value": m_vol.group(1)})
 
         if "brightness" in clean or "roshni" in clean:
             m_bri = re.search(r"\b(\d{1,3})\b", clean)
             if m_bri:
-                return ("computer_settings", {"action": "set_brightness", "value": m_bri.group(1)})
+                return _dispatch("computer_settings", {"action": "set_brightness", "value": m_bri.group(1)})
             elif "up" in clean or "badhao" in clean:
-                return ("computer_settings", {"action": "brightness_up"})
+                return _dispatch("computer_settings", {"action": "brightness_up"})
             elif "down" in clean or "kam" in clean:
-                return ("computer_settings", {"action": "brightness_down"})
+                return _dispatch("computer_settings", {"action": "brightness_down"})
 
         # -- GUI & Screen Controls --------------------------------------------
         if re.search(r"\b(screenshot|screen shot|snip)\b", clean):
-            return ("computer_control", {"action": "screenshot"})
+            return _dispatch("computer_control", {"action": "screenshot"})
 
         # -- YouTube / Music / Song Play ------------------------------------------
         m_yt_song = re.search(r"\b(gaana|gana|song|music|naghma|dhun|track|qawwali|ghazal)\b", clean)
@@ -166,7 +221,7 @@ class NeedleToolRouter:
             song_q = re.sub(r"\bka\b|\bki\b|\bke\b|\bne\b", "", song_q).strip(" ,.-")
             song_q = " ".join(song_q.split())  # collapse whitespace
             song_q = song_q or "popular hindi songs"
-            return ("youtube_video", {"action": "play", "query": song_q})
+            return _dispatch("youtube_video", {"action": "play", "query": song_q})
 
         # YouTube search: "youtube par X dekho", "X ka video dikhao"
         m_yt_platform = re.search(r"\b(youtube|yt)\b", clean)
@@ -177,12 +232,12 @@ class NeedleToolRouter:
                 "", clean
             ).strip(" ,.-")
             vid_q = " ".join(vid_q.split())
-            return ("youtube_video", {"action": "play", "query": vid_q or "trending"})
+            return _dispatch("youtube_video", {"action": "play", "query": vid_q or "trending"})
 
         # -- System Metrics ---------------------------------------------------
         if re.search(r"\b(cpu usage|ram usage|temperature|system status|hardware status|pc performance"
                      r"|cpu kitna|ram kitna|memory kitni|processor load|pc garam|kitna garam)\b", clean):
-            return ("system_status", {})
+            return _dispatch("system_status", {})
 
         # -- Web Search -------------------------------------------------------
         # "google karo X" / "X dhundo" / "search karo X" / "X ke baare mein batao"
@@ -191,18 +246,18 @@ class NeedleToolRouter:
         m_ws_kya = re.search(r"\b(kya hai|kaun hai|kahan hai|kab hai)\s+(.+)", clean)
         if m_ws_en:
             q = m_ws_en.group(2).strip()
-            if q and len(q) > 1:
-                return ("web_search", {"query": q})
+            if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting")):
+                return _dispatch("web_search", {"query": q})
         elif m_ws_hi:
             q = m_ws_hi.group(1).strip()
             q = re.sub(r"\b(yaar|bhai|sir|please|zara|jaldi|mujhe|abhi)\b", "", q).strip()
-            if q and len(q) > 1:
-                return ("web_search", {"query": q})
+            if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting", "mausam", "weather")):
+                return _dispatch("web_search", {"query": q})
         elif m_ws_kya:
             q = f"{m_ws_kya.group(2)} {m_ws_kya.group(1)}".strip()
-            return ("web_search", {"query": q})
+            return _dispatch("web_search", {"query": q})
 
-        # -- Weather ----------------------------------------------------------
+        # -- Weather (Memory-Aware: defaults to user location from long_term.json)
         # "Delhi ka mausam" / "aaj weather" / "kal baarish hogi kya"
         m_weather = re.search(
             r"\b(mausam|weather|baarish|tapman|garmi|sardi|temperature|barish|barsat)\b", clean
@@ -210,20 +265,19 @@ class NeedleToolRouter:
         if m_weather:
             city_m = re.search(
                 r"\b(delhi|mumbai|bangalore|bengaluru|pune|hyderabad|chennai|kolkata|jaipur|lucknow"
-                r"|noida|gurgaon|chandigarh|ahmedabad|surat|indore|bhopal|patna|agra)\b", clean
+                r"|noida|gurgaon|chandigarh|ahmedabad|surat|indore|bhopal|patna|agra|bihar)\b", clean
             )
-            city = city_m.group(1).title() if city_m else "current location"
+            city = city_m.group(1).title() if city_m else _get_user_location()
             when_m = re.search(r"\b(kal|tomorrow|aaj|today|parso|week)\b", clean)
             when = "tomorrow" if when_m and "kal" in (when_m.group(1) or "") else "today"
-            return ("weather_report", {"city": city, "time": when})
+            return _dispatch("weather_report", {"city": city, "time": when})
 
         # -- Reminder / Alarm -------------------------------------------------
         # "5 minute baad yaad dilana" / "kal subah 8 baje reminder"
         m_remind = re.search(
-            r"\b(reminder|alarm|yaad\s*dilana|yaad\s*karna|set\s*alarm|remind)\b", clean
+            r"\b(reminder|alarm|yaad\s*dilana|yaad\s*dilao|yaad\s*karna|set\s*alarm|remind)\b", clean
         )
         if m_remind:
-            # Extract time expression
             time_m = re.search(
                 r"(\d+)\s*(minute|min|ghante|hour|second|sec|baje|am|pm)", clean
             )
@@ -231,7 +285,7 @@ class NeedleToolRouter:
             r_time = time_m.group(0) if time_m else "5 minutes"
             r_msg = msg_m.group(1).strip() if msg_m else "reminder"
             r_msg = re.sub(r"\b(lagao|set|karo|do|dena|please)\b", "", r_msg).strip() or "reminder"
-            return ("reminder", {"action": "set", "time": r_time, "message": r_msg})
+            return _dispatch("reminder", {"action": "set", "time": r_time, "message": r_msg})
 
         # -- WhatsApp / Message Send ------------------------------------------
         # "Mummy ko WhatsApp karo" / "Rahul ko message bhejo" / "whatsapp mummy"
@@ -241,12 +295,11 @@ class NeedleToolRouter:
         m_contact = re.search(
             r"([a-zA-Z\u0900-\u097F]+)\s+ko\s+(?:whatsapp|message|msg|text)", clean
         )
-        # Also match LFM-normalized "whatsapp {contact}" form
         m_wa_direct = re.search(r"^whatsapp\s+([a-zA-Z\u0900-\u097F]+)$", clean.strip())
         if m_wa_direct:
             contact = m_wa_direct.group(1).strip()
             if contact not in ("ek", "koi", "kuch", "yeh", "kisi", "karo", "bhejo"):
-                return ("send_message", {"platform": "whatsapp", "contact": contact, "message": ""})
+                return _dispatch("send_message", {"platform": "whatsapp", "contact": contact, "message": ""})
         elif m_msg and m_contact:
             contact = m_contact.group(1).strip()
             if contact not in ("ek", "koi", "kuch", "yeh"):
@@ -254,7 +307,7 @@ class NeedleToolRouter:
                     r"(?:likho|likhke|bol|bolo|bhejo)\s+(.+)$", clean
                 )
                 msg_text = msg_text_m.group(1).strip() if msg_text_m else ""
-                return ("send_message", {
+                return _dispatch("send_message", {
                     "platform": "whatsapp",
                     "contact": contact,
                     "message": msg_text
@@ -263,11 +316,89 @@ class NeedleToolRouter:
         # -- Window Control ---------------------------------------------------
         # "minimize karo" / "maximize karo" / "window band karo" / "fullscreen"
         if re.search(r"\b(minimize|choti\s*karo|chhupa\s*do|taskbar\s*mein)\b", clean):
-            return ("computer_settings", {"action": "minimize"})
+            return _dispatch("computer_settings", {"action": "minimize"})
         if re.search(r"\b(maximize|badi\s*karo|fullscreen|poori\s*screen)\b", clean):
-            return ("computer_settings", {"action": "full_screen"})
+            return _dispatch("computer_settings", {"action": "full_screen"})
         if re.search(r"\b(window\s*band|window\s*close|band\s*karo\s*window|close\s*window|alt\s*f4)\b", clean):
-            return ("computer_settings", {"action": "close_window"})
+            return _dispatch("computer_settings", {"action": "close_window"})
+
+        # -- Screen Lock / Lock PC --------------------------------------------
+        if re.search(r"\b(screen lock|lock screen|lock pc|computer lock|pc lock|screen ko lock|lock karo)\b", clean):
+            return _dispatch("computer_settings", {"action": "lock_screen"})
+
+        # -- Task Manager -----------------------------------------------------
+        if re.search(r"\b(task manager|processes dekho|process manager|processes dikhao)\b", clean):
+            return _dispatch("computer_settings", {"action": "task_manager"})
+
+        # -- Settings / Control Panel -----------------------------------------
+        if re.search(r"\b(open settings|computer settings|system settings|settings kholo|control panel)\b", clean):
+            return _dispatch("computer_settings", {"action": "open_settings"})
+
+        # -- File Explorer / This PC ------------------------------------------
+        if re.search(r"\b(file explorer|my computer|this pc|explorer kholo)\b", clean):
+            return _dispatch("computer_settings", {"action": "file_explorer"})
+
+        # -- Tabs & Browser Navigation ----------------------------------------
+        if re.search(r"\b(tab band|close tab|tab close|current tab band)\b", clean):
+            return _dispatch("computer_settings", {"action": "close_tab"})
+        if re.search(r"\b(new tab|nayi tab|naya tab|tab kholo)\b", clean):
+            return _dispatch("computer_settings", {"action": "new_tab"})
+        if re.search(r"\b(next tab|agli tab|dusri tab)\b", clean):
+            return _dispatch("computer_settings", {"action": "next_tab"})
+        if re.search(r"\b(previous tab|prev tab|pichli tab)\b", clean):
+            return _dispatch("computer_settings", {"action": "prev_tab"})
+        if re.search(r"\b(refresh page|page refresh|reload|reload page|refresh karo)\b", clean):
+            return _dispatch("computer_settings", {"action": "refresh_page"})
+        if re.search(r"\b(go back|peeche jao|pichla page)\b", clean):
+            return _dispatch("computer_settings", {"action": "go_back"})
+        if re.search(r"\b(go forward|aage jao|agla page)\b", clean):
+            return _dispatch("computer_settings", {"action": "go_forward"})
+
+        # -- Scrolling --------------------------------------------------------
+        if re.search(r"\b(scroll down|scroll neeche|neeche scroll|down scroll)\b", clean):
+            return _dispatch("computer_control", {"action": "scroll", "direction": "down", "amount": 5})
+        if re.search(r"\b(scroll up|scroll upar|upar scroll|up scroll)\b", clean):
+            return _dispatch("computer_control", {"action": "scroll", "direction": "up", "amount": 5})
+
+        # -- Zoom Control -----------------------------------------------------
+        if re.search(r"\b(zoom in|bada dikhao zoom|zoom badhao)\b", clean):
+            return _dispatch("computer_settings", {"action": "zoom_in"})
+        if re.search(r"\b(zoom out|chhota dikhao zoom|zoom ghatao)\b", clean):
+            return _dispatch("computer_settings", {"action": "zoom_out"})
+        if re.search(r"\b(zoom reset|normal zoom|zoom theek karo)\b", clean):
+            return _dispatch("computer_settings", {"action": "zoom_reset"})
+
+        # -- Clipboard & Editing Shortcuts ------------------------------------
+        if re.search(r"\b(clipboard mein kya|clipboard read|clipboard dekho|copy text dikhao|clipboard dikhao)\b", clean):
+            return _dispatch("computer_control", {"action": "copy"})
+        if re.search(r"\b(paste karo|yahan paste|paste kar do)\b", clean):
+            return _dispatch("computer_control", {"action": "paste"})
+        if re.search(r"\b(select all|sab select|poora select)\b", clean):
+            return _dispatch("computer_settings", {"action": "select_all"})
+        if re.search(r"\b(undo karo|undo|wapas lo|pichla action hatao)\b", clean):
+            return _dispatch("computer_settings", {"action": "undo"})
+        if re.search(r"\b(redo karo|redo|phir se aage)\b", clean):
+            return _dispatch("computer_settings", {"action": "redo"})
+        if re.search(r"\b(file save|save karo|save document|ctrl s)\b", clean):
+            return _dispatch("computer_settings", {"action": "save"})
+        if re.search(r"\b(press enter|enter dabao|enter maro)\b", clean):
+            return _dispatch("computer_settings", {"action": "enter"})
+        if re.search(r"\b(press escape|escape dabao|esc dabao)\b", clean):
+            return _dispatch("computer_settings", {"action": "escape"})
+
+        # -- Desktop & Window Arrangement -------------------------------------
+        if re.search(r"\b(show desktop|desktop dikhao|sab minimize)\b", clean):
+            return _dispatch("computer_settings", {"action": "show_desktop"})
+        if re.search(r"\b(switch window|alt tab|agli window|window badlo)\b", clean):
+            return _dispatch("computer_settings", {"action": "switch_window"})
+        if re.search(r"\b(dark mode|light mode|theme badlo|dark theme)\b", clean):
+            return _dispatch("computer_settings", {"action": "dark_mode"})
+        if re.search(r"\b(open run|run dialog|run prompt)\b", clean):
+            return _dispatch("computer_settings", {"action": "open_run"})
+        if re.search(r"\b(left snap|snap left|screen left)\b", clean):
+            return _dispatch("computer_settings", {"action": "snap_left"})
+        if re.search(r"\b(right snap|snap right|screen right)\b", clean):
+            return _dispatch("computer_settings", {"action": "snap_right"})
 
         # -- Typing / Clipboard -----------------------------------------------
         # "yeh type karo: hello" / "likho: main theek hoon"
@@ -275,25 +406,25 @@ class NeedleToolRouter:
         if m_type:
             type_text = m_type.group(1).strip().strip(":- \"'")
             if type_text and len(type_text) > 0:
-                return ("computer_control", {"action": "type", "text": type_text})
+                return _dispatch("computer_control", {"action": "type", "text": type_text})
 
         # -- System Power (Shutdown / Restart / Sleep) ------------------------
         # "PC band karo" / "shutdown" / "restart karo" / "sleep mode"
         if re.search(r"\b(shutdown|pc\s*band|computer\s*band|band\s*karo\s*pc|band\s*kar\s*do)\b", clean):
             if "restart" not in clean and "reboot" not in clean:
-                return ("computer_settings", {"action": "shutdown"})
+                return _dispatch("computer_settings", {"action": "shutdown"})
         if re.search(r"\b(restart|reboot|dobara\s*chalu|phir\s*se\s*start)\b", clean):
-            return ("computer_settings", {"action": "restart"})
+            return _dispatch("computer_settings", {"action": "restart"})
         if re.search(r"\b(sleep|hibernate|so\s*jao|pc\s*so|suspend)\b", clean):
-            return ("computer_settings", {"action": "sleep"})
+            return _dispatch("computer_settings", {"action": "sleep"})
 
         # -- WiFi / Internet Toggle -------------------------------------------
         # "wifi on karo" / "wifi off karo" / "internet band karo"
         if re.search(r"\b(wifi|wi-fi|internet|net|network)\b", clean):
             if any(w in clean for w in ("on", "chalu", "shuru", "connect", "lagao")):
-                return ("computer_settings", {"action": "wifi_on"})
+                return _dispatch("computer_settings", {"action": "wifi_on"})
             if any(w in clean for w in ("off", "band", "disconnect", "hatao", "rok")):
-                return ("computer_settings", {"action": "wifi_off"})
+                return _dispatch("computer_settings", {"action": "wifi_off"})
 
         # -- File / Folder Open -----------------------------------------------
         # "downloads kholo" / "desktop kholo" / "documents folder"
@@ -317,7 +448,7 @@ class NeedleToolRouter:
         if m_folder and m_folder_action:
             folder_key = m_folder.group(1).strip()
             folder_path = _folder_map.get(folder_key, str(os.path.expanduser("~")))
-            return ("file_controller", {"action": "open_folder", "path": folder_path})
+            return _dispatch("file_controller", {"action": "open_folder", "path": folder_path})
 
         # -- Neural Needle 2 Engine Fallback (foundation model tool extraction) --
 
@@ -520,16 +651,55 @@ class LFMChatEngine:
             if any(w in clean for w in ("off", "band", "disconnect", "hatao")):
                 return "wifi off", "wifi_off"
 
-        # Semantic Mapping 14: Folder / File Open
-        # "downloads kholo" / "desktop folder dikhao"
+        # Semantic Mapping 14: Folder / File Open vs Show Desktop
+        if any(w in clean for w in ("show desktop", "desktop dikhao", "sab minimize")):
+            return "show desktop", "show_desktop"
+
         _hi_folders = {
-            "downloads": "downloads", "desktop": "desktop",
+            "downloads": "downloads",
             "documents": "documents", "pictures": "pictures",
             "videos": "videos", "music": "music",
         }
         for folder_hi, folder_en in _hi_folders.items():
             if folder_hi in clean and any(w in clean for w in ("kholo", "open", "dekho", "dikhao")):
                 return f"open folder {folder_en}", "open_folder"
+
+        if "desktop" in clean and any(w in clean for w in ("kholo", "open", "folder")):
+            return "open folder desktop", "open_folder"
+
+        # Semantic Mapping 15: Screen Lock / Task Manager / Settings
+        if any(w in clean for w in ("screen lock", "lock screen", "pc lock", "computer lock")):
+            return "lock screen", "lock_screen"
+        if any(w in clean for w in ("task manager", "processes")):
+            return "task manager", "task_manager"
+        if any(w in clean for w in ("settings kholo", "control panel", "computer settings", "system settings")):
+            return "open settings", "open_settings"
+
+        # Semantic Mapping 16: Tabs & Navigation
+        if any(w in clean for w in ("tab band", "close tab")):
+            return "close tab", "close_tab"
+        if any(w in clean for w in ("new tab", "nayi tab", "naya tab")):
+            return "new tab", "new_tab"
+        if any(w in clean for w in ("refresh page", "reload page", "page refresh", "reload")):
+            return "refresh page", "refresh_page"
+
+        # Semantic Mapping 17: Scroll & Zoom
+        if any(w in clean for w in ("scroll down", "scroll neeche", "neeche scroll")):
+            return "scroll down", "scroll_down"
+        if any(w in clean for w in ("scroll up", "scroll upar", "upar scroll")):
+            return "scroll up", "scroll_up"
+        if any(w in clean for w in ("zoom in", "zoom badhao")):
+            return "zoom in", "zoom_in"
+        if any(w in clean for w in ("zoom out", "zoom ghatao")):
+            return "zoom out", "zoom_out"
+
+        # Semantic Mapping 18: Calculator & Utilities
+        if any(w in clean for w in ("calculator", "calc", "hisaab")) and any(w in clean for w in ("kholo", "open", "chalao")):
+            return "open calculator", "open_app"
+
+        # Semantic Mapping 19: Repeat Command
+        if any(w in clean for w in ("wahi dobara", "wahi phir se", "wahi kholo", "dobara karo", "phir se karo", "repeat karo", "repeat that", "once more")):
+            return "repeat command", "repeat"
 
         return text, "general"
 
@@ -553,23 +723,88 @@ class LFMChatEngine:
             except Exception:
                 pass
 
-        # 2. Local LFM2.5 offline conversational reflex responses
+        # 2. Local LFM2.5 offline conversational reflex responses (30+ Smart Patterns)
         clean = prompt.lower().strip()
+        from datetime import datetime
+        now = datetime.now()
+
+        # Dynamic Time & Date
+        if any(w in clean for w in ("kya time", "samay kya", "kitne baje", "time batao", "current time")):
+            return f"Sir, abhi samay ho raha hai {now.strftime('%I:%M %p')}."
+        if any(w in clean for w in ("aaj kya date", "konsi date", "aaj ka din", "konsa din", "tarikh kya", "date batao")):
+            return f"Aaj {now.strftime('%A, %d %B %Y')} hai, sir."
+
+        # Greetings & Pleasantries
+        if any(w in clean for w in ("good morning", "shubh prabhat")):
+            return "Shubh Prabhat, sir! Umeed hai aapka din shandar rahega. Bataiye kya madad karoon?"
+        if any(w in clean for w in ("good afternoon", "shubh dopahar")):
+            return "Good afternoon, sir! Main ready hoon, bataiye kya task karna hai?"
+        if any(w in clean for w in ("good evening", "shubh sandhya")):
+            return "Good evening, sir! Aaj ka din kaisa raha? Main aapki seva me hazir hoon."
+        if any(w in clean for w in ("good night", "shubh ratri", "so jao")):
+            return "Shubh Ratri, sir! Achi neend lijiye. Main background me standby par hoon."
+        if any(w in clean for w in ("namaste", "pranam", "radhe radhe", "ram ram")):
+            return "Namaste sir! J.A.R.V.I.S. aapki seva me hazir hai. Kahiye kya aadesh hai?"
+        if any(w in clean for w in ("hello", "hii", "hey", "suno jarvis", "sun jarvis")):
+            return "Hello sir! Main sun raha hoon, bataiye kya hukum hai?"
+
+        # Capabilities & Help
+        if any(w in clean for w in ("tum kya kar sakte ho", "capabilities", "kya features hain", "help me", "kya kar sakte")):
+            return ("Main J.A.R.V.I.S. hoon! Main aapke system par apps khol/band kar sakta hoon, YouTube par gaane chala sakta hoon, "
+                    "volume/brightness control kar sakta hoon, files manage, reminders, screenshots, web search, "
+                    "aur pura offline Edge AI control de sakta hoon!")
+
+        # Identity & Creator
         if any(w in clean for w in ("tum kaun ho", "who are you", "tera naam kya hai", "apna parichay do")):
-            return "Main J.A.R.V.I.S. hoon — aapka personal AI assistant. Needle 2 aur LFM2.5 ke sath poora offline control mere pas hai, sir."
-        if any(w in clean for w in ("kya haal hai", "kaise ho", "how are you")):
-            return "Main bilkul teek hoon, sir. Saare edge neural systems active hain aur aapke aadesh ke intezar me hain."
+            return "Main J.A.R.V.I.S. (Mark-LIII) hoon — aapka ultra-fast personal AI assistant. Needle 2 aur LFM2.5 ke sath poora on-device control mere pas hai, sir."
+        if any(w in clean for w in ("tumhe kisne banaya", "who created you", "who made you", "tera malik kaun", "creator")):
+            return "Mujhe mere boss (Aapne) banaya hai — ek powerful, intelligent aur fully automated personal desktop assistant ke roop me!"
+        if any(w in clean for w in ("version kya hai", "which version", "tumhara version")):
+            return "Main J.A.R.V.I.S. Mark-LIII (Needle 2 + LFM2.5 Tri-Tier Edge Edition) par chal raha hoon."
+
+        # Status & Feelings
+        if any(w in clean for w in ("kya haal hai", "kaise ho", "how are you", "sab theek hai")):
+            return "Main bilkul shandar hoon, sir! Saare edge neural systems active hain aur aapke aadesh ke intezar me hain."
+        if any(w in clean for w in ("thak gaye kya", "are you tired")):
+            return "AI kabhi nahi thakta, sir! 24/7 aapki seva ke liye 100% ready hoon."
+
+        # Gratitude & Courtesy
         if any(w in clean for w in ("shukriya", "dhanyawad", "thank you", "thanks")):
             return "Aapka swagat hai, sir. Hamesha aapki seva me hajir!"
-        if any(w in clean for w in ("offline ho kya", "internet nahi hai", "is internet working")):
+        if any(w in clean for w in ("bye", "alvida", "phir milenge", "goodbye")):
+            return "Alvida sir! Apna khayal rakhiyega. Jab bhi zaroorat ho, bas aawaz dijiyega."
+
+        # Offline & Connection Status
+        if any(w in clean for w in ("offline ho kya", "internet nahi hai", "is internet working", "net chal raha")):
             return "Haan sir, abhi hum offline edge mode me chal rahe hain. Needle 2 aur LFM2.5 ke sahare saare local OS actions kaam kar rahe hain."
+
+        # Humor & Fun
+        if any(w in clean for w in ("joke", "chutkula", "hasao", "kuch hasao")):
+            return "Ek programmer ne apni biwi se kaha: 'Market ja raha hoon, agar tamatar mile toh 10 le aana.' Wo 10 dukan le aaya kyunki wahan tamatar the! :D"
+        if any(w in clean for w in ("shayari", "kavita")):
+            return "Hukm aapka, taamil meri hogi, \nHar mushkil ab aasan banegi, \nJab tak J.A.R.V.I.S. hai aapke sath, \nHar command instant execute hogi!"
+
+        # Math / Quick calculation evaluation offline
+        math_m = re.search(r"(\d+)\s*([\+\-\*\/])\s*(\d+)", clean)
+        if math_m:
+            try:
+                n1 = float(math_m.group(1))
+                op = math_m.group(2)
+                n2 = float(math_m.group(3))
+                if op == '+': res_v = n1 + n2
+                elif op == '-': res_v = n1 - n2
+                elif op == '*': res_v = n1 * n2
+                elif op == '/': res_v = n1 / n2 if n2 != 0 else "undefined"
+                return f"{int(n1) if n1.is_integer() else n1} {op} {int(n2) if n2.is_integer() else n2} = {int(res_v) if isinstance(res_v, float) and res_v.is_integer() else res_v} hota hai, sir."
+            except Exception:
+                pass
 
         return f"J.A.R.V.I.S. (LFM2.5 Edge Mode): Aapka aadesh samajh gaya hoon — '{prompt}'."
 
 
 class TriTierDispatcher:
     """Coordinates between:
-      - Tier 1: Needle 2 (Instant Local OS Tool Reflex, 28 MB RAM)
+      - Tier 1: Needle 2 (Instant Local OS Tool Reflex, 28 MB RAM) & LLM Cache (0ms)
       - Tier 2: LFM2.5-230M (Local Offline Edge Chat, ~200 MB RAM)
       - Tier 3: Gemini Cloud (Deep Reasoning, Live Voice, Vision, 0 MB local RAM)
     """
@@ -601,6 +836,24 @@ class TriTierDispatcher:
                 "ram_footprint": "28 MB",
                 "latency_estimate": "10ms",
             }
+
+        # Step 2.5: Check Smart LLM Cache (Instant 0ms, avoids unnecessary Cloud calls)
+        try:
+            from core import llm_cache
+            cached_ans = llm_cache.get(user_text)
+            if cached_ans:
+                return {
+                    "tier": 1,
+                    "engine": "llm_cache",
+                    "ear": "lfm2.5-230m",
+                    "cached_response": cached_ans,
+                    "tool": None,
+                    "target": "cached_reply",
+                    "ram_footprint": "0 MB",
+                    "latency_estimate": "0ms",
+                }
+        except Exception:
+            pass
 
         # Step 3: If offline, Tier 2 LFM2.5 handles conversation locally
         if not is_online and self.lfm.is_available():

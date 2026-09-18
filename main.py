@@ -717,6 +717,12 @@ class JarvisLive:
                 dispatcher = get_tri_tier_dispatcher()
                 routing = dispatcher.route(text, is_online=bool(_get_api_key().strip()))
 
+                if routing.get("cached_response"):
+                    c_resp = routing["cached_response"]
+                    self.ui.write_log(f"⚡ [Smart LLM Cache (0ms)]: {c_resp}")
+                    self.speak(c_resp)
+                    return
+
                 if routing.get("tier") == 1 and routing.get("tool"):
                     t_name, t_args = routing["tool"]
                     if self._action_registry.has(t_name):
@@ -907,6 +913,11 @@ class JarvisLive:
                     ans = (res.text or "").strip()
                     if ans:
                         log_daily_activity(text, ai_response=ans)
+                        try:
+                            from core import llm_cache
+                            llm_cache.set(text, ans, ttl_seconds=3600, provider=prov)
+                        except Exception:
+                            pass
                         self.ui.write_log(f"{self._asst_name}: {ans}")
                         try:
                             from core.expression_engine import detect_expression
