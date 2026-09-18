@@ -127,6 +127,29 @@ class NeedleToolRouter:
             if self._last_tool_call is not None:
                 return self._last_tool_call
 
+        # -- Hermes 2.0: Dynamically Learned User Intents (<1ms) --------------
+        try:
+            from memory.hermes_personalization import match_learned_intent
+            learned = match_learned_intent(clean)
+            if learned:
+                return _dispatch(learned[0], learned[1])
+        except Exception:
+            pass
+
+        # -- Dynamic API Sniffer & Reverse Engineer ---------------------------
+        # "is website ki api sniff karo" / "sniff api quotes.toscrape.com" / "reverse engineer this api"
+        if re.search(r"\b(sniff api|api sniff|reverse engineer|network sniff|api dhoondho|api nikaalo)\b", clean):
+            url_m = re.search(r"https?://[^\s]+|[a-zA-Z0-9_\-\.]+\.[a-zA-Z]{2,}", clean)
+            target_url = url_m.group(0) if url_m else "https://quotes.toscrape.com"
+            goal_text = re.sub(r"\b(sniff\s*api|api\s*sniff|reverse\s*engineer|network\s*sniff|api\s*dhoondho|api\s*nikaalo|karo|do|please|zara)\b", "", clean).strip()
+            return _dispatch("api_sniffer", {"url": target_url, "goal": goal_text})
+
+        # -- Autonomous Sub-Agent Swarm ---------------------------------------
+        # "subagent chalao" / "multi agent research" / "swarm task"
+        if re.search(r"\b(subagent chalao|multi agent|swarm run|swarm task|background research|deep reverse engineer)\b", clean):
+            task_text = re.sub(r"\b(subagent\s*chalao|multi\s*agent|swarm\s*run|swarm\s*task|background\s*research|deep\s*reverse\s*engineer|karo|do|please|par)\b", "", clean).strip()
+            return _dispatch("subagent_swarm", {"task": task_text or "live web research"})
+
         # 2. Ultra-fast local reflex pattern matching (deterministic edge reflex in ~1ms)
         # -- App Management ---------------------------------------------------
         if re.search(r"\b(running apps|active apps|kaun se app|open apps|konsa app)\b", clean):
@@ -700,6 +723,17 @@ class LFMChatEngine:
         # Semantic Mapping 19: Repeat Command
         if any(w in clean for w in ("wahi dobara", "wahi phir se", "wahi kholo", "dobara karo", "phir se karo", "repeat karo", "repeat that", "once more")):
             return "repeat command", "repeat"
+
+        # Semantic Mapping 20: Dynamic API Sniffer
+        if any(w in clean for w in ("sniff api", "api sniff", "reverse engineer", "api nikaalo")):
+            url_m = re.search(r"https?://[^\s]+|[a-zA-Z0-9_\-\.]+\.[a-zA-Z]{2,}", clean)
+            target = url_m.group(0) if url_m else "https://quotes.toscrape.com"
+            return f"sniff api {target}", "api_sniffer"
+
+        # Semantic Mapping 21: Autonomous Sub-Agent Swarm
+        if any(w in clean for w in ("subagent chalao", "multi agent", "swarm run", "background research")):
+            task = re.sub(r"\b(subagent\s*chalao|multi\s*agent|swarm\s*run|background\s*research|par|karo|do)\b", "", clean).strip()
+            return f"subagent chalao {task}", "subagent_swarm"
 
         return text, "general"
 

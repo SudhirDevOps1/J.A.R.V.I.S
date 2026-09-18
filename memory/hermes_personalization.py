@@ -220,3 +220,61 @@ def adjust_pitch_by_intent(text: str) -> tuple[bool, str, str]:
         return True, pitch_str, f"Voice pitch default ({pitch_str}) par reset ho gayi hai."
 
     return False, get_edge_pitch(), ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Hermes 2.0: Continuous Intent & Workflow Learning
+# ─────────────────────────────────────────────────────────────────────────────
+LEARNED_INTENTS_PATH = BASE_DIR / "memory" / "learned_intents.json"
+_intents_lock = threading.Lock()
+
+
+def load_learned_intents() -> dict:
+    if not LEARNED_INTENTS_PATH.exists():
+        return {}
+    with _intents_lock:
+        try:
+            return json.loads(LEARNED_INTENTS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+
+def save_learned_intent(phrase: str, tool_name: str, tool_args: dict) -> None:
+    """Store dynamically learned user phrase to tool mapping so Needle/TriTier executes it forever."""
+    if not phrase or not tool_name:
+        return
+    phrase_clean = phrase.lower().strip()
+    data = load_learned_intents()
+    data[phrase_clean] = {
+        "tool": tool_name,
+        "args": tool_args,
+        "learned_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+    }
+    with _intents_lock:
+        try:
+            LEARNED_INTENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LEARNED_INTENTS_PATH.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False),
+                encoding="utf-8"
+            )
+        except Exception as e:
+            print(f"[Hermes] ⚠️ Error saving learned intent: {e}")
+
+
+def match_learned_intent(text: str) -> Optional[tuple[str, dict]]:
+    """Check if input text matches any dynamically learned user intent in <1ms."""
+    if not text:
+        return None
+    data = load_learned_intents()
+    if not data:
+        return None
+    t = text.lower().strip()
+    # Exact match
+    if t in data:
+        item = data[t]
+        return (item["tool"], item.get("args", {}))
+    # Substring match
+    for k, item in data.items():
+        if len(k) > 4 and (k in t or t in k):
+            return (item["tool"], item.get("args", {}))
+    return None
