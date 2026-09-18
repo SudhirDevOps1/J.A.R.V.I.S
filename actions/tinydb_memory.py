@@ -82,8 +82,31 @@ class _SimpleTable:
         return False
 
 
+def _normalize_tinydb_file():
+    if not _STORE_FILE.exists():
+        return
+    try:
+        raw = json.loads(_STORE_FILE.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            _STORE_FILE.write_text("{}", encoding="utf-8")
+            return
+        modified = False
+        for tbl_name, tbl_data in raw.items():
+            if isinstance(tbl_data, list):
+                new_dict = {}
+                for idx, item in enumerate(tbl_data, 1):
+                    if isinstance(item, dict):
+                        new_dict[str(idx)] = item
+                raw[tbl_name] = new_dict
+                modified = True
+        if modified:
+            _STORE_FILE.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
 def _get_db():
     _STORE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _normalize_tinydb_file()
     if _HAS_TINYDB:
         return TinyDB(str(_STORE_FILE))
     return _SimpleNoSQL(_STORE_FILE)
