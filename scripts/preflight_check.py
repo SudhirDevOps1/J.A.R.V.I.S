@@ -224,6 +224,17 @@ def check_omniroute(verbose=True):
     if verbose:
         print('  [--] OmniRoute Gateway: Not running (optional - npm install -g omniroute)')
 
+def check_installed_apps(verbose=True):
+    """Auto-scan host machine applications on first run and cache locally."""
+    try:
+        from actions.open_app import _scan_installed_apps
+        apps = _scan_installed_apps()
+        if verbose:
+            print(f'  [OK] Host Applications Index: {len(apps)} apps indexed on this PC')
+    except Exception as e:
+        if verbose:
+            print(f'  [!] Apps scan note: {e}')
+
 def run_preflight(verbose=True):
     """Programmatic entry point for main.py / run_jarvis.pyw."""
     if verbose:
@@ -240,6 +251,7 @@ def run_preflight(verbose=True):
     check_desktop_shortcut(verbose=verbose)
     check_free_proxy(verbose=verbose)
     check_llm_cache(verbose=verbose)
+    check_installed_apps(verbose=verbose)
     check_omniroute(verbose=verbose)
     dt = time.monotonic() - t0
     if verbose:

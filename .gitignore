@@ -89,3 +89,5 @@ logs/
 downloads/
 screenshots/
 scratch/
+config/generated_sniffers/*.py
+config/swarm_outputs/*.json

@@ -67,6 +67,28 @@ Please analyze the traffic:
         return f"Gemini reverse-engineering analysis note: {e}\nCaptured {len(captured_traffic)} API endpoints."
 
 
+def _get_browser_executable_or_kwargs() -> dict:
+    """Finds installed Chromium-based browser (Brave, Chrome, Edge) to run Playwright headlessly without 200MB download."""
+    import shutil
+    candidates = [
+        r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return {"executable_path": c}
+    for bin_name in ("brave", "google-chrome", "chrome", "chromium", "microsoft-edge", "msedge"):
+        w = shutil.which(bin_name)
+        if w:
+            return {"executable_path": w}
+    return {}
+
+
 def sniff_web_api(
     url: str,
     wait_seconds: int = 4,
@@ -87,7 +109,11 @@ def sniff_web_api(
         nonlocal page_title
         from playwright.async_api import async_playwright
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            launch_kwargs = _get_browser_executable_or_kwargs()
+            try:
+                browser = await p.chromium.launch(headless=True, **launch_kwargs)
+            except Exception:
+                browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             )
