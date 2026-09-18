@@ -126,6 +126,7 @@ class NeedleToolRouter:
         if re.search(r"\b(wahi dobara|wahi phir se|wahi kholo|dobara karo|phir se karo|repeat karo|repeat that|once more|repeat command)\b", clean):
             if self._last_tool_call is not None:
                 return self._last_tool_call
+            return _dispatch("repeat", {"action": "repeat"})
 
         # -- Hermes 2.0: Dynamically Learned User Intents (<1ms) --------------
         try:
@@ -136,6 +137,12 @@ class NeedleToolRouter:
         except Exception:
             pass
 
+        # -- Autonomous Sub-Agent Swarm ---------------------------------------
+        # "subagent chalao" / "multi agent research" / "swarm task" / "swarm run"
+        if re.search(r"\b(subagent chalao|multi agent|swarm run|swarm task|background research|deep reverse engineer)\b", clean):
+            task_text = re.sub(r"\b(subagent\s*chalao|multi\s*agent|swarm\s*run|swarm\s*task|background\s*research|deep\s*reverse\s*engineer|karo|do|please|par)\b", "", clean).strip()
+            return _dispatch("subagent_swarm", {"task": task_text or "live web research"})
+
         # -- Dynamic API Sniffer & Reverse Engineer ---------------------------
         # "is website ki api sniff karo" / "sniff api quotes.toscrape.com" / "reverse engineer this api"
         if re.search(r"\b(sniff api|api sniff|reverse engineer|network sniff|api dhoondho|api nikaalo)\b", clean):
@@ -143,12 +150,6 @@ class NeedleToolRouter:
             target_url = url_m.group(0) if url_m else "https://quotes.toscrape.com"
             goal_text = re.sub(r"\b(sniff\s*api|api\s*sniff|reverse\s*engineer|network\s*sniff|api\s*dhoondho|api\s*nikaalo|karo|do|please|zara)\b", "", clean).strip()
             return _dispatch("api_sniffer", {"url": target_url, "goal": goal_text})
-
-        # -- Autonomous Sub-Agent Swarm ---------------------------------------
-        # "subagent chalao" / "multi agent research" / "swarm task"
-        if re.search(r"\b(subagent chalao|multi agent|swarm run|swarm task|background research|deep reverse engineer)\b", clean):
-            task_text = re.sub(r"\b(subagent\s*chalao|multi\s*agent|swarm\s*run|swarm\s*task|background\s*research|deep\s*reverse\s*engineer|karo|do|please|par)\b", "", clean).strip()
-            return _dispatch("subagent_swarm", {"task": task_text or "live web research"})
 
         # 2. Ultra-fast local reflex pattern matching (deterministic edge reflex in ~1ms)
         # -- App Management ---------------------------------------------------
@@ -224,6 +225,14 @@ class NeedleToolRouter:
         if re.search(r"\b(screenshot|screen shot|snip)\b", clean):
             return _dispatch("computer_control", {"action": "screenshot"})
 
+        # -- Media Playback Controls (Pause / Resume / Next) -------------------
+        if re.search(r"\b(gana pause|song pause|pause karo|gana roko|music pause|pause song|media pause|gaana roko|pause music|gaana band|gana band)\b", clean):
+            return _dispatch("computer_control", {"action": "press", "key": "playpause"})
+        if re.search(r"\b(gana resume|song resume|resume karo|unpause|chalu karo gana|gaana chalu)\b", clean):
+            return _dispatch("computer_control", {"action": "press", "key": "playpause"})
+        if re.search(r"\b(next song|agla gana|agla song|next track)\b", clean):
+            return _dispatch("computer_control", {"action": "press", "key": "nexttrack"})
+
         # -- YouTube / Music / Song Play ------------------------------------------
         m_yt_song = re.search(r"\b(gaana|gana|song|music|naghma|dhun|track|qawwali|ghazal)\b", clean)
         m_yt_play_action = any(w in clean for w in (
@@ -257,26 +266,28 @@ class NeedleToolRouter:
             vid_q = " ".join(vid_q.split())
             return _dispatch("youtube_video", {"action": "play", "query": vid_q or "trending"})
 
-        # -- System Metrics ---------------------------------------------------
+        # -- System Metrics & Battery -----------------------------------------
         if re.search(r"\b(cpu usage|ram usage|temperature|system status|hardware status|pc performance"
-                     r"|cpu kitna|ram kitna|memory kitni|processor load|pc garam|kitna garam)\b", clean):
-            return _dispatch("system_status", {})
+                     r"|cpu kitna|ram kitna|memory kitni|processor load|pc garam|kitna garam"
+                     r"|battery|charge|charging|battery kitni|kitni battery|charge kitna)\b", clean):
+            act = "battery" if any(w in clean for w in ("battery", "charge", "charging")) else "cpu"
+            return _dispatch("system_status", {"action": act})
 
         # -- Web Search -------------------------------------------------------
         # "google karo X" / "X dhundo" / "search karo X" / "X ke baare mein batao"
         m_ws_en = re.search(r"\b(search|google|bing|find|lookup)\s+(?:for\s+)?(.+)", clean)
         m_ws_hi = re.search(r"(.+?)\s+(?:dhundo|search\s*karo|google\s*karo|khojo|batao|dekho)\b", clean)
         m_ws_kya = re.search(r"\b(kya hai|kaun hai|kahan hai|kab hai)\s+(.+)", clean)
-        if m_ws_en:
+        if m_ws_en and "click" not in clean:
             q = m_ws_en.group(2).strip()
             if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting")):
                 return _dispatch("web_search", {"query": q})
-        elif m_ws_hi:
+        elif m_ws_hi and "click" not in clean:
             q = m_ws_hi.group(1).strip()
             q = re.sub(r"\b(yaar|bhai|sir|please|zara|jaldi|mujhe|abhi)\b", "", q).strip()
             if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting", "mausam", "weather")):
                 return _dispatch("web_search", {"query": q})
-        elif m_ws_kya:
+        elif m_ws_kya and "click" not in clean:
             q = f"{m_ws_kya.group(2)} {m_ws_kya.group(1)}".strip()
             return _dispatch("web_search", {"query": q})
 
@@ -376,6 +387,49 @@ class NeedleToolRouter:
             return _dispatch("computer_settings", {"action": "go_back"})
         if re.search(r"\b(go forward|aage jao|agla page)\b", clean):
             return _dispatch("computer_settings", {"action": "go_forward"})
+
+        # -- Mouse & Click Automation -----------------------------------------
+        # "double click karo" / "do baar click"
+        if re.search(r"\b(double click|do baar click|double tap)\b", clean):
+            coord_m = re.search(r"(\d+)\s*,\s*(\d+)", clean)
+            x = int(coord_m.group(1)) if coord_m else None
+            y = int(coord_m.group(2)) if coord_m else None
+            return _dispatch("computer_control", {"action": "double_click", "x": x, "y": y})
+
+        # "right click karo" / "right click"
+        if re.search(r"\b(right click|right button|context menu)\b", clean):
+            coord_m = re.search(r"(\d+)\s*,\s*(\d+)", clean)
+            x = int(coord_m.group(1)) if coord_m else None
+            y = int(coord_m.group(2)) if coord_m else None
+            return _dispatch("computer_control", {"action": "right_click", "x": x, "y": y})
+
+        # AI Screen element click: "save icon par click karo", "submit button pe click kar do", "click on submit button"
+        m_hindi_target = re.search(r"(.+?)\s+(?:par|pe)\s+click(?:\s*(?:karo|kar\s*do|karna))?\b", clean)
+        m_eng_target = re.search(r"\bclick\s+on\s+(.+)$", clean)
+        target_desc = None
+        if m_hindi_target:
+            raw = re.sub(r"\b(yaar|bhai|please|zara|jaldi|kripya)\b", "", m_hindi_target.group(1)).strip()
+            if raw and raw not in ("yahan", "here", "mouse", "left", "right", "double", "do baar"):
+                target_desc = raw
+        elif m_eng_target:
+            raw = re.sub(r"\b(yaar|bhai|please|zara|jaldi|the)\b", "", m_eng_target.group(1)).strip()
+            if raw and raw not in ("yahan", "here", "mouse", "left", "right", "double"):
+                target_desc = raw
+
+        if target_desc:
+            return _dispatch("computer_control", {"action": "screen_click", "description": target_desc})
+
+        # "click karo" / "mouse click" / "left click" / "yahan click karo"
+        if re.search(r"\b(click karo|mouse click|left click|yahan click|cursor click|click)\b", clean):
+            coord_m = re.search(r"(\d+)\s*,\s*(\d+)", clean)
+            x = int(coord_m.group(1)) if coord_m else None
+            y = int(coord_m.group(2)) if coord_m else None
+            return _dispatch("computer_control", {"action": "click", "x": x, "y": y})
+
+        # "mouse move karo 500, 300"
+        m_move = re.search(r"\b(?:mouse move|cursor move|mouse le jao|cursor le jao)\b.*?(?:to\s+)?(\d+)\s*,\s*(\d+)", clean)
+        if m_move:
+            return _dispatch("computer_control", {"action": "move", "x": int(m_move.group(1)), "y": int(m_move.group(2))})
 
         # -- Scrolling --------------------------------------------------------
         if re.search(r"\b(scroll down|scroll neeche|neeche scroll|down scroll)\b", clean):
@@ -735,6 +789,22 @@ class LFMChatEngine:
             task = re.sub(r"\b(subagent\s*chalao|multi\s*agent|swarm\s*run|background\s*research|par|karo|do)\b", "", clean).strip()
             return f"subagent chalao {task}", "subagent_swarm"
 
+        # Semantic Mapping 22: Mouse & Click Actions
+        if any(w in clean for w in ("double click", "do baar click")):
+            return "double click", "double_click"
+        if any(w in clean for w in ("right click", "right button")):
+            return "right click", "right_click"
+        m_hindi_click = re.search(r"(.+?)\s+(?:par|pe)\s+click", clean)
+        if m_hindi_click:
+            t = re.sub(r"\b(yaar|bhai|please|zara|jaldi|karo|do)\b", "", m_hindi_click.group(1)).strip()
+            if t and t not in ("yahan", "here", "mouse", "left", "right"):
+                return f"click on {t}", "screen_click"
+        if "click on" in clean:
+            target = clean.split("click on")[-1].strip()
+            return f"click on {target}", "screen_click"
+        if any(w in clean for w in ("click karo", "mouse click", "left click", "yahan click")):
+            return "click karo", "click"
+
         return text, "general"
 
     def generate(self, prompt: str, system_prompt: str = "") -> Optional[str]:
@@ -921,3 +991,9 @@ def get_tri_tier_dispatcher() -> TriTierDispatcher:
     if _DISPATCHER is None:
         _DISPATCHER = TriTierDispatcher()
     return _DISPATCHER
+
+
+# Aliases for convenient importing
+NeedleTwoReflex = NeedleToolRouter
+LFM25Ear = LFMChatEngine
+

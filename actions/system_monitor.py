@@ -122,6 +122,17 @@ def get_system_status() -> dict:
     uptime_h    = int(uptime_secs // 3600)
     uptime_m    = int((uptime_secs % 3600) // 60)
 
+    battery_info = None
+    try:
+        b = psutil.sensors_battery()
+        if b:
+            battery_info = {
+                "percent": round(b.percent, 1),
+                "power_plugged": b.power_plugged,
+            }
+    except Exception:
+        pass
+
     return {
         "cpu_percent":   round(cpu, 1),
         "ram_percent":   round(ram.percent, 1),
@@ -129,6 +140,7 @@ def get_system_status() -> dict:
         "ram_total_gb":  round(ram.total  / 1024 ** 3, 1),
         "cpu_temp_c":    round(temp, 1) if temp > 0 else None,
         "gpu_percent":   round(gpu,  1) if gpu  >= 0 else None,
+        "battery":       battery_info,
         "uptime":        f"{uptime_h}h {uptime_m}m",
         "process_count": len(psutil.pids()),
     }
