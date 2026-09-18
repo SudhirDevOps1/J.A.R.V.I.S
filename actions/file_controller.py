@@ -1,6 +1,7 @@
 import os
 import shutil
 import platform
+from fnmatch import fnmatch
 from pathlib import Path
 from datetime import datetime
 
@@ -512,8 +513,12 @@ def find_files(name: str = "", extension: str = "",
                 continue
             if extension and item.suffix.lower() != extension.lower():
                 continue
-            if name and name.lower() not in item.name.lower():
-                continue
+            if name:
+                # Support fnmatch wildcard patterns (*.py, *invoice*2026.pdf) as well as substring matching
+                name_clean = name.lower()
+                item_clean = item.name.lower()
+                if not (fnmatch(item_clean, name_clean) or name_clean in item_clean):
+                    continue
             size = _format_size(item.stat().st_size)
             results.append(f"📄 {item.name} ({size}) — {item.parent}")
             if len(results) >= max_results:
@@ -824,7 +829,7 @@ def file_controller(
                 append=params.get("append", False)
             )
 
-        elif action == "find":
+        elif action in ("find", "search", "search_files", "dhoondho"):
             return find_files(
                 name=name or params.get("name", ""),
                 extension=params.get("extension", ""),

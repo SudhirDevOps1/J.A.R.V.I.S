@@ -157,6 +157,33 @@ class NeedleToolRouter:
             goal_text = re.sub(r"\b(sniff\s*api|api\s*sniff|reverse\s*engineer|network\s*sniff|api\s*dhoondho|api\s*nikaalo|karo|do|please|zara)\b", "", clean).strip()
             return _dispatch("api_sniffer", {"url": target_url, "goal": goal_text})
 
+        # -- The Hack: Pillow + Gemini 2.5 Flash Visual Debugger --------------
+        # "check karo is code mein kya error hai" / "screen par error dekho" / "troubleshoot screen"
+        if re.search(r"\b(error\s*(?:check|dekho|kya\s*hai|dhoondho|batao|solve)|troubleshoot|debug\s*(?:my\s*code|screen|error)|code\s*me\s*error|code\s*mein\s*error|screen\s*(?:pe|par|me|mein)\s*error)\b", clean):
+            return _dispatch("troubleshoot_screen", {"query": clean})
+
+        # -- The Tool: TinyDB Persistent Memory & Reminders -------------------
+        # "yaad rakhna kal mujhe Java ke multi-threading concepts revise karne hain"
+        if re.search(r"\b(yaad\s*(?:rakhna|rakho)|remember\s*that|task\s*save|save\s*task)\b", clean):
+            task_text = re.sub(r"^(yaad\s*rakhna|yaad\s*rakho|remember\s*that|task\s*save|save\s*task|ki)\s*", "", clean).strip()
+            return _dispatch("tinydb_memory", {"action": "add", "task": task_text or clean})
+
+        if re.search(r"\b(pending\s*tasks?|reminders?\s*(?:dikhao|kya\s*hai|list)|tasks?\s*list|kya\s*karna\s*hai)\b", clean):
+            return _dispatch("tinydb_memory", {"action": "list"})
+
+        # -- The Tool: Rank-BM25 Lexical Notes Search (<4ms) -----------------
+        # "notes mein search karo polymorphism" / "kahan likha tha polymorphism" / "search notes docker"
+        if re.search(r"\b(notes?\s*(?:me|mein|par)?\s*search|search\s*notes?|kahan\s*likha\s*tha|notes?\s*dhoondho)\b", clean):
+            q_text = re.sub(r"\b(notes?\s*(?:me|mein|par)?\s*search\s*karo|search\s*notes?|kahan\s*likha\s*tha|notes?\s*dhoondho|karo|do|please|zara)\b", "", clean).strip()
+            return _dispatch("bm25_search", {"query": q_text or clean})
+
+        # -- 0 MB Native Windows Pop-up Alert (ctypes) ------------------------
+        if re.search(r"\b(alert\s*dikhao|show\s*alert|show\s*popup|popup\s*dikhao)\b", clean):
+            msg = re.sub(r"\b(alert\s*dikhao|show\s*alert|show\s*popup|popup\s*dikhao)\b", "", clean).strip()
+            from core.native_hacks import show_native_alert
+            show_native_alert("J.A.R.V.I.S. Alert", msg or "Aapka task complete ho gaya hai!", "info")
+            return _dispatch("computer_control", {"action": "none"})
+
         # 2. Ultra-fast local reflex pattern matching (deterministic edge reflex in ~1ms)
         # -- App Management ---------------------------------------------------
         if re.search(r"\b(running apps|active apps|kaun se app|open apps|konsa app)\b", clean):
@@ -565,6 +592,28 @@ class NeedleToolRouter:
                                     pass
             except Exception:
                 pass
+
+        # -- Scikit-Learn Micro Naive Bayes Classifier (<0.3ms probabilistic fallback) --
+        try:
+            from core.intent_classifier import get_micro_intent_classifier
+            nb = get_micro_intent_classifier()
+            pred = nb.predict_intent(clean, min_confidence=0.65)
+            if pred:
+                intent_name, conf = pred
+                if intent_name == "troubleshoot_screen":
+                    return _dispatch("troubleshoot_screen", {"query": clean})
+                elif intent_name == "tinydb_memory":
+                    t_text = re.sub(r"^(yaad\s*rakhna|yaad\s*rakho|remember\s*that|ki)\s*", "", clean).strip()
+                    return _dispatch("tinydb_memory", {"action": "add", "task": t_text or clean})
+                elif intent_name == "tinydb_list":
+                    return _dispatch("tinydb_memory", {"action": "list"})
+                elif intent_name == "bm25_search":
+                    q_text = re.sub(r"\b(notes?\s*(?:me|mein|par)?\s*search\s*karo|search\s*notes?|kahan\s*likha\s*tha|notes?\s*dhoondho|karo|do|please|zara)\b", "", clean).strip()
+                    return _dispatch("bm25_search", {"query": q_text or clean})
+                elif intent_name == "find_files":
+                    return _dispatch("file_controller", {"action": "find", "name": clean, "path": "home"})
+        except Exception:
+            pass
 
         return None
 

@@ -33,6 +33,7 @@ memory/journals/
 memory/obsidian_vault/
 memory/*.db
 memory/*.sqlite*
+memory/tinydb_store.json
 config/weather_cache.json
 config/installed_apps.json
 

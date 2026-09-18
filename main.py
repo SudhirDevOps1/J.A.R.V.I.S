@@ -2371,6 +2371,12 @@ class JarvisLive:
 def main():
     ui = JarvisUI("face.png")
 
+    try:
+        from core.global_hotkey import get_hotkey_manager
+        get_hotkey_manager().start()
+    except Exception as _hke:
+        print(f"[Main] Hotkey note: {_hke}")
+
     def runner():
         ui.wait_for_api_key()
         jarvis = JarvisLive(ui)
@@ -2387,6 +2393,11 @@ def main():
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
+        try:
+            from core.global_hotkey import get_hotkey_manager
+            get_hotkey_manager().stop()
+        except Exception:
+            pass
         # Graceful shutdown of free proxy
         try:
             from core.gemini_free_proxy import stop_proxy
