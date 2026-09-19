@@ -216,6 +216,25 @@ def _play_audio_bytes(audio_bytes: bytes) -> None:
 # Engines
 # ---------------------------------------------------------------------------
 
+def _speak_sapi_fallback(text: str) -> bool:
+    """Windows native SAPI5 / pyttsx3 offline fallback when EdgeTTS network is unreachable."""
+    try:
+        import win32com.client
+        speaker = win32com.client.Dispatch("SAPI.SpVoice")
+        speaker.Speak(text)
+        return True
+    except Exception:
+        pass
+    try:
+        import pyttsx3
+        eng = pyttsx3.init()
+        eng.say(text)
+        eng.runAndWait()
+        return True
+    except Exception:
+        return False
+
+
 class EdgeTTSEngine:
     """Microsoft EdgeTTS – free, requires internet with dynamic pitch and rate control."""
 
@@ -238,7 +257,9 @@ class EdgeTTSEngine:
         try:
             audio_bytes = loop.run_until_complete(self._synth(cleaned))
         except Exception as e:
-            print(f"[EdgeTTS] Synthesis failed ({e}). Piper removed — no offline fallback.")
+            print(f"[EdgeTTS] Synthesis failed ({e}). Attempting offline SAPI fallback...")
+            if _speak_sapi_fallback(cleaned):
+                return
             return
         finally:
             loop.close()

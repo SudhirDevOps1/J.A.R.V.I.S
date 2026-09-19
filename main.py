@@ -507,6 +507,7 @@ class JarvisLive:
         self.ui.get_plugins = self._plugin_registry.list_for_ui
         self.ui.get_plugin_settings = self._plugin_registry.settings_schemas  # ⚙ settings tab
         self.ui.request_say = self.plugin_say   # plugins: mid-task speech channel
+        self.ui.speak       = self.speak        # ADDITIVE: Unified speech channel for HUD alerts/timers
 
         # ── Wake word ────────────────────────────────────────────────────────
         # _awake gates the mic (see _listen_audio) and the background speakers.
@@ -993,6 +994,12 @@ class JarvisLive:
                 print(f"[JARVIS] ✋ Interrupted — {drained} audio chunks discarded")
 
         # NOTE: Piper queue removed with Piper engine (Edge/Gemini only now).
+        if hasattr(self, "_edge_queue") and self._edge_queue:
+            while not self._edge_queue.empty():
+                try:
+                    self._edge_queue.get_nowait()
+                except Exception:
+                    break
         try:
             import sounddevice as _sd
             _sd.stop()
@@ -1008,6 +1015,8 @@ class JarvisLive:
             self.ui.write_log("SYS: Interrupted — listening...")
 
     def speak(self, text: str):
+        # ADDITIVE: Reset interrupt state so newly generated local model / reflex replies are spoken immediately
+        self._interrupted = False
         # ADDITIVE: AI speech clock — TTS/Edge replies _is_speaking set nahi karte,
         # isliye monitor beech-jawab me alert ghusa deta tha. Ab clock update hoga.
         try:
@@ -1422,6 +1431,7 @@ class JarvisLive:
         if not text:
             return
 
+        self._interrupted = False
         if not hasattr(self, "_edge_queue"):
             import queue
             self._edge_queue = queue.Queue()

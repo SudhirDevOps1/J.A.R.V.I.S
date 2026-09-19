@@ -44,6 +44,8 @@ config/installed_apps.json
 config/music_library.json
 config/todos.json
 config/agent_plans.json
+config/active_timers.json
+Desktop/
 config/*.sqlite*
 config/*.db
 

@@ -414,6 +414,14 @@ def reminder(
         script_path.unlink(missing_ok=True)
         return "System scheduler me reminder register nahi ho paya."
 
+    # Register with live in-app TimerManager for real-time HUD countdown & voice alert
+    try:
+        from core.timer_manager import add_active_timer
+        cat = "alarm" if any(w in safe_msg.lower() for w in ("alarm", "timer")) else "reminder"
+        add_active_timer(task_name, safe_msg, target_dt, category=cat)
+    except Exception as _tm_err:
+        print(f"[Reminder] TimerManager register note: {_tm_err}")
+
     if player:
         player.write_log(f"[Reminder] ✅ {target_dt.strftime('%Y-%m-%d %H:%M')} — {safe_msg[:40]}")
 

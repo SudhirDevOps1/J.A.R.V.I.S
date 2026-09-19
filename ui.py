@@ -28,7 +28,7 @@ else:
     _WIN_HIDE: dict = {}
 
 from PyQt6.QtCore import (
-    QEasingCurve, QMimeData, QObject, QParallelAnimationGroup, QPointF,
+    QEasingCurve, QEvent, QMimeData, QObject, QParallelAnimationGroup, QPointF,
     QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, QUrl, pyqtSignal,
 )
 from PyQt6.QtGui import (
@@ -5727,21 +5727,54 @@ class PipWindow(QWidget):
             }}
         """)
 
-        # Header: dot + title + quick buttons (screen, cam, clear, expand, hide)
-        hdr = QHBoxLayout(); hdr.setSpacing(5)
+        # Draggable Header Bar
+        self._header_bar = QFrame(self)
+        self._header_bar.setObjectName("PipHeader")
+        self._header_bar.setCursor(Qt.CursorShape.SizeAllCursor)
+        self._header_bar.setStyleSheet(f"""
+            QFrame#PipHeader {{
+                background: rgba(0, 20, 35, 180);
+                border: 1px solid rgba(0, 229, 255, 0.25);
+                border-radius: 6px;
+                padding: 1px;
+            }}
+        """)
+        hdr = QHBoxLayout(self._header_bar)
+        hdr.setContentsMargins(5, 3, 5, 3)
+        hdr.setSpacing(4)
+
+        # Drag grip handle
+        self._grip = QLabel("✥")
+        self._grip.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        self._grip.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent; border: none;")
+        self._grip.setCursor(Qt.CursorShape.SizeAllCursor)
+        self._grip.setToolTip("Click and drag to reposition PiP companion anywhere on screen")
+        hdr.addWidget(self._grip)
+
         self._dot = QLabel("●")
         self._dot.setFont(QFont("Courier New", 12, QFont.Weight.Bold))
         self._dot.setStyleSheet("color: #00ff88; background: transparent; border: none;")
+        self._dot.setCursor(Qt.CursorShape.SizeAllCursor)
         hdr.addWidget(self._dot)
 
         self._t = QLabel(f"{self._asst} PiP")
         self._t.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         self._t.setStyleSheet(f"color: {C.PRI}; background: transparent; border: none;")
+        self._t.setCursor(Qt.CursorShape.SizeAllCursor)
         hdr.addWidget(self._t)
 
         self._badge = QLabel("⚡ EDGE")
         self._badge.setStyleSheet("color: #00e5ff; background: rgba(0, 229, 255, 0.15); border: 1px solid rgba(0, 229, 255, 0.3); border-radius: 4px; padding: 1px 4px; font-size: 8px; font-family: monospace;")
+        self._badge.setCursor(Qt.CursorShape.SizeAllCursor)
         hdr.addWidget(self._badge)
+
+        # Live Mini Countdown Timer badge
+        self._pip_timer = QLabel("")
+        self._pip_timer.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._pip_timer.setStyleSheet("color: #ffaa00; background: rgba(255, 170, 0, 0.15); border: 1px solid rgba(255, 170, 0, 0.3); border-radius: 4px; padding: 1px 4px; font-size: 8px;")
+        self._pip_timer.setVisible(False)
+        self._pip_timer.setCursor(Qt.CursorShape.SizeAllCursor)
+        hdr.addWidget(self._pip_timer)
 
         hdr.addStretch()
 
@@ -5750,7 +5783,7 @@ class PipWindow(QWidget):
         _btn_eye.setFixedSize(22, 20)
         _btn_eye.setFont(QFont("Segoe UI Emoji", 8))
         _btn_eye.setCursor(Qt.CursorShape.PointingHandCursor)
-        _btn_eye.setToolTip("Inspect Screen & Code Errors")
+        _btn_eye.setToolTip("Inspect Screen & Code Errors (ignores floating PiP)")
         _btn_eye.setStyleSheet("QPushButton { background: transparent; color: #00e5ff; border: 1px solid rgba(0,229,255,0.3); border-radius: 3px; } QPushButton:hover { background: rgba(0,229,255,0.2); }")
         _btn_eye.clicked.connect(lambda: self._quick_action("screen dekho"))
         hdr.addWidget(_btn_eye)
@@ -5788,7 +5821,11 @@ class PipWindow(QWidget):
         """)
         _hide.clicked.connect(self.hide)
         hdr.addWidget(_hide)
-        root.addLayout(hdr)
+        root.addWidget(self._header_bar)
+
+        # Install drag event filter on header bar and labels
+        for w in (self._header_bar, self._grip, self._dot, self._t, self._badge, self._pip_timer):
+            w.installEventFilter(self)
 
         # Scrollable Rich Chat Area
         self._chat = QTextEdit()
@@ -5931,6 +5968,38 @@ class PipWindow(QWidget):
         except Exception:
             pass
 
+    def update_timer(self, formatted: str, is_active: bool) -> None:
+        """Update live countdown timer in PiP companion header."""
+        try:
+            if is_active and formatted:
+                self._pip_timer.setText(f"⏳ {formatted}")
+                self._pip_timer.setVisible(True)
+            else:
+                self._pip_timer.setVisible(False)
+        except Exception:
+            pass
+
+    def eventFilter(self, watched, event) -> bool:
+        """Allow smooth dragging anywhere on the PiP header bar and its badges."""
+        try:
+            if watched in (getattr(self, "_header_bar", None), getattr(self, "_grip", None),
+                           getattr(self, "_dot", None), getattr(self, "_t", None),
+                           getattr(self, "_badge", None), getattr(self, "_pip_timer", None)):
+                if event.type() == QEvent.Type.MouseButtonPress:
+                    if event.button() == Qt.MouseButton.LeftButton:
+                        self._drag = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+                        return True
+                elif event.type() == QEvent.Type.MouseMove:
+                    if self._drag is not None and event.buttons() & Qt.MouseButton.LeftButton:
+                        self.move(event.globalPosition().toPoint() - self._drag)
+                        return True
+                elif event.type() == QEvent.Type.MouseButtonRelease:
+                    self._drag = None
+                    return True
+        except Exception:
+            pass
+        return super().eventFilter(watched, event)
+
     def mousePressEvent(self, e) -> None:
         try:
             if e.button() == Qt.MouseButton.LeftButton:
@@ -6016,6 +6085,7 @@ class MainWindow(QMainWindow):
         self.on_wake_toggle    = None   # callable: (enable: bool) -> str, set by JarvisLive
         self.on_wake_manual    = None   # callable: () -> None — manual sleep/wake
         self.wake_get_state    = None   # callable: () -> dict {enabled, awake, ready}
+        self.speak             = None   # callable: (text: str) -> None, set by JarvisLive
         self._muted            = False
         self._current_file: str | None = None
         self._remote_overlay: RemoteKeyOverlay | None = None
@@ -7019,12 +7089,81 @@ class MainWindow(QMainWindow):
         self._date_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
         self._date_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._date_lbl)
+        self._header_timer_badge = QLabel("")
+        self._header_timer_badge.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._header_timer_badge.setStyleSheet("color: #ffaa00; background: rgba(255, 170, 0, 0.15); border: 1px solid rgba(255, 170, 0, 0.3); border-radius: 4px; padding: 1px 5px;")
+        self._header_timer_badge.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._header_timer_badge.setVisible(False)
+        right_col.addWidget(self._header_timer_badge)
         lay.addLayout(right_col)
         return w
 
     def _tick_clock(self):
         self._clock_lbl.setText(time.strftime("%H:%M:%S"))
         self._date_lbl.setText(time.strftime("%a %d %b %Y"))
+
+        # Real-time countdown timer & active tasks synchronization
+        try:
+            from core.timer_manager import check_expired_timers, get_primary_timer, get_pending_tasks_for_ui
+
+            # 1. Fire alerts for expired countdowns / alarms
+            expired = check_expired_timers()
+            for exp in expired:
+                msg = exp.message or "Alarm"
+                self.write_log(f"⏰ [TIMER ALARM]: {msg}")
+                # Play audio chime
+                try:
+                    import winsound
+                    winsound.Beep(1200, 250)
+                    winsound.Beep(1600, 350)
+                except Exception:
+                    pass
+                # Speak aloud via EdgeTTS
+                spk_text = f"Alert sir! {msg} ka time ho gaya hai."
+                if hasattr(self, "speak") and callable(self.speak):
+                    self.speak(spk_text)
+                elif hasattr(self, "request_say") and callable(self.request_say):
+                    self.request_say(spk_text)
+
+            # 2. Update live primary countdown badge and telemetry bar
+            primary = get_primary_timer()
+            if primary and primary.remaining_seconds > 0:
+                cd_str = primary.format_countdown()
+                if hasattr(self, "_header_timer_badge"):
+                    self._header_timer_badge.setText(f"⏳ {cd_str}")
+                    self._header_timer_badge.setVisible(True)
+                if hasattr(self, "_task_timer_lbl"):
+                    cat_prefix = "⏰ ALARM" if primary.category == "alarm" else "⏳ TIMER"
+                    self._task_timer_lbl.setText(f"{cat_prefix} {cd_str} · {primary.message[:14]}")
+                    self._task_timer_lbl.setStyleSheet("color: #ffaa00; background: transparent; border: none;")
+                if hasattr(self, "_task_timer_bar"):
+                    self._task_timer_bar.setValue(primary.progress_percent)
+                if getattr(self, "_pip", None) and hasattr(self._pip, "update_timer"):
+                    self._pip.update_timer(cd_str, True)
+            else:
+                if hasattr(self, "_header_timer_badge"):
+                    self._header_timer_badge.setVisible(False)
+                if hasattr(self, "_task_timer_lbl"):
+                    self._task_timer_lbl.setText("⏳ NO ACTIVE TIMER")
+                    self._task_timer_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
+                if hasattr(self, "_task_timer_bar"):
+                    self._task_timer_bar.setValue(0)
+                if getattr(self, "_pip", None) and hasattr(self._pip, "update_timer"):
+                    self._pip.update_timer("", False)
+
+            # 3. Refresh pending tasks every 5 seconds
+            t_sec = int(time.time())
+            if t_sec % 5 == 0 and hasattr(self, "_pending_tasks_lbl"):
+                pending = get_pending_tasks_for_ui(limit=2)
+                if pending:
+                    lines = [f"• {p.get('task', '')[:28]}" for p in pending]
+                    self._pending_tasks_lbl.setText("📋 Tasks:\n" + "\n".join(lines))
+                    self._pending_tasks_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; border: none;")
+                else:
+                    self._pending_tasks_lbl.setText("📋 No pending tasks")
+                    self._pending_tasks_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
+        except Exception:
+            pass
 
     def _build_left_panel(self) -> QWidget:
         w = QWidget()
@@ -7138,7 +7277,51 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._weather_card)
         lay.addSpacing(4)
 
-        # ── 3) Compact Telemetry Status Badges ──────────────────────────────
+        # ── 3) Active Countdown Timers & Pending Tasks ───────────────────────
+        timer_hdr = QLabel("◈ TIMERS & TASKS")
+        timer_hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        timer_hdr.setStyleSheet(f"color: {C.PRI}; background: transparent; border-bottom: 1px solid {C.BORDER}; padding-bottom: 2px;")
+        lay.addWidget(timer_hdr)
+
+        self._timer_card = QWidget()
+        self._timer_card.setStyleSheet(f"background: {C.PANEL2}; border: 1px solid {C.BORDER}; border-radius: 4px;")
+        t_lay = QVBoxLayout(self._timer_card)
+        t_lay.setContentsMargins(6, 4, 6, 4)
+        t_lay.setSpacing(2)
+
+        self._task_timer_lbl = QLabel("⏳ NO ACTIVE TIMER")
+        self._task_timer_lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        self._task_timer_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; border: none;")
+        t_lay.addWidget(self._task_timer_lbl)
+
+        self._task_timer_bar = QProgressBar()
+        self._task_timer_bar.setFixedHeight(5)
+        self._task_timer_bar.setTextVisible(False)
+        self._task_timer_bar.setRange(0, 100)
+        self._task_timer_bar.setValue(0)
+        self._task_timer_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background: rgba(0, 20, 30, 120);
+                border: 1px solid {C.BORDER_A};
+                border-radius: 2px;
+            }}
+            QProgressBar::chunk {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #ffaa00, stop:1 #00e5ff);
+                border-radius: 2px;
+            }}
+        """)
+        t_lay.addWidget(self._task_timer_bar)
+
+        self._pending_tasks_lbl = QLabel("📋 No pending tasks")
+        self._pending_tasks_lbl.setFont(QFont("Courier New", 6))
+        self._pending_tasks_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; border: none;")
+        self._pending_tasks_lbl.setWordWrap(True)
+        t_lay.addWidget(self._pending_tasks_lbl)
+
+        lay.addWidget(self._timer_card)
+        lay.addSpacing(4)
+
+        # ── 4) Compact Telemetry Status Badges ──────────────────────────────
         badge_row = QHBoxLayout()
         badge_row.setSpacing(3)
         for txt, col in [

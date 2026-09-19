@@ -101,16 +101,46 @@ def troubleshoot_screen(
     params = parameters or {}
     user_query = params.get("query") or params.get("prompt") or "Is screen par kya error dikh raha hai? Check karo aur solution batao."
 
+    # If PiP mode window is floating over the IDE, temporarily hide it so vision sees code/errors clearly
+    pip_win = None
+    pip_was_visible = False
+    if player is not None:
+        try:
+            pip_win = getattr(player, "_pip", None)
+            if pip_win is not None and hasattr(pip_win, "isVisible") and pip_win.isVisible():
+                if not any(w in str(user_query).lower() for w in ("pip", "mini window", "companion")):
+                    pip_win.hide()
+                    pip_was_visible = True
+                    import time; time.sleep(0.06)
+        except Exception:
+            pass
+
     try:
         img_bytes, mime_type = _capture_screen_thumbnail()
     except Exception as e:
         return f"Screen capture nahi ho paya: {e}"
+    finally:
+        if pip_was_visible and pip_win is not None:
+            try:
+                pip_win.show()
+            except Exception:
+                pass
 
     api_key = _get_gemini_api_key()
     if not api_key:
         return "Screen capture ho gaya hai par Gemini API key configured nahi hai config/api_keys.json mein."
 
     b64_img = base64.b64encode(img_bytes).decode("utf-8")
+
+    # Detect active foreground window to give vision model exact context (e.g. VSCodium, Code, Terminal)
+    active_win_title = ""
+    try:
+        import pygetwindow as _gw
+        _w = _gw.getActiveWindow()
+        if _w and getattr(_w, "title", None):
+            active_win_title = _w.title.strip()
+    except Exception:
+        pass
 
     # Call Gemini Flash with multimodal payload (working endpoints first)
     models_to_try = [
@@ -128,9 +158,19 @@ def troubleshoot_screen(
     except Exception:
         pass
 
+    active_win_hint = (
+        f"\nUser's Active Window: '{active_win_title}' (e.g. VSCodium / Code Editor / Terminal).\n"
+        "Inspect the underlying code editor, syntax highlighting, terminal tracebacks, and compiler errors in priority. "
+        "Do NOT focus on or get distracted by any floating assistant widgets or overlays."
+        if active_win_title else
+        "\nFocus specifically on the code editor (e.g. VSCodium, VS Code), terminal output, compiler errors, and tracebacks. "
+        "Ignore any floating assistant widgets or overlays."
+    )
+
     system_instruction = (
         f"You are {asst_name}, a friendly, ultra-sharp AI assistant and visual troubleshooter. "
         "Examine this screenshot carefully and respond directly in fluent, natural Hinglish (conversational Hindi-English mix). "
+        f"{active_win_hint}\n"
         "DO NOT use robotic numbered section headers (e.g. do NOT write '**1. Screen Description:**' or '**2. Errors:**'). "
         "Instead, speak directly and naturally: "
         "- In 1-2 quick sentences, mention what is open on the screen (e.g. VS Code, terminal, browser). "
