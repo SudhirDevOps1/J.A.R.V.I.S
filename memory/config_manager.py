@@ -318,9 +318,9 @@ def save_tts_engine(engine_name: str) -> None:
 
 
 def get_avatar_mode() -> str:
-    """Return chosen avatar mode ('celestial', 'reactor', 'orb', 'matrix'). Default: 'celestial'."""
+    """Return chosen avatar mode ('celestial', 'reactor', 'orb', 'matrix', 'nova'). Default: 'celestial'."""
     mode = (load_api_keys().get("avatar_mode", "celestial") or "celestial").lower().strip()
-    return mode if mode in ("celestial", "reactor", "orb", "matrix") else "celestial"
+    return mode if mode in ("celestial", "reactor", "orb", "matrix", "nova") else "celestial"
 
 
 def save_avatar_mode(mode: str) -> None:
@@ -352,6 +352,8 @@ def get_hud_fx() -> dict:
         "photons": True,
         "spectrum": True,
         "brackets": True,
+        "meteors": True,     # ambient shooting-star streaks (voice-boosted)
+        "trails": True,      # comet trails behind orbiting photons
     }
     cfg = load_api_keys().get("hud_fx")
     if isinstance(cfg, dict):
@@ -564,6 +566,25 @@ def save_edge_reflex_enabled(enabled: bool) -> None:
     _patch_config(enable_edge_reflex=bool(enabled))
 
 
+def get_proxy_version() -> int:
+    """Free-proxy implementation selector: 1 = v1 (default, battle-tested),
+    2 = v2 (metrics + rate-limit canary). Unknown values collapse to 1."""
+    try:
+        v = int(load_api_keys().get("proxy_version", 1) or 1)
+        return v if v in (1, 2) else 1
+    except Exception:
+        return 1
+
+
+def save_proxy_version(version: int) -> None:
+    """Persist free-proxy implementation selector (1 or 2)."""
+    try:
+        v = int(version or 1)
+    except Exception:
+        v = 1
+    _patch_config(proxy_version=2 if v == 2 else 1)
+
+
 def get_onboarded() -> bool:
     """ADDITIVE: first-run onboarding shown? Default False (purani installs par ek baar dikhega)."""
     return bool(load_api_keys().get("onboarded", False))
@@ -630,15 +651,26 @@ def watch_plugins_once(callback=None) -> bool:
 
 
 def cache_lookup_semantic(query: str, candidates: list[str]) -> str | None:
-    """bm25-based semantic cache probe. bm25 na ho to None (cache untouched)."""
+    """BM25-based semantic cache probe over in-memory candidate strings.
+
+    Uses the real PureBM25 scorer from actions.bm25_search (the old import
+    referenced a bm25_scores symbol that never existed, so this ALWAYS fell
+    through to the token-overlap fallback). Threshold 2.0 preserved.
+    """
     try:
         q = (query or "").strip().lower()
         if not q or not candidates:
             return None
-        from actions.bm25_search import bm25_scores as _bm
-        _sc = _bm(q, candidates)
-        _best = max(_sc, key=lambda x: x[1]) if _sc else (None, 0.0)
-        return _best[0] if _best[1] > 2.0 else None
+        from actions.bm25_search import PureBM25, _tokenize as _bm_tok
+        corpus = [_bm_tok(str(c)) for c in candidates]
+        scores = PureBM25(corpus).get_scores(_bm_tok(q))
+        if not scores:
+            return None
+        best_i = max(range(len(scores)), key=lambda i: scores[i])
+        # Threshold 1.0 (not 2.0): BM25 scores scale with corpus size, and
+        # candidate lists here are tiny — 2.0 would reject genuine matches
+        # like 'reserve table restaurant' ~ 'book restaurant table' (1.39).
+        return candidates[best_i] if scores[best_i] > 1.0 else None
     except Exception:
         try:
             # Fallback: token-overlap (bm25 module shape alag ho to bhi kaam kare)

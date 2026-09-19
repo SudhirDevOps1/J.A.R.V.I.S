@@ -143,12 +143,42 @@ def _trim_to_limit(memory: dict) -> dict:
             pass
     return memory
 
+_MEMORY_BAK_KEEP = 5
+
+
+def _prune_memory_backups() -> None:
+    """Keep max _MEMORY_BAK_KEEP long_term.json.bak-* files (mirrors config backups)."""
+    try:
+        olds = sorted(MEMORY_PATH.parent.glob("long_term.json.bak-*"))
+        for _old in olds[:-_MEMORY_BAK_KEEP]:
+            try:
+                _old.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _backup_memory() -> None:
+    """Timestamped backup before overwriting long_term.json. Never raises."""
+    try:
+        if not MEMORY_PATH.exists():
+            return
+        import shutil as _sh
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        _sh.copy2(str(MEMORY_PATH), str(MEMORY_PATH.parent / f"long_term.json.bak-{ts}"))
+        _prune_memory_backups()
+    except Exception as e:
+        print(f"[Memory] ⚠️ Backup note: {e}")
+
+
 def save_memory(memory: dict) -> None:
     if not isinstance(memory, dict):
         return
     memory = _trim_to_limit(memory)
     MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     with _lock:
+        _backup_memory()
         MEMORY_PATH.write_text(
             json.dumps(memory, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -162,8 +192,34 @@ def _truncate_value(val: str) -> str:
     return val
 
 
-def _recursive_update(target: dict, updates: dict) -> bool:
+def _find_duplicate_key(memory: dict, new_val: str, skip_cat: str = "", skip_key: str = "") -> str:
+    """Find an existing 'cat/key' holding the identical value ('' if none).
+
+    Prevents 'ayse' vs 'ayse_sister' style duplicates from piling up: the same
+    fact saved under a second key is skipped with a log line instead of stored
+    twice. Short values (<4 chars) are exempt — 'yes'/'ok' collide by nature.
+    """
+    try:
+        needle = str(new_val or "").strip()
+        if len(needle) < 4:
+            return ""
+        for cat, items in (memory or {}).items():
+            if not isinstance(items, dict):
+                continue
+            for key, entry in items.items():
+                if cat == skip_cat and key == skip_key:
+                    continue
+                if _entry_value(entry) == needle:
+                    return f"{cat}/{key}"
+    except Exception:
+        pass
+    return ""
+
+
+def _recursive_update(target: dict, updates: dict, _root: dict | None = None) -> bool:
     changed = False
+    if _root is None:
+        _root = target  # top-level call: dupe scan covers the whole store
     for key, value in updates.items():
         if value is None:
             continue
@@ -173,13 +229,17 @@ def _recursive_update(target: dict, updates: dict) -> bool:
             if key not in target or not isinstance(target[key], dict):
                 target[key] = {}
                 changed = True
-            if _recursive_update(target[key], value):
+            if _recursive_update(target[key], value, _root):
                 changed = True
         else:
             new_val  = _truncate_value(str(value["value"] if isinstance(value, dict) else value))
             entry    = {"value": new_val, "updated": datetime.now().strftime("%Y-%m-%d")}
             existing = target.get(key, {})
             if not isinstance(existing, dict) or existing.get("value") != new_val:
+                dupe = _find_duplicate_key(_root, new_val)
+                if dupe:
+                    print(f"[Memory] ♻️  Duplicate skipped (already at {dupe}): {new_val[:60]}")
+                    continue
                 target[key] = entry
                 changed = True
     return changed
@@ -377,6 +437,67 @@ def format_memory_for_prompt(memory: dict | None) -> str:
 
 # ── Recall ────────────────────────────────────────────────────────────────────
 
+def _lev_ratio(a: str, b: str) -> float:
+    """Tiny dependency-free similarity ratio (0..100, SequenceMatcher-style).
+
+    Used when thefuzz isn't installed so typo-tolerance works out of the box.
+    O(len(a)*len(b)) with early exit for very long strings.
+    """
+    try:
+        if not a or not b:
+            return 0.0
+        if len(a) > 64 or len(b) > 64:
+            return 0.0
+        # Classic DP Levenshtein on the shorter-first pair.
+        if len(a) > len(b):
+            a, b = b, a
+        prev = list(range(len(b) + 1))
+        for i, ca in enumerate(a, 1):
+            cur = [i]
+            for j, cb in enumerate(b, 1):
+                cost = 0 if ca == cb else 1
+                cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost))
+            prev = cur
+        dist = prev[len(b)]
+        return (1.0 - dist / max(len(a), len(b))) * 100.0
+    except Exception:
+        return 0.0
+
+
+def _fuzzy_bonus(word: str, hay: str) -> int:
+    """Typo-tolerant fallback (similarity ≥ 75 → small bonus).
+
+    Runs ONLY when exact/substring matching already scored 0 for the word, so
+    the hot path stays as fast as before and 'Ayse' still finds 'Ayşe'.
+    Prefers thefuzz when installed, else the built-in Levenshtein ratio.
+    """
+    try:
+        if not word or not hay or len(word) < 3:
+            return 0
+        try:
+            from thefuzz import fuzz as _fuzz
+            ratio = float(_fuzz.partial_ratio(word, hay))
+        except Exception:
+            # partial_ratio ≈ best alignment of the shorter string: slide
+            # `word` over `hay` windows and take the max ratio.
+            w, h = word.lower(), hay.lower()
+            if len(w) > len(h):
+                w, h = h, w
+            ratio = 0.0
+            step = max(1, (len(h) - len(w)) // 8 + 1)
+            for i in range(0, len(h) - len(w) + 1, step):
+                r = _lev_ratio(w, h[i:i + len(w)])
+                if r > ratio:
+                    ratio = r
+                    if ratio >= 90.0:
+                        break
+        # 75 ≈ ≤2 edits on a 9-char word ('restorant'~'restaurant' = 80).
+        # Bonus stays tiny (+2) so typos never outrank exact matches.
+        return 2 if ratio >= 75.0 else 0
+    except Exception:
+        return 0
+
+
 def _score(query_words: list[str], cat: str, key: str, value: str) -> int:
     """Cheap lexical relevance. No embeddings, no network, no model call - this
     runs in well under a millisecond, which is the entire point: recall must
@@ -387,14 +508,22 @@ def _score(query_words: list[str], cat: str, key: str, value: str) -> int:
     for w in query_words:
         if not w:
             continue
+        word_hit = False
         if w == hay_key:
             score += 10
+            word_hit = True
         elif w in hay_key:
             score += 6
+            word_hit = True
         if w in hay_val:
             score += 3
+            word_hit = True
         if w in cat:
             score += 1
+            word_hit = True
+        if not word_hit:
+            # Typo fallback: 'ayse' ~ 'ayşe', 'restorant' ~ 'restaurant'.
+            score += max(_fuzzy_bonus(w, hay_key), _fuzzy_bonus(w, hay_val))
     return score
 
 
@@ -408,8 +537,20 @@ def search_memory(query: str, limit: int = 8) -> str:
 
     rows: list[tuple[int, str, str, str]] = []
     for cat, items in memory.items():
+        if cat == "sessions" and isinstance(items, list):
+            # Past session summaries ARE searchable (previously invisible).
+            for sess in items:
+                if not isinstance(sess, dict):
+                    continue
+                summary = str(sess.get("summary", "") or "").strip()
+                if not summary:
+                    continue
+                s = _score(words, "sessions", sess.get("date", "session"), summary) if words else 1
+                if s > 0:
+                    rows.append((s, "sessions", str(sess.get("date", "past")), summary))
+            continue
         if not isinstance(items, dict):
-            continue                     # skip 'sessions', which is a list
+            continue
         for key, entry in items.items():
             val = _entry_value(entry)
             if not val:
@@ -527,6 +668,7 @@ def pop_last_session() -> dict | None:
                 _ts = _dt.now().strftime("%Y%m%d-%H%M%S")
                 _bak = MEMORY_PATH.parent / f"long_term.json.bak-{_ts}"
                 _sh.copy2(str(MEMORY_PATH), str(_bak))
+                _prune_memory_backups()
             except Exception:
                 pass
             try:
@@ -615,36 +757,114 @@ def log_daily_activity(user_text: str, ai_response: str = "", action_name: str =
             print(f"[Journal] Error writing daily log: {e}")
 
 
-def get_daily_journal(day_query: str = "yesterday") -> str:
-    """
-    Read the markdown journal for a given day ('today', 'yesterday', or a specific YYYY-MM-DD).
+# Weekday names (English + Hindi) → Python weekday() number (Mon=0..Sun=6).
+_WEEKDAYS = {
+    "monday": 0, "somvar": 0, "somvaar": 0,
+    "tuesday": 1, "mangal": 1, "mangalvar": 1,
+    "wednesday": 2, "budh": 2, "budhvar": 2,
+    "thursday": 3, "guruvar": 3, "guruwar": 3, "brihaspati": 3,
+    "friday": 4, "shukravar": 4, "shukrvar": 4,
+    "saturday": 5, "shanivar": 5, "shanivaar": 5,
+    "sunday": 6, "ravivar": 6, "ravivaar": 6, "itvar": 6,
+}
+
+# Cap concatenated multi-day output so a "last week" query can't flood the prompt.
+_JOURNAL_CHARS_CAP = 4000
+
+
+def _resolve_journal_dates(day_query: str) -> list[str]:
+    """Resolve a natural day expression to one or more YYYY-MM-DD dates.
+
+    Supports: today/aaj, yesterday/kal, day-before-yesterday/parso,
+    'N days ago' / 'N din pehle' (N≤30), weekday names (EN+HI, most recent
+    occurrence incl. today), 'last week'/'pichle hafte' (last 7 days),
+    'this week'/'is hafte' (Monday..today), ISO dates. Anything else falls
+    back to [yesterday] (legacy behavior preserved).
     """
     from datetime import timedelta
     now = datetime.now()
     q = (day_query or "yesterday").lower().strip()
+    today = now.date()
+    fmt = lambda d: d.strftime("%Y-%m-%d")
 
+    if q in ("today", "aaj", "current", "0"):
+        return [fmt(today)]
     if q in ("yesterday", "kal", "prev", "-1"):
-        target_date = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-    elif q in ("today", "aaj", "current", "0"):
-        target_date = now.strftime("%Y-%m-%d")
-    else:
-        # Check if user provided an ISO date format
-        m = re.search(r"\d{4}-\d{2}-\d{2}", q)
-        target_date = m.group(0) if m else (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        return [fmt(today - timedelta(days=1))]
+    if q in ("day before yesterday", "day-before-yesterday", "parso", "parson"):
+        return [fmt(today - timedelta(days=2))]
 
-    target_file = JOURNALS_DIR / f"{target_date}.md"
-    if not target_file.exists():
-        return f"No activity log found for {target_date} ({q}). The assistant was either not active or nothing was recorded."
+    m = re.search(r"(\d{1,2})\s*(days?\s*ago|din\s*(pehle|pahle))", q)
+    if m:
+        try:
+            n = max(1, min(30, int(m.group(1))))
+        except Exception:
+            n = 1
+        return [fmt(today - timedelta(days=n))]
 
-    try:
-        content = target_file.read_text(encoding="utf-8")
-        return f"--- Activity Log for {target_date} ---\n{content}"
-    except Exception as e:
-        return f"Error reading journal for {target_date}: {e}"
+    if q in ("last week", "pichle hafte", "pichhle hafte", "past week", "last 7 days"):
+        return [fmt(today - timedelta(days=i)) for i in range(7, 0, -1)]
+    if q in ("this week", "is hafte", "is saptah"):
+        days = []
+        d = today - timedelta(days=today.weekday())  # Monday
+        while d <= today:
+            days.append(fmt(d))
+            d += timedelta(days=1)
+        return days
+
+    for name, wd in _WEEKDAYS.items():
+        if name in q:
+            back = (today.weekday() - wd) % 7  # 0 when today IS that weekday
+            return [fmt(today - timedelta(days=back))]
+
+    m = re.search(r"\d{4}-\d{2}-\d{2}", q)
+    if m:
+        return [m.group(0)]
+    return [fmt(today - timedelta(days=1))]
+
+
+def get_daily_journal(day_query: str = "yesterday") -> str:
+    """
+    Read the markdown journal for a day expression — 'today', 'yesterday',
+    'parso'/'day before yesterday', '3 days ago'/'3 din pehle', weekday names
+    (EN+HI), 'last week'/'this week', or a specific YYYY-MM-DD.
+    Multi-day queries are concatenated (capped) oldest-first.
+    """
+    q = (day_query or "yesterday").strip()
+    dates = _resolve_journal_dates(q)
+    chunks: list[str] = []
+    missing: list[str] = []
+    used = 0
+    for target_date in dates:
+        target_file = JOURNALS_DIR / f"{target_date}.md"
+        if not target_file.exists():
+            missing.append(target_date)
+            continue
+        try:
+            content = target_file.read_text(encoding="utf-8")
+        except Exception as e:
+            return f"Error reading journal for {target_date}: {e}"
+        block = f"--- Activity Log for {target_date} ---\n{content}"
+        if used + len(block) > _JOURNAL_CHARS_CAP and chunks:
+            chunks.append(f"\n[… output capped at {_JOURNAL_CHARS_CAP} chars — ask for a narrower day …]")
+            break
+        chunks.append(block)
+        used += len(block)
+
+    if not chunks:
+        if len(dates) == 1:
+            return (f"No activity log found for {dates[0]} ({q}). "
+                    f"The assistant was either not active or nothing was recorded.")
+        return (f"No activity logs found for {', '.join(dates)}. "
+                f"The assistant was either not active or nothing was recorded.")
+    out = "\n".join(chunks)
+    if missing and len(dates) > 1:
+        out += f"\n(No logs for: {', '.join(missing)})"
+    return out
 
 
 def recall_past_activities(day: str = "yesterday") -> str:
     """
-    Tool called by the model to look up what the user or assistant did yesterday or on a past day.
+    Tool called by the model to look up what the user or assistant did on a past day(s).
     """
     return get_daily_journal(day)

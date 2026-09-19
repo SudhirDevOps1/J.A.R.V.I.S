@@ -275,6 +275,12 @@ class _GeminiHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        # /health is intentionally OPEN (no auth) — health checks, the UI
+        # proxy toggle, and test_llm_provider must work without a token.
+        # Everything else requires the bearer token (see _check_auth).
+        if self.path == "/health":
+            self._send_json(200, {"status": "ok", "version": __version__})
+            return
         if not _check_auth(self):
             return
         if self.path in ("/v1/models", "/v1/models/"):
@@ -284,8 +290,6 @@ class _GeminiHandler(BaseHTTPRequestHandler):
                 for m, info in MODELS.items()
             ]
             self._send_json(200, {"object": "list", "data": model_list})
-        elif self.path == "/health":
-            self._send_json(200, {"status": "ok", "version": __version__})
         else:
             self._send_json(404, {"error": "Not found"})
 
@@ -406,6 +410,11 @@ def is_running() -> bool:
 
 def get_url() -> str:
     return f"http://127.0.0.1:{CONFIG['port']}/v1"
+
+
+def get_auth_token() -> str:
+    """Bearer token clients must send ('' if proxy never started)."""
+    return CONFIG.get("auth_token") or ""
 
 
 def quick_test() -> bool:

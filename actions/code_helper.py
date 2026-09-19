@@ -101,10 +101,33 @@ def _has_error(output: str) -> bool:
 def _take_screenshot() -> Path | None:
     try:
         import pyautogui
+        
+        # Hide PiP so it doesn't obstruct VSCodium/code errors
+        pip_win = None
+        try:
+            from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtCore import QMetaObject, Qt
+            app = QApplication.instance()
+            if app and hasattr(app, '_pip') and app._pip.isVisible():
+                pip_win = app._pip
+                QMetaObject.invokeMethod(pip_win, "hide", Qt.ConnectionType.BlockingQueuedConnection)
+                time.sleep(0.1) # allow compositor to clear
+        except Exception:
+            pass
+
         screenshot_path = Path.home() / "Desktop" / f"jarvis_debug_{int(time.time())}.png"
         screenshot = pyautogui.screenshot()
         screenshot.save(str(screenshot_path))
         print(f"[Code] 📸 Screenshot: {screenshot_path}")
+
+        # Restore PiP
+        if pip_win:
+            try:
+                from PyQt6.QtCore import QMetaObject, Qt
+                QMetaObject.invokeMethod(pip_win, "show", Qt.ConnectionType.BlockingQueuedConnection)
+            except Exception:
+                pass
+
         return screenshot_path
     except Exception as e:
         print(f"[Code] ⚠️ Screenshot failed: {e}")

@@ -520,6 +520,16 @@ class HudCanvas(QWidget):
         # ── Vocal Shockwaves ──────────────────────────────────────────────────
         self._shockwaves: list[dict] = []
 
+        # ── Supernova eruption sparks (radial burst particles) ───────────────
+        self._nova_sparks: list[dict] = []
+
+        # ── Supernova mode state (angles, eruption rings) ─────────────────────
+        self._nova_ang = 0.0
+        self._nova_rings: list[dict] = []
+
+        # ── Ambient meteor streaks (normalized coords, voice-boosted) ─────────
+        self._meteors: list[dict] = []
+
         # ── Image Caching & Soft Vignetting ───────────────────────────────────
         self._face_px: QPixmap | None = None
         self._face_cache: QPixmap | None = None
@@ -579,9 +589,9 @@ class HudCanvas(QWidget):
             })
 
     def set_avatar_mode(self, mode: str) -> None:
-        """Switch active avatar mode ('celestial', 'reactor', 'orb', 'matrix')."""
+        """Switch active avatar mode ('celestial', 'reactor', 'orb', 'matrix', 'nova')."""
         m = (mode or "celestial").lower().strip()
-        if m in ("celestial", "reactor", "orb", "matrix"):
+        if m in ("celestial", "reactor", "orb", "matrix", "nova"):
             self._avatar_mode = m
             self.update()
 
@@ -710,6 +720,38 @@ class HudCanvas(QWidget):
         gp.end()
         return pm
 
+    def _draw_eq_ring(self, p, cx: float, cy: float, radius: float,
+                      amp: float, is_active: bool,
+                      primary_c, sec_c, white_c, glow_mult: float) -> None:
+        """Polar voice spectrum: 48 bars radiating around (cx, cy).
+
+        The round twin of the linear bottom equalizer — same voice energy,
+        wrapped into a halo. Callers gate it on the `spectrum` toggle.
+        """
+        try:
+            N = 48
+            for i in range(N):
+                ang = (i / N) * math.pi * 2 + self._tick * 0.01
+                env = 0.55 + 0.45 * math.sin(self._tick * 0.15 + i * 0.55)
+                if is_active:
+                    hgt = 3.0 + amp * 34.0 * env
+                else:
+                    hgt = 3.0 + 1.5 * (0.5 + 0.5 * math.sin(self._tick * 0.06 + i * 0.4))
+                hgt = max(2.0, min(38.0, hgt))
+                x1 = cx + math.cos(ang) * radius
+                y1 = cy + math.sin(ang) * radius
+                x2 = cx + math.cos(ang) * (radius + hgt)
+                y2 = cy + math.sin(ang) * (radius + hgt)
+                if is_active and amp > 0.05:
+                    col = white_c if hgt > 26 else (primary_c if hgt > 14 else sec_c)
+                else:
+                    col = sec_c
+                p.setPen(QPen(QColor(col.red(), col.green(), col.blue(),
+                                              int(200 * glow_mult)), 2.0))
+                p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+        except Exception:
+            pass
+
     def _step(self):
         self._tick += 1
 
@@ -752,8 +794,16 @@ class HudCanvas(QWidget):
         # ── Advance Celestial Halo ────────────────────────────────────────────
         if rot_spd > 0.001:
             self._halo_angle = (self._halo_angle + rot_spd) % 360.0
+            _trails_on = bool(self._hud_fx.get("trails", True))
             for ph in self._photons:
                 ph["angle"] = (ph["angle"] + math.radians(rot_spd * ph["spd"])) % (math.pi * 2)
+                # Comet trail: remember recent orbit angles (resize-proof —
+                # screen positions are re-derived at paint time).
+                if _trails_on:
+                    _tr = ph.setdefault("trail", [])
+                    _tr.append(ph["angle"])
+                    if len(_tr) > 6:
+                        del _tr[0:len(_tr) - 6]
 
         # ── Advance Stark Arc Reactor & Embers ───────────────────────────────
         reactor_spd = max(0.28 if anim_mode != "kinetic" else 0.65, rot_spd)
@@ -828,6 +878,73 @@ class HudCanvas(QWidget):
             if sw["r"] < sw["max_r"] and sw["alpha"] > 5:
                 active_sw.append(sw)
         self._shockwaves = active_sw
+
+        # ── Supernova dynamics: beam rotation, idle debris drift, eruption rings
+        _is_nova = (getattr(self, "_avatar_mode", "celestial") == "nova")
+        self._nova_ang = (self._nova_ang
+                          + ((1.4 + amp * 4.0) if (_is_nova and is_active) else 0.35)) % 360.0
+        if _is_nova and rot_spd <= 0.001:
+            # Halo block already drives debris when active — this is the idle
+            # drift so the supernova never freezes in reactive standby.
+            for ph in self._photons:
+                ph["angle"] = (ph["angle"] + math.radians(0.22 * ph["spd"])) % (math.pi * 2)
+        if _is_nova and is_active and amp > 0.12 and random.random() < 0.30:
+            self._nova_rings.append({
+                "r": 10.0,
+                "max_r": 220.0 + amp * 140.0,
+                "alpha": 230,
+                "spd": 6.0 + amp * 8.0,
+            })
+        active_nr = []
+        for nr in getattr(self, "_nova_rings", []):
+            nr["r"] += nr["spd"]
+            nr["alpha"] = max(0, int(nr["alpha"] * 0.92 - 2))
+            if nr["r"] < nr["max_r"] and nr["alpha"] > 4:
+                active_nr.append(nr)
+        self._nova_rings = active_nr
+
+        # ── Supernova eruption sparks: radial burst particles ────────────────
+        if _is_nova and is_active and amp > 0.22 and len(self._nova_sparks) < 60:
+            for _ in range(2):
+                _sang = random.uniform(0, math.pi * 2)
+                _sspd = random.uniform(2.0, 7.0) + amp * 6.0
+                self._nova_sparks.append({
+                    "dx": math.cos(_sang) * 10.0,
+                    "dy": math.sin(_sang) * 10.0,
+                    "vx": math.cos(_sang) * _sspd,
+                    "vy": math.sin(_sang) * _sspd,
+                    "life": 1.0,
+                    "sz": random.uniform(0.8, 2.2),
+                })
+        _fw_lim = min(self.width(), self.height()) * 0.6
+        _salive = []
+        for sp in getattr(self, "_nova_sparks", []):
+            sp["dx"] += sp["vx"]
+            sp["dy"] += sp["vy"]
+            sp["life"] -= 0.03
+            if sp["life"] > 0 and abs(sp["dx"]) < _fw_lim and abs(sp["dy"]) < _fw_lim:
+                _salive.append(sp)
+        self._nova_sparks = _salive
+
+        # ── Meteors: occasional streaks, voice-boosted spawn rate ────────────
+        if self._hud_fx.get("meteors", True):
+            _mspawn = (0.025 + amp * 0.20) if is_active else 0.008
+            if random.random() < _mspawn and len(self._meteors) < 12:
+                self._meteors.append({
+                    "x": random.uniform(0.1, 1.1),
+                    "y": random.uniform(-0.1, 0.5),
+                    "vx": random.uniform(0.008, 0.020),
+                    "vy": random.uniform(0.003, 0.009),
+                    "life": 1.0,
+                })
+        _malive = []
+        for mt in getattr(self, "_meteors", []):
+            mt["x"] -= mt["vx"] * (1.0 + amp * 2.0)
+            mt["y"] += mt["vy"]
+            mt["life"] -= 0.022
+            if mt["life"] > 0 and mt["x"] > -0.2 and mt["y"] < 1.2:
+                _malive.append(mt)
+        self._meteors = _malive
 
         # Blinking logic for status
         self._blink_tick += 1
@@ -1070,6 +1187,86 @@ class HudCanvas(QWidget):
             p.setPen(QPen(QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), 35), 1.2))
             p.drawLine(QPointF(cx - R * 1.05, sc_y), QPointF(cx + R * 1.05, sc_y))
 
+            # 12. Coil chase-light pulse (travels the ring, speeds up with voice)
+            if is_active or anim_mode == "kinetic":
+                _chase_spd = 0.15 + amp * 0.9
+                _ci = int(self._tick * _chase_spd) % 12
+                for _k in range(3):
+                    _cki = (_ci - _k) % 12
+                    _cang = math.radians(_cki * 30 + self._reactor_outer_ang)
+                    _ccx = cx + math.cos(_cang) * R * 0.72
+                    _ccy = cy + math.sin(_cang) * R * 0.72
+                    _ca = max(0, min(255, int((230 - _k * 80) * glow_mult)))
+                    if _ca > 10:
+                        p.setBrush(QBrush(QColor(255, 255, 255, _ca)))
+                        p.setPen(Qt.PenStyle.NoPen)
+                        p.drawEllipse(QPointF(_ccx, _ccy), 5.5 - _k * 1.2, 5.5 - _k * 1.2)
+
+            # 13. Voice VU arc meter on the bezel (dim track + live gold sweep)
+            _vr = R * 1.06
+            p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(),
+                                          int(60 * glow_mult)), 3.0))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawArc(QRectF(cx - _vr, cy - _vr, _vr * 2, _vr * 2), 225 * 16, -270 * 16)
+            _frac = max(0.0, min(1.0, amp if is_active else 0.04))
+            if _frac > 0.01:
+                p.setPen(QPen(QColor(255, 215, 130, int(230 * glow_mult)), 3.4))
+                p.drawArc(QRectF(cx - _vr, cy - _vr, _vr * 2, _vr * 2),
+                          225 * 16, int(-270 * _frac * 16))
+                _tip = math.radians(225 - 270 * _frac)
+                p.setBrush(QBrush(QColor(255, 255, 255, int(230 * glow_mult))))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(cx + math.cos(_tip) * _vr,
+                                      cy - math.sin(_tip) * _vr), 3.4, 3.4)
+
+            # 14. Counter-rotating dashed energy rings (marching-ants drift)
+            for _dr, _dir, _dw in ((R * 0.62, 1.0, 1.4), (R * 0.44, -1.0, 1.2)):
+                _dpen = QPen(QColor(sec_c.red(), sec_c.green(), sec_c.blue(),
+                                             int(150 * glow_mult)), _dw)
+                _dpen.setStyle(Qt.PenStyle.DashLine)
+                try:
+                    _dpen.setDashOffset(self._tick * 0.12 * _dir)
+                except Exception:
+                    pass
+                p.setPen(_dpen)
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                _drr = _dr + (amp * 6.0 if is_active else 0.0)
+                p.drawEllipse(QPointF(cx, cy), _drr, _drr)
+
+            # 15. Radar sweep hand on the bezel (stateless — pure tick drive)
+            _sweep = math.radians(self._tick * (1.2 + amp * 3.0))
+            for _sk in range(4):
+                _sa2 = _sweep - _sk * 0.12
+                _salpha = max(0, min(255, int((200 - _sk * 55) * glow_mult)))
+                if _salpha > 10:
+                    p.setPen(QPen(QColor(255, 255, 255, _salpha), 3.0 - _sk * 0.5))
+                    p.setBrush(Qt.BrushStyle.NoBrush)
+                    p.drawArc(QRectF(cx - R, cy - R, R * 2, R * 2),
+                              int(math.degrees(_sa2) * 16), int(14 * 16))
+
+            # 16. Coil lightning arcs when loud (jittered jumps between coils)
+            if is_active and amp > 0.4:
+                for _li in range(3):
+                    _a1 = random.uniform(0, math.pi * 2)
+                    _r1 = R * (0.60 + random.uniform(0, 0.12))
+                    _x1 = cx + math.cos(_a1) * _r1
+                    _y1 = cy + math.sin(_a1) * _r1
+                    _mx = cx + math.cos(_a1 + 0.35) * (_r1 + 8)
+                    _my = cy + math.sin(_a1 + 0.35) * (_r1 + 8) + random.uniform(-6, 6)
+                    _x2 = cx + math.cos(_a1 + 0.7) * _r1
+                    _y2 = cy + math.sin(_a1 + 0.7) * _r1
+                    p.setPen(QPen(QColor(255, 255, 255, int(200 * glow_mult)), 1.2))
+                    p.drawLine(QPointF(_x1, _y1), QPointF(_mx, _my))
+                    p.drawLine(QPointF(_mx, _my), QPointF(_x2, _y2))
+
+            # 17. Live power readout under the core
+            _pwr = int(100 * (amp if is_active else 0.06 + 0.02 * math.sin(self._tick * 0.05)))
+            p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(),
+                                          int(200 * glow_mult)), 1))
+            p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            p.drawText(QRectF(cx - 60, cy + R * 0.60, 120, 16),
+                       Qt.AlignmentFlag.AlignCenter, f"PWR {_pwr}%")
+
         elif mode == "orb":
             # ══════════════════════════════════════════════════════════════════
             # MODE: QUANTUM PLASMA ORB (3D Gyroscopic Rings & Energy Sphere)
@@ -1158,6 +1355,131 @@ class HudCanvas(QWidget):
             p.setPen(QPen(QColor(white_c.red(), white_c.green(), white_c.blue(), int((140 + amp * 90) * glow_mult)), 1.5))
             p.drawEllipse(QPointF(cx, cy), hex_r * 0.55 + amp * 18.0, hex_r * 0.55 + amp * 18.0)
 
+        elif mode == "nova":
+            # ══════════════════════════════════════════════════════════════════
+            # MODE: SUPERNOVA BURST (Voice-reactive stellar explosion)
+            # ══════════════════════════════════════════════════════════════════
+            nR = fw * 0.30
+
+            # Heat color: bloom tint at rest → white-hot when loud
+            _heat = min(1.0, amp * 1.25) if is_active else 0.0
+            _hc = QColor(int(bloom_c.red() + (255 - bloom_c.red()) * _heat),
+                         int(bloom_c.green() + (255 - bloom_c.green()) * _heat),
+                         int(bloom_c.blue() + (255 - bloom_c.blue()) * _heat))
+
+            # 1. Expanding eruption rings from vocal bursts
+            for nr in getattr(self, "_nova_rings", []):
+                n_alpha = max(0, min(255, int(nr.get("alpha", 0) * glow_mult)))
+                if n_alpha > 4:
+                    p.setPen(QPen(QColor(_hc.red(), _hc.green(), _hc.blue(), n_alpha), 2.2))
+                    p.setBrush(Qt.BrushStyle.NoBrush)
+                    p.drawEllipse(QPointF(cx, cy), nr["r"], nr["r"] * 0.92)
+
+            # 2. Triple-layer stellar core (idle throb + voice eruption)
+            throb = math.sin(self._tick * 0.05) * (nR * 0.03)
+            core_r = nR * 0.42 + (amp * nR * 0.55 if is_active else throb)
+            for frac, alpha, col in ((1.0, 90, sec_c), (0.66, 150, primary_c), (0.38, 230, _hc)):
+                cg = QRadialGradient(cx, cy, core_r * frac)
+                cg.setColorAt(0.0, QColor(255, 255, 255, max(0, min(255, int(alpha * glow_mult)))))
+                cg.setColorAt(1.0, QColor(col.red(), col.green(), col.blue(), 0))
+                p.setBrush(QBrush(cg))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(cx, cy), core_r * frac, core_r * frac)
+
+            # 3. Radiating star beams: 12 at rest, up to 24 when loud
+            _n_beams = 12 + (int(amp * 12.0) if is_active else 0)
+            for bi in range(_n_beams):
+                b_ang = math.radians(bi * (360.0 / _n_beams) + self._nova_ang)
+                b_len = nR * (0.75 + amp * 0.9 if is_active else 0.62 + 0.06 * math.sin(self._tick * 0.04 + bi))
+                bx1 = cx + math.cos(b_ang) * core_r * 0.9
+                by1 = cy + math.sin(b_ang) * core_r * 0.9
+                bx2 = cx + math.cos(b_ang) * (core_r + b_len)
+                by2 = cy + math.sin(b_ang) * (core_r + b_len)
+                p.setPen(QPen(QColor(_hc.red(), _hc.green(), _hc.blue(),
+                                              int((110 + amp * 120) * glow_mult)), 2.0))
+                p.drawLine(QPointF(bx1, by1), QPointF(bx2, by2))
+                p.setBrush(QBrush(white_c))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(bx2, by2), 2.4 + amp * 2.0, 2.4 + amp * 2.0)
+
+            # 4. Orbiting hot debris on a tilted ellipse (shares photon state)
+            if self._hud_fx.get("photons", True):
+                d_rx = nR * 1.25
+                d_ry = d_rx * math.sin(self._halo_tilt) * 1.15
+                for ph in self._photons:
+                    d_ang = ph["angle"]
+                    dx = cx + d_rx * math.cos(d_ang)
+                    dy = cy - d_ry * math.sin(d_ang)
+                    d_a = max(0, min(255, int(ph["alpha"] * (0.7 + amp * 0.5) * glow_mult)))
+                    if d_a > 5:
+                        p.setBrush(QBrush(QColor(255, 200, 120, d_a)))
+                        p.setPen(Qt.PenStyle.NoPen)
+                        p.drawEllipse(QPointF(dx, dy), ph["sz"], ph["sz"])
+
+            # 5. Polar voice EQ halo + white eruption flash on vocal bursts
+            if self._hud_fx.get("spectrum", True):
+                self._draw_eq_ring(p, cx, cy, nR * 1.45, amp, is_active,
+                                   primary_c, sec_c, white_c, glow_mult)
+            if is_active and amp > 0.35:
+                fl = core_r * (1.6 + amp * 1.2)
+                p.setPen(QPen(QColor(255, 255, 255, int(160 * glow_mult)), 2.0))
+                p.drawLine(QPointF(cx - fl, cy), QPointF(cx + fl, cy))
+                p.drawLine(QPointF(cx, cy - fl * 0.7), QPointF(cx, cy + fl * 0.7))
+
+            # 6. Logarithmic galaxy spiral arms (twin arms, voice-expanded)
+            for _arm in range(2):
+                _base = math.radians(self._nova_ang * 1.5 + _arm * 180.0)
+                for _j in range(25):
+                    _t = _j / 24.0
+                    _sa = _base + _t * 3.6
+                    _sr = core_r * 0.6 + _t * (nR * (1.05 + amp * 0.7))
+                    _sx = cx + _sr * math.cos(_sa)
+                    _sy = cy - _sr * math.sin(_sa) * 0.92
+                    _salpha = max(0, min(255, int((200 * (1.0 - _t) + amp * 55) * glow_mult)))
+                    if _salpha > 8:
+                        p.setBrush(QBrush(QColor(255, 214, 150, _salpha)))
+                        p.setPen(Qt.PenStyle.NoPen)
+                        _ssz = max(0.8, 2.6 * (1.0 - _t) + amp * 1.2)
+                        p.drawEllipse(QPointF(_sx, _sy), _ssz, _ssz)
+
+            # 7. Eruption sparks flying off the core
+            for sp in getattr(self, "_nova_sparks", []):
+                _spalpha = max(0, min(255, int(sp.get("life", 0.0) * 255 * glow_mult)))
+                if _spalpha > 8:
+                    p.setBrush(QBrush(QColor(255, 226, 160, _spalpha)))
+                    p.setPen(Qt.PenStyle.NoPen)
+                    _spsz = 1.2 + sp.get("sz", 1.5)
+                    p.drawEllipse(QPointF(cx + sp["dx"], cy + sp["dy"]), _spsz, _spsz)
+
+            # 8. Pulsar lighthouse beams (twin ultra-bright spokes, fast spin)
+            _puls_spd = (self._nova_ang * 3.0) if is_active else (self._nova_ang * 0.5)
+            for _pk in range(2):
+                _pa = math.radians(_puls_spd + _pk * 180.0)
+                _pl = nR * (1.9 + amp * 0.8)
+                p.setPen(QPen(QColor(255, 255, 255, int((140 + amp * 110) * glow_mult)), 1.4))
+                p.drawLine(QPointF(cx + math.cos(_pa) * core_r * 0.5,
+                                   cy + math.sin(_pa) * core_r * 0.5),
+                           QPointF(cx + math.cos(_pa) * (core_r + _pl),
+                                   cy + math.sin(_pa) * (core_r + _pl)))
+
+            # 9. Accretion glow band (stacked translucent ellipses + orbiting knots)
+            _arx = nR * 1.7
+            _ary = _arx * math.sin(self._halo_tilt) * 1.15
+            for _ai in range(5):
+                _aa = max(0, min(255, int((46 - _ai * 8) * glow_mult)))
+                if _aa > 4:
+                    p.setPen(QPen(QColor(_hc.red(), _hc.green(), _hc.blue(), _aa),
+                                           5.0 - _ai * 0.7))
+                    p.setBrush(Qt.BrushStyle.NoBrush)
+                    p.drawEllipse(QPointF(cx, cy), _arx + _ai * 2.5, _ary + _ai * 2.5)
+            for _ki in range(5):
+                _ka = math.radians(self._tick * (0.9 + _ki * 0.22) + _ki * 72.0)
+                _kx = cx + _arx * math.cos(_ka)
+                _ky = cy - _ary * math.sin(_ka)
+                p.setBrush(QBrush(QColor(255, 255, 255, int(210 * glow_mult))))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(_kx, _ky), 2.6, 2.6)
+
         else:
             # ══════════════════════════════════════════════════════════════════
             # MODE: CELESTIAL AVATAR (Harmonized, Clean & Beautiful)
@@ -1217,10 +1539,26 @@ class HudCanvas(QWidget):
             # Orbiting Stardust Photons along the outer halo path (only when active or in kinetic mode)
             if self._hud_fx.get("photons", True) and (is_active or anim_mode == "kinetic"):
                 halo_rot_rad = math.radians(self._halo_angle)
+                _trails_on = bool(self._hud_fx.get("trails", True))
                 for ph in self._photons:
                     ang = (ph["angle"] + halo_rot_rad) % (math.pi * 2)
                     px = head_cx + (r_x + ph["rad_jit"]) * math.cos(ang)
                     py = head_cy - (r_y + ph["rad_jit"] * 0.28) * math.sin(ang)
+
+                    # Comet trail: fading echoes along the recent orbit path
+                    if _trails_on:
+                        _trail = ph.get("trail") or []
+                        for _ti, _ta in enumerate(_trail):
+                            _ta2 = (_ta + halo_rot_rad) % (math.pi * 2)
+                            _tx = head_cx + (r_x + ph["rad_jit"]) * math.cos(_ta2)
+                            _ty = head_cy - (r_y + ph["rad_jit"] * 0.28) * math.sin(_ta2)
+                            _tf = (_ti + 1) / max(1, len(_trail))
+                            _tal = max(0, min(255, int(ph["alpha"] * 0.45 * _tf * glow_mult)))
+                            if _tal > 6:
+                                p.setBrush(QBrush(QColor(255, 220, 150, _tal)))
+                                p.setPen(Qt.PenStyle.NoPen)
+                                _ts = max(0.6, ph["sz"] * 0.7 * _tf)
+                                p.drawEllipse(QPointF(_tx, _ty), _ts, _ts)
 
                     if abs(px - head_cx) > av_w * 0.28 or py < head_cy - av_h * 0.12 or py > head_cy + av_h * 0.18:
                         alpha = max(0, min(255, int(ph["alpha"] * (0.75 + amp * 0.40) * glow_mult)))
@@ -1228,6 +1566,11 @@ class HudCanvas(QWidget):
                         p.setBrush(QBrush(QColor(255, 235, 175, alpha)))
                         p.setPen(Qt.PenStyle.NoPen)
                         p.drawEllipse(QPointF(px, py), sz, sz)
+
+            # Polar voice EQ halo around the avatar (shares the spectrum toggle)
+            if self._hud_fx.get("spectrum", True):
+                self._draw_eq_ring(p, head_cx, head_cy, av_w * 0.62 + amp * 20.0,
+                                   amp, is_active, primary_c, sec_c, white_c, glow_mult)
 
         # ── GLOBAL FX: Shockwaves (if enabled AND actively speaking/bursting) ─
         if self._hud_fx.get("shockwaves", True) and is_active:
@@ -1264,6 +1607,21 @@ class HudCanvas(QWidget):
             p.setPen(QPen(qcol(C.PRI_GHO, int(36 * glow_mult)), 1))
             for sl_y in range(0, H, 3):
                 p.drawLine(0, sl_y, W, sl_y)
+
+        # ── GLOBAL FX: Meteor streaks (if enabled, voice-boosted) ────────────
+        if self._hud_fx.get("meteors", True):
+            for mt in getattr(self, "_meteors", []):
+                mx = mt["x"] * W
+                my = mt["y"] * H
+                tx = mx - mt["vx"] * W * 6.0
+                ty = my - mt["vy"] * H * 6.0
+                ma = max(0, min(255, int(220 * mt.get("life", 1.0) * glow_mult)))
+                if ma > 8:
+                    p.setPen(QPen(QColor(255, 240, 210, ma // 3), 1.5))
+                    p.drawLine(QPointF(tx, ty), QPointF(mx, my))
+                    p.setBrush(QBrush(QColor(255, 255, 255, ma)))
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.drawEllipse(QPointF(mx, my), 2.0, 2.0)
 
         # ── HUD Frame, Status Indicators & Voice Waveform ─────────────────────
         if self._hud_fx.get("brackets", True):
@@ -2591,7 +2949,39 @@ class ProviderSettingsOverlay(QWidget):
         self._gemini_web_info.setStyleSheet(self._fs + "; color: #00ffaa;")
         gw_row.addWidget(self._gemini_web_info, 1)
 
-        from core.gemini_free_proxy import is_running as _proxy_is_running, start_proxy as _proxy_start, stop_proxy as _proxy_stop
+        # Version-aware proxy controls: proxy_version flag (1=v1, 2=v2 canary)
+        # selects the implementation; anything unknown collapses to v1.
+        def _proxy_mod():
+            try:
+                from memory.config_manager import get_proxy_version
+                if get_proxy_version() == 2:
+                    import core.gemini_free_proxy_v2 as _m2
+                    return _m2
+            except Exception:
+                pass
+            import core.gemini_free_proxy as _m1
+            return _m1
+
+        def _proxy_is_running() -> bool:
+            try:
+                return bool(_proxy_mod().is_running())
+            except Exception:
+                return False
+
+        def _proxy_start(port: int = 8081, silent: bool = True) -> bool:
+            try:
+                return bool(_proxy_mod().start_proxy(port=port, silent=silent))
+            except Exception:
+                return False
+
+        def _proxy_stop() -> None:
+            # Stop both (idle one is a no-op) so a version flip can never orphan a server.
+            for _mod_name in ("core.gemini_free_proxy_v2", "core.gemini_free_proxy"):
+                try:
+                    _mod = __import__(_mod_name, fromlist=["stop_proxy"])
+                    _mod.stop_proxy()
+                except Exception:
+                    pass
 
         gw_toggle_btn = QPushButton("⏹ STOP PROXY" if _proxy_is_running() else "▶ START PROXY")
         gw_toggle_btn.setFixedSize(100, 24)
@@ -3416,6 +3806,7 @@ class CustomizeOverlay(QWidget):
             ("reactor",   "⚛ ARC REACTOR"),
             ("orb",       "🔮 QUANTUM ORB"),
             ("matrix",    "🟢 MATRIX RAIN"),
+            ("nova",      "💥 SUPERNOVA"),
         ]
         for mode_key, label in av_modes:
             b = QPushButton(label)
@@ -3549,6 +3940,12 @@ class CustomizeOverlay(QWidget):
         self._chk_photons.stateChanged.connect(self._on_fx_toggle)
         chk_col1.addWidget(self._chk_photons)
 
+        self._chk_meteors = QCheckBox("Meteor Streaks (Voice-Boosted)")
+        self._chk_meteors.setChecked(self._sel_hud_fx.get("meteors", True))
+        self._chk_meteors.setStyleSheet(_chk_style)
+        self._chk_meteors.stateChanged.connect(self._on_fx_toggle)
+        chk_col1.addWidget(self._chk_meteors)
+
         self._chk_spectrum = QCheckBox("Voice Waveform Spectrum")
         self._chk_spectrum.setChecked(self._sel_hud_fx.get("spectrum", True))
         self._chk_spectrum.setStyleSheet(_chk_style)
@@ -3566,6 +3963,12 @@ class CustomizeOverlay(QWidget):
         self._chk_scanlines.setStyleSheet(_chk_style)
         self._chk_scanlines.stateChanged.connect(self._on_fx_toggle)
         chk_col2.addWidget(self._chk_scanlines)
+
+        self._chk_trails = QCheckBox("Photon Comet Trails")
+        self._chk_trails.setChecked(self._sel_hud_fx.get("trails", True))
+        self._chk_trails.setStyleSheet(_chk_style)
+        self._chk_trails.stateChanged.connect(self._on_fx_toggle)
+        chk_col2.addWidget(self._chk_trails)
 
         fx_row = QHBoxLayout(); fx_row.setSpacing(12)
         fx_row.addLayout(chk_col1)
@@ -4056,6 +4459,8 @@ class CustomizeOverlay(QWidget):
             "spectrum": self._chk_spectrum.isChecked(),
             "brackets": self._chk_brackets.isChecked(),
             "scanlines": self._chk_scanlines.isChecked(),
+            "meteors": self._chk_meteors.isChecked(),
+            "trails": self._chk_trails.isChecked(),
         }
         if self.on_hud_fx_preview:
             self.on_hud_fx_preview(self._sel_hud_fx)
@@ -5985,11 +6390,14 @@ class PipWindow(QWidget):
         except Exception:
             pass
 
-    def update_timer(self, formatted: str, is_active: bool) -> None:
+    def update_timer(self, formatted: str, is_active: bool, task_name: str = "") -> None:
         """Update live countdown timer in PiP companion header."""
         try:
             if is_active and formatted:
-                self._pip_timer.setText(f"⏳ {formatted}")
+                display_text = f"⏳ {formatted}"
+                if task_name:
+                    display_text += f" | {task_name}"
+                self._pip_timer.setText(display_text)
                 self._pip_timer.setVisible(True)
             else:
                 self._pip_timer.setVisible(False)
@@ -6005,14 +6413,15 @@ class PipWindow(QWidget):
                 if event.type() == QEvent.Type.MouseButtonPress:
                     if event.button() == Qt.MouseButton.LeftButton:
                         self._drag = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-                        return True
+                        return False
                 elif event.type() == QEvent.Type.MouseMove:
                     if self._drag is not None and event.buttons() & Qt.MouseButton.LeftButton:
                         self.move(event.globalPosition().toPoint() - self._drag)
-                        return True
+                        return False
                 elif event.type() == QEvent.Type.MouseButtonRelease:
-                    self._drag = None
-                    return True
+                    if event.button() == Qt.MouseButton.LeftButton:
+                        self._drag = None
+                        return False
         except Exception:
             pass
         return super().eventFilter(watched, event)
@@ -7156,7 +7565,7 @@ class MainWindow(QMainWindow):
                 if hasattr(self, "_task_timer_bar"):
                     self._task_timer_bar.setValue(primary.progress_percent)
                 if getattr(self, "_pip", None) and hasattr(self._pip, "update_timer"):
-                    self._pip.update_timer(cd_str, True)
+                    self._pip.update_timer(cd_str, True, primary.message[:15] if primary.message else "")
             else:
                 if hasattr(self, "_header_timer_badge"):
                     self._header_timer_badge.setVisible(False)
@@ -7166,7 +7575,7 @@ class MainWindow(QMainWindow):
                 if hasattr(self, "_task_timer_bar"):
                     self._task_timer_bar.setValue(0)
                 if getattr(self, "_pip", None) and hasattr(self._pip, "update_timer"):
-                    self._pip.update_timer("", False)
+                    self._pip.update_timer("", False, "")
 
             # 3. Refresh pending tasks every 5 seconds
             t_sec = int(time.time())

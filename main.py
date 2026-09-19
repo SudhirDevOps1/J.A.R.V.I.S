@@ -951,8 +951,8 @@ class JarvisLive:
         cfg = load_api_keys()
         prov = (cfg.get("preferred_llm_provider") or "gemini").lower().strip()
 
-        if prov in ("gemini-web", "omniroute", "openrouter", "groq", "deepseek", "custom", "openai", "ollama") or not _get_api_key().strip():
-            def _async_multi_llm():
+        def _do_fallback():
+            if prov in ("gemini-web", "omniroute", "openrouter", "groq", "deepseek", "custom", "openai", "ollama") or not _get_api_key().strip():
                 try:
                     self.ui.set_state("THINKING")
                     from core.multi_llm import get_llm_model
@@ -1001,19 +1001,38 @@ class JarvisLive:
                     print(f"[MultiLLM Error] {e}")
                     self.ui.write_log(f"ERR: {prov.upper()} query failed: {e}")
                     self.ui.set_state("LISTENING")
+                return
 
-            threading.Thread(target=_async_multi_llm, daemon=True).start()
-            return
+            if not self._loop or not self.session:
+                return
+            asyncio.run_coroutine_threadsafe(
+                self.session.send_client_content(
+                    turns={"role": "user", "parts": [{"text": text}]},
+                    turn_complete=True
+                ),
+                self._loop
+            )
 
-        if not self._loop or not self.session:
-            return
-        asyncio.run_coroutine_threadsafe(
-            self.session.send_client_content(
-                turns={"role": "user", "parts": [{"text": text}]},
-                turn_complete=True
-            ),
-            self._loop
-        )
+        def _async_llm_chain():
+            # Tier 2.5: Safe Opt-in Local LLM Bridge (DeepSeek-R1 / Qwen2.5)
+            # If enabled, queries local LLM first to prevent UI freezing
+            try:
+                from core.local_llm_bridge import generate_local_llm, is_local_llm_enabled
+                if is_local_llm_enabled():
+                    self.ui.set_state("THINKING")
+                    from core.persona_manager import build_persona_system_prompt
+                    local_ans = generate_local_llm(text, system_prompt=build_persona_system_prompt(self._asst_name))
+                    if local_ans:
+                        self.ui.write_log(f"⚡ [Local LLM]: {local_ans}")
+                        self.speak(local_ans)
+                        self.ui.set_state("LISTENING")
+                        return
+            except Exception as _llm_err:
+                print(f"[LocalLLM Error] {_llm_err}")
+                
+            _do_fallback()
+
+        threading.Thread(target=_async_llm_chain, daemon=True).start()
 
     def set_speaking(self, value: bool):
         with self._speaking_lock:

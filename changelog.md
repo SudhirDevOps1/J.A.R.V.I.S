@@ -123,7 +123,7 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 ### 🧪 Automated Quality & Test Suite
 - **100/100 Passing Unit & Integration Tests** in `tests/` (100% pass rate, 0 failures, 0 regressions across entire codebase).
 
-## [v1.2.0 - 2026-09-19 15:15] — Telegram Direct Protocol, Explorer Documents Bug Fix, Obsidian Second Brain REST & Crash Resilience
+## [v1.3.0 - 2026-09-19 15:15] — Telegram Direct Protocol, Explorer Documents Bug Fix, Obsidian Second Brain REST & Crash Resilience
 
 ### 🚀 Direct Telegram Messaging & Contact Disambiguation (`actions/send_message.py`)
 1. **Direct Windows Protocol Routing (`tg://resolve?domain=...`)**:

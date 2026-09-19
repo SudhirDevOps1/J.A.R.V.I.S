@@ -412,7 +412,8 @@ def reminder(
 
     if not job_id:
         script_path.unlink(missing_ok=True)
-        return "System scheduler me reminder register nahi ho paya."
+        # We don't return here! We want to register it with the UI TimerManager!
+        print("System scheduler me reminder register nahi ho paya. Relying on UI TimerManager only.")
 
     # Register with live in-app TimerManager for real-time HUD countdown & voice alert
     try:

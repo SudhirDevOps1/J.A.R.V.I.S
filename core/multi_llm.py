@@ -21,12 +21,13 @@ import requests
 
 # ─── Optional free proxy + cache ─────────────────────────────────────────────
 try:
-    from core.gemini_free_proxy import is_running as _proxy_is_running, get_url as _proxy_url
+    from core.gemini_free_proxy import is_running as _proxy_is_running, get_url as _proxy_url, get_auth_token as _proxy_token
     _HAS_FREE_PROXY = True
 except ImportError:
     _HAS_FREE_PROXY = False
     def _proxy_is_running(): return False
     def _proxy_url(): return "http://127.0.0.1:8081/v1"
+    def _proxy_token(): return ""
 
 try:
     from core.llm_cache import get as _cache_get, set as _cache_set, TTL as _TTL
@@ -70,6 +71,43 @@ def _load_config() -> dict:
         return decrypt_dict(data)
     except Exception:
         return data if isinstance(data, dict) else {}
+
+
+def _selected_proxy_version() -> int:
+    """Which free-proxy implementation the config flag selects (1=v1, 2=v2)."""
+    try:
+        v = int((_load_config().get("proxy_version", 1)) or 1)
+        return v if v in (1, 2) else 1
+    except Exception:
+        return 1
+
+
+def _proxy_active_is_running() -> bool:
+    """True if the SELECTED proxy version is running (v1 flag reads v1, v2 flag reads v2)."""
+    if _selected_proxy_version() == 2:
+        try:
+            from core.gemini_free_proxy_v2 import is_running as _running_v2
+            return bool(_running_v2())
+        except Exception:
+            return False
+    try:
+        return bool(_proxy_is_running())
+    except Exception:
+        return False
+
+
+def _proxy_active_token() -> str:
+    """Bearer token for the SELECTED proxy version ('' if unavailable)."""
+    if _selected_proxy_version() == 2:
+        try:
+            from core.gemini_free_proxy_v2 import get_auth_token as _token_v2
+            return _token_v2() or ""
+        except Exception:
+            return ""
+    try:
+        return _proxy_token() or ""
+    except Exception:
+        return ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -406,7 +444,7 @@ class MultiLLMClient:
         if not self.provider:
             if self.omniroute_auto_detect and self._check_omniroute():
                 self.provider = "omniroute"
-            elif self.free_proxy_enabled and _proxy_is_running():
+            elif self.free_proxy_enabled and _proxy_active_is_running():
                 self.provider = "gemini-web"
             elif self.custom_providers:
                 self.provider = "custom-list"
@@ -520,13 +558,16 @@ class MultiLLMClient:
             return result
 
         # ── 0. Gemini-Web Free Proxy (Anonymous, no API key needed) ───────────
-        if self.free_proxy_enabled and _proxy_is_running():
+        # Both v1 and v2 require the proxy bearer token (no longer "none"):
+        # it is generated at proxy start and read here version-aware.
+        if self.free_proxy_enabled and _proxy_active_is_running():
             model = self.model or self.free_proxy_model
             endpoint = f"http://127.0.0.1:{self.free_proxy_port}/v1/chat/completions"
             try:
                 res = requests.post(
                     endpoint,
-                    headers={"Authorization": "Bearer none", "Content-Type": "application/json"},
+                    headers={"Authorization": f"Bearer {_proxy_active_token() or 'none'}",
+                             "Content-Type": "application/json"},
                     json={
                         "model": model,
                         "messages": [{"role": "user", "content": prompt}],

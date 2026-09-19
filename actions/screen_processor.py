@@ -138,11 +138,33 @@ def _capture_screen() -> tuple[bytes, str]:
     if not _MSS:
         raise RuntimeError("mss is not installed. Run: pip install mss")
 
+    # Hide PiP so it doesn't obstruct VSCodium/code errors
+    pip_win = None
+    try:
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QMetaObject, Qt
+        import time
+        app = QApplication.instance()
+        if app and hasattr(app, '_pip') and app._pip.isVisible():
+            pip_win = app._pip
+            QMetaObject.invokeMethod(pip_win, "hide", Qt.ConnectionType.BlockingQueuedConnection)
+            time.sleep(0.1) # allow compositor to clear
+    except Exception:
+        pass
+
     with mss.mss() as sct:
         monitors = sct.monitors          # [0] = all combined, [1..n] = real screens
         target   = monitors[1] if len(monitors) > 1 else monitors[0]
         shot     = sct.grab(target)
         png      = mss.tools.to_png(shot.rgb, shot.size)
+
+    # Restore PiP
+    if pip_win:
+        try:
+            from PyQt6.QtCore import QMetaObject, Qt
+            QMetaObject.invokeMethod(pip_win, "show", Qt.ConnectionType.BlockingQueuedConnection)
+        except Exception:
+            pass
 
     return _compress(png, "PNG")
 
