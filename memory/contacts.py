@@ -30,8 +30,8 @@ def _save_all(contacts: dict) -> bool:
         return False
 
 
-def save_contact(name: str, phone: str = "", platform: str = "whatsapp") -> bool:
-    """Naam -> phone save karo. Never raises."""
+def save_contact(name: str, phone: str = "", platform: str = "whatsapp", username: str = "") -> bool:
+    """Naam -> phone/username save karo. Never raises."""
     try:
         n = (name or "").strip().lower()
         if not n or n.startswith("_"):
@@ -42,6 +42,8 @@ def save_contact(name: str, phone: str = "", platform: str = "whatsapp") -> bool
         if phone:
             import re as _re
             entry["phone"] = _re.sub(r"\D", "", phone)
+        if username:
+            entry["username"] = username.strip()
         if platform:
             entry["platform"] = platform
         contacts[n] = entry

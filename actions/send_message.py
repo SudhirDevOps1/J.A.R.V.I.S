@@ -258,17 +258,57 @@ def _try_telegram_api(receiver: str, message: str) -> str | None:
         return f"Telegram Bot API failed ({_e}) — desktop fallback available."
     return None
 
+def _verify_chat_opened(contact_name: str) -> bool:
+    """Check if contact search actually opened a chat, or if focus is still in search/find box."""
+    if not _PYPERCLIP:
+        return True
+    try:
+        pyautogui.hotkey("ctrl", "a")
+        time.sleep(0.08)
+        pyautogui.hotkey("ctrl", "c")
+        time.sleep(0.08)
+        curr = pyperclip.paste().strip().lower()
+        if curr and curr == contact_name.strip().lower():
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def _check_telegram_error_dialog() -> bool:
+    """Check if Telegram opened an error modal popup (e.g. 'Username not found')."""
+    try:
+        import pygetwindow as gw
+        act = gw.getActiveWindow()
+        if act and act.visible:
+            title = (act.title or "").lower()
+            if any(k in title for k in ("telegram", "error", "warning", "not found")):
+                if 50 < act.width < 550 and 50 < act.height < 350:
+                    return True
+    except Exception:
+        pass
+    try:
+        if _PYPERCLIP:
+            old = pyperclip.paste()
+            pyautogui.hotkey("ctrl", "c")
+            time.sleep(0.08)
+            cur = pyperclip.paste().lower()
+            if "not found" in cur or "username" in cur or "error" in cur:
+                return True
+            pyperclip.copy(old)
+    except Exception:
+        pass
+    return False
+
 
 def _send_whatsapp_web(receiver: str, message: str) -> str:
-    """ADDITIVE WhatsApp Web flow — jab PC par WhatsApp app/PWA installed nahi hai.
-    web.whatsapp.com kholo -> search me contact -> chat kholo -> message bhejo."""
+    """WhatsApp Web flow — direct phone link or verified search."""
     _require_pyautogui()
     try:
-        # 1. Agar receiver phone number hai, toh direct click-to-chat URL use karo
         import re as _re
         from urllib.parse import quote as _q
         digits = _re.sub(r"\D", "", receiver or "")
-        if len(digits) >= 10 and len(digits) <= 15:
+        if 10 <= len(digits) <= 15:
             wa_url = f"https://web.whatsapp.com/send?phone={digits}&text={_q(message)}"
             _open_browser_url(wa_url)
             time.sleep(8.0)
@@ -279,27 +319,17 @@ def _send_whatsapp_web(receiver: str, message: str) -> str:
                 pass
             return f"Message sent to {receiver} via WhatsApp Web."
 
-        # 2. Agar receiver naam hai ('sudhir', 'mummy', etc.)
         if not _open_browser_url("https://web.whatsapp.com"):
             return "Could not open WhatsApp Web in browser."
         time.sleep(6.0)
 
-        # Address bar se focus hatao
+        # Close any address bar or Find-in-page box
         pyautogui.press("escape")
         time.sleep(0.2)
         pyautogui.press("escape")
         time.sleep(0.3)
 
-        # WhatsApp Web search box focus:
-        # A. Screen click on typical search location
-        try:
-            sw, sh = pyautogui.size()
-            pyautogui.click(int(sw * 0.18), int(sh * 0.18))
-            time.sleep(0.4)
-        except Exception:
-            pass
-
-        # B. Official WhatsApp Web shortcut: Ctrl+Alt+/ (Cmd+Option+/ on Mac)
+        # Official WhatsApp Web shortcut: Ctrl+Alt+/ (Cmd+Option+/ on Mac)
         os_name = _get_os()
         if os_name == "mac":
             pyautogui.hotkey("command", "option", "/")
@@ -308,27 +338,30 @@ def _send_whatsapp_web(receiver: str, message: str) -> str:
         time.sleep(0.5)
 
         _clear_and_paste(receiver)
-        time.sleep(2.0)  # Wait for contact search results to populate
+        time.sleep(2.0)
         pyautogui.press("down")
         time.sleep(0.4)
-        pyautogui.press("enter")  # Open chat
-        time.sleep(1.2)  # Wait for chat input to focus
+        pyautogui.press("enter")
+        time.sleep(1.2)
+
+        if not _verify_chat_opened(receiver):
+            pyautogui.press("escape")
+            time.sleep(0.2)
+            pyautogui.press("escape")
+            return f"WhatsApp Web par '{receiver}' naam ka contact nahi mila. Kripya phone number batayein."
 
         if message:
             _paste_text(message)
             time.sleep(0.4)
-            pyautogui.press("enter")  # Send
+            pyautogui.press("enter")
             time.sleep(0.5)
 
-        return (f"WhatsApp Web par '{receiver}' ko message bhejne ki koshish ki. "
-                f"Browser me verify kar lo (chat khula dikhe to sent).")
+        return f"Message sent to {receiver} via WhatsApp Web."
     except Exception as e:
         return f"WhatsApp Web send failed: {e}. Browser me haath se bhej do."
 
 
 def _is_whatsapp_installed() -> bool:
-    """ADDITIVE: WhatsApp desktop/PWA installed hai? Nahi to GUI typing galat
-    window me jayegi — isliye pehle check, phir Web fallback."""
     try:
         import shutil as _sh
         if _sh.which("WhatsApp") or _sh.which("whatsapp"):
@@ -370,20 +403,74 @@ def _send_whatsapp(receiver: str, message: str) -> str:
     _api = _try_whatsapp_api(receiver, message)
     if _api:
         return _api
-    # ADDITIVE: app installed nahi (PWA/Web user) -> seedha Web flow, taaki
-    # message galat window me type na ho. Purana desktop path installed par same.
+
+    import re as _re
+    from urllib.parse import quote as _q
+    digits = _re.sub(r"\D", "", receiver or "")
+    # If phone number (10-15 digits), use direct WhatsApp protocol or Web
+    if 10 <= len(digits) <= 15:
+        try:
+            import os
+            os.system(f'start "" "whatsapp://send?phone={digits}&text={_q(message)}"')
+            time.sleep(3.5)
+            pyautogui.press("enter")
+            time.sleep(0.5)
+            return f"Message sent to {receiver} via WhatsApp."
+        except Exception:
+            pass
+        return _send_whatsapp_web(receiver, message)
+
     if not _is_whatsapp_installed():
         try:
             return _send_whatsapp_web(receiver, message)
         except Exception as e:
             return f"WhatsApp app nahi mila, Web fallback fail: {e}."
-    _desk = _desktop_send("WhatsApp", receiver, message)
-    if "Could not open" in _desk or "could not verify" in _desk:
-        try:
-            return _send_whatsapp_web(receiver, message)
-        except Exception as e:
-            return f"{_desk} (Web fallback bhi fail: {e})"
-    return _desk
+
+    if not _open_app("WhatsApp"):
+        return _send_whatsapp_web(receiver, message)
+
+    # Allow WhatsApp desktop to load past splash screen
+    time.sleep(2.5)
+    try:
+        import subprocess
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", '(New-Object -ComObject WScript.Shell).AppActivate("WhatsApp")'],
+            capture_output=True, timeout=5
+        )
+    except Exception:
+        pass
+    time.sleep(0.8)
+
+    # Dismiss any browser find-in-page overlay
+    pyautogui.press("escape")
+    time.sleep(0.2)
+    pyautogui.press("escape")
+    time.sleep(0.3)
+
+    # WhatsApp search
+    pyautogui.hotkey("ctrl", "f")
+    time.sleep(0.5)
+    _clear_and_paste(receiver)
+    time.sleep(1.8)
+
+    pyautogui.press("down")
+    time.sleep(0.4)
+    pyautogui.press("enter")
+    time.sleep(1.2)
+
+    if not _verify_chat_opened(receiver):
+        pyautogui.press("escape")
+        time.sleep(0.2)
+        pyautogui.press("escape")
+        return f"WhatsApp par '{receiver}' naam ka contact ya chat nahi mila. Kripya unka phone number batayein."
+
+    if message:
+        _paste_text(message)
+        time.sleep(0.3)
+        pyautogui.press("enter")
+        time.sleep(0.3)
+    return f"Message sent to {receiver} via WhatsApp."
+
 
 def _send_telegram(receiver: str, message: str) -> str:
     _api = _try_telegram_api(receiver, message)
@@ -391,17 +478,21 @@ def _send_telegram(receiver: str, message: str) -> str:
         return _api
 
     clean_r = (receiver or "").lstrip("@").strip()
-    # 1. First try direct Telegram protocol URL — opens exact contact chat without global search mistakes
-    if clean_r:
+    if not clean_r:
+        return "Please specify a recipient for Telegram."
+
+    import re as _re
+    digits = _re.sub(r"\D", "", clean_r)
+
+    # 1. Phone number receiver
+    if (clean_r.startswith("+") and len(digits) >= 10) or (clean_r.isdigit() and len(clean_r) >= 10):
         try:
             import os
-            # If receiver is digits, use phone URL; otherwise use domain/username URL
-            if clean_r.isdigit():
-                _tg_link = f"tg://resolve?phone={clean_r}"
-            else:
-                _tg_link = f"tg://resolve?domain={clean_r}"
-            os.system(f'start "" "{_tg_link}"')
-            time.sleep(1.8)
+            os.system(f'start "" "tg://resolve?phone={clean_r}"')
+            time.sleep(2.0)
+            if _check_telegram_error_dialog():
+                pyautogui.press("escape")
+                return f"Telegram par '{receiver}' phone number register nahi mila."
             if message:
                 _paste_text(message)
                 time.sleep(0.3)
@@ -409,17 +500,81 @@ def _send_telegram(receiver: str, message: str) -> str:
                 time.sleep(0.3)
             return f"Message sent to {receiver} via Telegram."
         except Exception as _e:
-            print(f"[send_message] tg:// protocol note: {_e}")
+            print(f"[send_message] tg:// phone note: {_e}")
 
-    _desk = _desktop_send("Telegram", receiver, message)
-    if "Could not open" in _desk or "not installed" in _desk:
-        # Fallback to Telegram Web in default browser
+    # 2. Explicit @username handle
+    if receiver.strip().startswith("@"):
+        try:
+            import os
+            os.system(f'start "" "tg://resolve?domain={clean_r}"')
+            time.sleep(2.0)
+            if _check_telegram_error_dialog():
+                pyautogui.press("escape")
+                return f"Telegram par '@{clean_r}' username nahi mila (Username not found). Kripya phone number ya exact contact batayein."
+            if message:
+                _paste_text(message)
+                time.sleep(0.3)
+                pyautogui.press("enter")
+                time.sleep(0.3)
+            return f"Message sent to @{clean_r} via Telegram."
+        except Exception as _e:
+            print(f"[send_message] tg:// domain note: {_e}")
+
+    # 3. Plain contact display name (e.g. 'ritik', 'rahul', 'mummy')
+    # Use native Telegram search in app instead of blind public username lookup
+    return _send_telegram_desktop_contact(clean_r, message)
+
+
+def _send_telegram_desktop_contact(contact_name: str, message: str) -> str:
+    """Search and send to a local Telegram contact using native Telegram search."""
+    if not _open_app("Telegram"):
         import urllib.parse
-        tg_url = f"https://web.telegram.org/k/#?q={clean_r}"
+        tg_url = f"https://web.telegram.org/k/#?q={contact_name}"
         if _open_browser_url(tg_url):
-            return f"Telegram Desktop app is PC par nahi mila — Telegram Web browser me khol diya gaya hai taaki aap {receiver} ko message bhej sakein."
+            return f"Telegram Desktop app is PC par nahi mila — Telegram Web browser me khol diya gaya hai taaki aap {contact_name} ko message bhej sakein."
         return f"Telegram app is computer par install ya open nahi ho paya."
-    return _desk
+
+    time.sleep(1.0)
+    try:
+        import subprocess
+        subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", '(New-Object -ComObject WScript.Shell).AppActivate("Telegram")'],
+            capture_output=True, timeout=5
+        )
+    except Exception:
+        pass
+    time.sleep(0.5)
+
+    pyautogui.press("escape")
+    time.sleep(0.3)
+
+    os_name = _get_os()
+    search_hotkey = ("command", "f") if os_name == "mac" else ("ctrl", "f")
+    pyautogui.hotkey(*search_hotkey)
+    time.sleep(0.4)
+
+    _clear_and_paste(contact_name)
+    time.sleep(1.5)
+
+    pyautogui.press("down")
+    time.sleep(0.3)
+    pyautogui.press("enter")
+    time.sleep(1.0)
+
+    if not _verify_chat_opened(contact_name):
+        pyautogui.press("escape")
+        time.sleep(0.2)
+        pyautogui.press("escape")
+        return f"Telegram par '{contact_name}' naam ka koi contact ya chat nahi mila. Kripya unka phone number ya exact username batayein."
+
+    if message:
+        _paste_text(message)
+        time.sleep(0.3)
+        pyautogui.press("enter")
+        time.sleep(0.3)
+
+    pyautogui.press("escape")
+    return f"Message sent to {contact_name} via Telegram."
 
 def _send_signal(receiver: str, message: str) -> str:
     return _desktop_send("Signal", receiver, message)
@@ -511,8 +666,11 @@ def send_message(
     try:
         from memory import contacts as _cb
         _hit = _cb.resolve_contact(receiver)
-        if _hit.get("phone"):
-            receiver = _hit["phone"]
+        if _hit:
+            if platform in ("telegram", "tg") and _hit.get("username"):
+                receiver = _hit["username"]
+            elif _hit.get("phone"):
+                receiver = _hit["phone"]
     except Exception:
         pass
 

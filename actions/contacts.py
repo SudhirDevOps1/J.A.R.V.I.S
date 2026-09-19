@@ -9,9 +9,10 @@ def contacts(parameters: dict | None = None, player=None, session_memory=None, *
     name = str(params.get("name", "") or "").strip()
     if action in ("save", "add", "yaad"):
         phone = str(params.get("phone", "") or "").strip()
+        username = str(params.get("username", params.get("handle", "")) or "").strip()
         if not name:
             return "Naam batao (e.g. name='mummy', phone='98...')."
-        ok = _cb.save_contact(name, phone, str(params.get("platform", "whatsapp") or "whatsapp"))
+        ok = _cb.save_contact(name, phone, str(params.get("platform", "whatsapp") or "whatsapp"), username=username)
         if player:
             try:
                 player.write_log(f"[contacts] saved {name}")
@@ -25,7 +26,12 @@ def contacts(parameters: dict | None = None, player=None, session_memory=None, *
         if not hit:
             return f"'{name}' contacts me saved nahi hai. WhatsApp/Telegram par direct search karke message bhejne ke liye send_message(platform='whatsapp'/'telegram', receiver='{name}', message_text=...) call karo."
         ph = hit.get("phone", "") or "no phone saved"
-        return f"{name}: {ph} ({hit.get('platform', 'whatsapp')})."
+        usr = hit.get("username", "")
+        parts = []
+        if ph and ph != "no phone saved": parts.append(ph)
+        if usr: parts.append(f"@{usr.lstrip('@')}")
+        parts.append(hit.get('platform', 'whatsapp'))
+        return f"{name}: {' | '.join(parts)}."
     names = _cb.list_contacts()
     return ("Contacts: " + ", ".join(names)) if names else "Contacts khali hai."
 

@@ -708,6 +708,8 @@ class JarvisLive:
         # transcription clock update karta tha, to typed baat-cheet ke beech me
         # system-monitor/proactive alerts ghus jate the.
         self._last_user_speech = time.monotonic()
+        # Immediately halt any active audio/speech so typed commands and reflex actions have exclusive audio
+        self.interrupt()
 
         from memory.memory_manager import log_daily_activity
         log_daily_activity(text)
@@ -1016,21 +1018,8 @@ class JarvisLive:
         from memory.config_manager import get_tts_engine
         eng = (get_tts_engine() or "").lower().strip()
 
-        # NOTE: Piper removed per user request — piper* setting auto-migrates to Edge
-        # in get_tts_engine(), so this branch is dead-safe (kept for clarity).
-        # 1. If official Gemini Live audio session is active via WebSockets
-        if self._loop and self.session:
-            asyncio.run_coroutine_threadsafe(
-                self.session.send_client_content(
-                    turns={"role": "user", "parts": [{"text": text}]},
-                    turn_complete=True
-                ),
-                self._loop
-            )
-            return
-
-        # 2. In Free Mode or Multi-Provider: default to natural Edge Neural voice
-        # (e.g. Swara for Maya, Madhur for Jarvis)
+        # Natural Edge Neural TTS (e.g. Swara for Maya, Madhur for Jarvis)
+        # Speaks the exact action result directly without prompting Gemini Live for conversational chatter
         self._speak_with_edge(text)
 
     def speak_error(self, tool_name: str, error: str):
@@ -1602,7 +1591,7 @@ class JarvisLive:
                     if response.server_content:
                         sc = response.server_content
 
-                        if sc.output_transcription and sc.output_transcription.text:
+                        if not self._interrupted and sc.output_transcription and sc.output_transcription.text:
                             self._last_ai_speech = time.monotonic()
                             txt = _clean_transcript(sc.output_transcription.text)
                             if txt and txt != (out_buf[-1] if out_buf else ""):

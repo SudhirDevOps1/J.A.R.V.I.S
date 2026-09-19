@@ -160,10 +160,11 @@ def search_notes(query: str) -> str:
     if not q:
         return "Please provide a query to search in Obsidian."
 
-    # 1. Try REST API search — POST search/simple/ with query in URL params
-    # contentLength=500 ensures we get context snippets back
+    # 1. Try REST API search — GET search/simple/ (Obsidian Local REST API v5.1 standard)
     encoded_q = urllib.parse.quote(q)
-    res = _rest_request("POST", f"search/simple/?query={encoded_q}&contentLength=300")
+    res = _rest_request("GET", f"search/simple/?query={encoded_q}&contentLength=300")
+    if not res or res.status_code != 200:
+        res = _rest_request("POST", f"search/simple/?query={encoded_q}&contentLength=300")
 
     if res and res.status_code == 200:
         try:
@@ -464,7 +465,7 @@ def obsidian_brain(parameters: dict, player=None, **_) -> str:
                     f"Saving to fallback '{v}'. REST API configured: {has_key}. "
                     f"Path theek karo ya Obsidian app kholo.")
         return (f"Obsidian Brain Status: {conn_icon} {msg} | "
-                f"Vault: '{cfg_path or v}' | "
+                f"Local Vault: '{cfg_path or v}' | "
                 f"REST API: {'✅' if has_key else '❌ not configured'} "
                 f"(Port {cfg.get('port', 27123)})")
     else:
