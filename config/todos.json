@@ -1,0 +1,290 @@
+[
+  {
+    "id": "881350",
+    "goal": "User wants to enter Agent Mode",
+    "steps": [
+      "Step 1: break 'User wants to enter Agent Mode' into parts",
+      "Step 2: execute via tools one by one",
+      "Step 3: confirm + journal"
+    ],
+    "status": "completed",
+    "created_at": "2026-09-18T19:10:13.084708",
+    "results": [
+      "Step 1 (Step 1: break 'User wants to enter Agent Mode' into parts): Completed (routed via action registry).",
+      "Step 2 (Step 2: execute via tools one by one): Completed (routed via action registry).",
+      "Step 3 (Step 3: confirm + journal): Completed (routed via action registry)."
+    ]
+  },
+  {
+    "id": "768631",
+    "goal": "trip plan karo",
+    "steps": [
+      "flight_finder: search flights",
+      "web_search: hotels research",
+      "reminder: pack checklist",
+      "send_message: share plan on Telegram"
+    ],
+    "status": "completed",
+    "created_at": "2026-09-19T11:31:26.481712",
+    "results": [
+      "Step 1 (flight_finder: search flights): Completed (routed via action registry).",
+      "Step 2 (web_search: hotels research): Completed (routed via action registry).",
+      "Step 3 (reminder: pack checklist): Completed (routed via action registry).",
+      "Step 4 (send_message: share plan on Telegram): Completed (routed via action registry)."
+    ]
+  },
+  {
+    "id": "775788",
+    "goal": "trip plan karo",
+    "steps": [
+      "flight_finder: search flights",
+      "web_search: hotels research",
+      "reminder: pack checklist",
+      "send_message: share plan on Telegram"
+    ],
+    "status": "completed",
+    "created_at": "2026-09-19T11:32:37.726162",
+    "results": [
+      "Step 1 (flight_finder: search flights): Completed (routed via action registry).",
+      "Step 2 (web_search: hotels research): Completed (routed via action registry).",
+      "Step 3 (reminder: pack checklist): Completed (routed via action registry).",
+      "Step 4 (send_message: share plan on Telegram): Completed (routed via action registry)."
+    ]
+  },
+  {
+    "id": "899578",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T11:53:15.695474"
+  },
+  {
+    "id": "905924",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T11:54:19.044822"
+  },
+  {
+    "id": "991153",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T12:08:31.263545"
+  },
+  {
+    "id": "000275",
+    "goal": "Goa trip plan karo",
+    "steps": [
+      "travel_transit: find transit routes, trains and flights",
+      "web_search: hotels, attractions and weather research",
+      "reminder: pack travel essentials checklist",
+      "send_message: share trip itinerary draft"
+    ],
+    "status": "completed",
+    "created_at": "2026-09-19T12:10:02.708724",
+    "results": [
+      "Step 1 (travel_transit: find transit routes, trains and flights): Delhi se Goa ka road distance 1745.5 km hai (driving: ~21.0 hrs). Flight se yeh sirf 3h 30m ka safar hai. Fastest train Delhi - Goa Vande Bharat Express (21h 48m) hai. Maine Train, Flight, Bus aur Map route ka poora comparison card screen par render kar diya hai.",
+      "Step 2 (web_search: hotels, attractions and weather research): Here is a comprehensive research guide covering **weather, top attractions, and hotel recommendations** for planning a trip to Goa.\n\n---\n\n### 1. Weather & Best Time to Visit\n\nGoa has a tropical monsoon climate divided into three distinct seasons:\n\n* **Mid-November to mid-February (Peak Season / Winter):**\n  * **Weather:** Pleasant, dry, and sunny with daytime temperatures around 28°C–32°C (82°F–90°F) and cooler evenings around 20°C–22°C (68°F–72°F).\n  * **Vibe:** Bustling with tourists, Christmas/New Year parties, beach shacks fully operational, water sports open. Expect premium hotel rates.\n* **March to May (Summer):**\n  * **Weather:** Hot and humid, with temperatures reaching 34°C–36°C (93°F–97°F) and high humidity.\n  * **Vibe:** Quieter and more affordable. Best for travelers on a budget or those looking to relax in resort pools and enjoy sunset beach walks.\n* **June to October (Monsoon):**\n  * **Weather:** Heavy tropical rains, overcast skies, and rough seas.\n  * **Vibe:** Lush, vibrant greenery and serene backwaters. Water sports and sea swimming are suspended, but it is the best time for visiting waterfalls (like Dudhsagar), spice plantations, and wellness/Ayurvedic retreats at discounted rates.\n\n---\n\n### 2. Top Attractions & Experiences\n\nGoa divides naturally into **North Goa** (busy, vibrant, nightlife, cafes) and **South Goa** (serene, scenic, luxury resorts, uncrowded beaches).\n\n#### **Historical & Cultural Highlights**\n* **Fontainhas (Panaji):** The historic Latin Quarter featuring colorful Portuguese-colonial houses, boutique art cafes, and cobbled alleys.\n* **Basilica of Bom Jesus & Se Cathedral (Old Goa):** UNESCO World Heritage Sites showcasing 16th-century baroque architecture and the mortal remains of St. Francis Xavier.\n* **Cabo de Rama Fort:** An ancient cliffside fort in South Goa offering sweeping panoramic views of the Arabian Sea.\n* **Aguada & Chapora Forts:** Historic 17th-century coastal forts in North Goa offering stunning sunset viewpoints.\n\n#### **Beaches**\n* **For Chill & Laid-Back Vibes:** *Mandrem, Ashwem, and Morjim* in the far north; *Palolem, Agonda, and Cola Beach* in the south (Cola has a unique freshwater lagoon touching the beach).\n* **For Water Sports & Buzz:** *Baga, Calangute, and Candolim* (parasailing, jet-skiing, boat tours).\n* **For Sunset Dining & Sundowners:** *Vagator and Anjuna*.\n\n#### **Nature & Adventure**\n* **Dudhsagar Waterfalls:** A multi-tiered 310-meter waterfall inside the Bhagwan Mahaveer Sanctuary (best visited right after the monsoon, October–January).\n* **Backwater Kayaking & Birdwatching:** Explore the mangroves along the Chapora River or the Chorao Island / Salim Ali Bird Sanctuary.\n* **Spice Plantations:** Guided tours and traditional Goan buffet lunches at Sahakari or Savoi Spice Plantations in Ponda.\n\n---\n\n### 3. Hotel & Resort Recommendations\n\n#### **Ultra-Luxury & Iconic Resorts**\n* **The St. Regis Goa Resort (Cavelossim, South):** 49-acre sanctuary between the Sal River and Arabian Sea with a 12-hole golf course.\n* **The Leela Goa (Mobor Beach, South):** Signature Portuguese-Indian architecture, lagoons, and direct beach access.\n* **Taj Exotica Resort & Spa (Benaulim, South):** Sprawling Mediterranean-style beachfront property, excellent for families.\n* **W Goa (Vagator, North):** Vibrant, modern luxury nestled at the foot of Chapora Fort, popular for nightlife and upscale dining.\n\n#### **Boutique & Heritage Stays**\n* **Ahilya by the Sea (Nerul, North):** An intimate, private family-owned heritage haven overlooking the sea with beautiful gardens and plunge pools.\n* **The Postcard Hotels (Moira, Velha, or Cuelim):** Curated, highly rated boutique properties set in historic Goan villages, offering personalized service and local cuisine.\n* **Elsewhere (Mandrem/Ashwem border, North):** Secret, tranquil beach houses and heritage tents separated from the mainland by a saltwater creek.\n\n#### **Mid-Range & Design Hotels**\n* **Amrapali House of Grace (Old Goa):** A restored 200-year-old Portuguese villa on the banks of the Zuari River.\n* **Fairfield by Marriott (Benaulim or Anjuna):** Reliable, modern comfort located close to popular areas.\n* **BloomSuites / Bloomrooms (Calangute):** Bright, clean, value-driven stays in the heart of commercial North Goa.\n\n#### **Social / Backpacker Hostels**\n* **Zostel (Morjim or Vagator):** Great social atmosphere, organized activities, and co-working facilities.\n* **goSTOPS / Madpackers (North Goa):** Ideal for solo travelers looking for budget-friendly dorms and community events.\n\n---\n\n### 4. Practical Travel Tips\n\n1. **Airports:** Goa now operates two airports:\n   * **Dabolim Airport (GOI):** Central/South Goa, convenient if staying in South Goa or Panaji.\n   * **Manohar International Airport, Mopa (GOX):** Far north, much closer to Arambol, Ashwem, Morjim, and Vagator.\n2. **Getting Around:**\n   * Public transport is limited. Renting a self-drive scooter (₹300–₹500/day) or car is the most common option.\n   * For app-based cabs, download the **GoaMiles** app, as standard rideshare services (Uber/Ola) face local restrictions in Goa.",
+      "Step 3 (reminder: pack travel essentials checklist): I need both a date and a time to set a reminder.",
+      "Step 4 (send_message: share trip itinerary draft): Please specify a recipient."
+    ]
+  },
+  {
+    "id": "024914",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T12:14:09.913704"
+  },
+  {
+    "id": "043435",
+    "goal": "delhi trip plan karo",
+    "steps": [
+      "travel_transit: find transit routes, trains and flights",
+      "web_search: hotels, attractions and weather research",
+      "reminder: pack travel essentials checklist",
+      "send_message: share trip itinerary draft"
+    ],
+    "status": "completed",
+    "created_at": "2026-09-19T12:17:14.743081",
+    "results": [
+      "Step 1 (travel_transit: find transit routes, trains and flights): Delhi se Delhi ka road distance 0.0 km hai (driving: ~0.0 hrs). Flight se yeh sirf 1h 00m ka safar hai. Fastest train Delhi - Delhi Vande Bharat Express (2h 30m) hai. Maine Train, Flight, Bus aur Map route ka poora comparison card screen par render kar diya hai.",
+      "Step 2 (web_search: hotels, attractions and weather research): Search result for 'hotels, attractions and weather research Delhi': Information retrieved from available sources.",
+      "Step 3 (reminder: pack travel essentials checklist): Reminder set for September 19 at 03:17 PM.",
+      "Step 4 (send_message: share trip itinerary draft): Message sent to Saved Messages via Telegram."
+    ]
+  },
+  {
+    "id": "066157",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T12:21:01.390468"
+  },
+  {
+    "id": "100167",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T12:26:41.489082"
+  },
+  {
+    "id": "109922",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T12:28:19.759000"
+  },
+  {
+    "id": "185043",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T12:40:50.484286"
+  },
+  {
+    "id": "213527",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T12:45:35.107743"
+  },
+  {
+    "id": "355253",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T13:09:12.804636"
+  },
+  {
+    "id": "418963",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T13:19:49.063122"
+  },
+  {
+    "id": "431892",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T13:21:58.487252"
+  },
+  {
+    "id": "461376",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T13:26:53.358456"
+  },
+  {
+    "id": "573294",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T13:45:32.888795"
+  },
+  {
+    "id": "594053",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T13:49:00.818995"
+  },
+  {
+    "id": "844221",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T14:30:42.246763"
+  },
+  {
+    "id": "876447",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T14:36:04.211539"
+  },
+  {
+    "id": "878890",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T14:36:28.623849"
+  },
+  {
+    "id": "063521",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T15:07:15.711076"
+  },
+  {
+    "id": "081799",
+    "goal": "Autonomous Test Trip Planning Unique",
+    "steps": [
+      "travel_transit: routes",
+      "reminder: pack"
+    ],
+    "status": "in_progress",
+    "created_at": "2026-09-19T15:10:17.263159"
+  }
+]

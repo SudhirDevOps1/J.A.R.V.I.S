@@ -44,6 +44,12 @@ _CORE: list[tuple[str, str]] = [
     ("uvicorn",            "uvicorn"),
     ("cryptography",       "cryptography"),
     ("openpyxl",           "openpyxl"),
+    # ADDITIVE-2 (purana hataya nahi): alias + baaki requirements drift
+    ("duckduckgo_search",  "duckduckgo-search"),
+    ("qrcode",             "qrcode"),
+    ("tinytuya",           "tinytuya"),
+    ("keyboard",           "keyboard"),
+    ("playwright",         "playwright"),
 ]
 
 # Windows-only (pywinauto, pycaw, win10toast, comtypes)

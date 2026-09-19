@@ -65,6 +65,8 @@ _APP_ALIASES: dict[str, dict[str, str]] = {
     "steam":              {"Windows": "steam",                   "Darwin": "Steam",                "Linux": "steam"},
     "epic":               {"Windows": "EpicGamesLauncher",       "Darwin": "Epic Games Launcher",  "Linux": "legendary"},
     "epic games":         {"Windows": "EpicGamesLauncher",       "Darwin": "Epic Games Launcher",  "Linux": "legendary"},
+    "camera":             {"Windows": "microsoft.windows.camera:", "Darwin": "Photo Booth",         "Linux": "cheese"},
+    "webcam":             {"Windows": "microsoft.windows.camera:", "Darwin": "Photo Booth",         "Linux": "cheese"},
 }
 
 _CATEGORY_FALLBACKS: dict[str, list[str]] = {
@@ -88,10 +90,169 @@ _CATEGORY_FALLBACKS: dict[str, list[str]] = {
     "terminal": ["wt", "powershell", "cmd", "git-bash"],
     "cmd": ["cmd", "wt", "powershell"],
     "powershell": ["powershell", "wt", "cmd"],
+
+    # ADDITIVE-2 (purana hataya nahi): 50+ category fallbacks for 1000+ app coverage
+    "pdf reader": ["acrobat", "sumatra", "foxit", "msedge", "chrome"],
+    "pdf": ["acrobat", "sumatra", "foxit", "msedge", "chrome"],
+    "photo editor": ["photoshop", "gimp", "paint.net", "mspaint"],
+    "image editor": ["photoshop", "gimp", "paint.net", "mspaint"],
+    "video editor": ["premiere", "capcut", "davinci", "filmora", "clipchamp"],
+    "audio editor": ["audacity", "adobe audition", "fl studio"],
+    "music": ["spotify", "vlc", "wmplayer", "groove", "itunes"],
+    "video": ["vlc", "mpv", "potplayer", "wmplayer", "films"],
+    "calculator": ["calc", "calculator", "speedcrunch"],
+    "calendar": ["outlook", "thunderbird", "google calendar"],
+    "mail": ["outlook", "thunderbird", "mail"],
+    "email": ["outlook", "thunderbird", "mail"],
+    "notes": ["notion", "obsidian", "onenote", "notepad", "evernote"],
+    "todo": ["todoist", "notion", "onenote", "tasks"],
+    "tasks": ["todoist", "notion", "onenote"],
+    "chat": ["whatsapp", "telegram", "discord", "slack"],
+    "messenger": ["whatsapp", "telegram", "discord", "messenger"],
+    "meeting": ["zoom", "teams", "meet", "webex"],
+    "video call": ["zoom", "teams", "skype", "meet"],
+    "ide": ["code", "cursor", "pycharm", "intellij", "sublime_text"],
+    "python ide": ["pycharm", "code", "thonny", "spyder"],
+    "database": ["dbeaver", "ssms", "datagrip", "heidisql"],
+    "ftp": ["filezilla", "winscp"],
+    "vpn": ["openvpn", "wireguard", "protonvpn"],
+    "zip": ["7zip", "winrar", "peazip"],
+    "archiver": ["7zip", "winrar", "peazip"],
+    "antivirus": ["defender", "avast", "avg"],
+    "screen recorder": ["obs", "bandicam", "sharex"],
+    "screenshot": ["sharex", "snipping", "greenshot"],
+    "snipping": ["snippingtool", "sharex", "greenshot"],
+    "paint": ["mspaint", "paint.net", "gimp"],
+    "maps": ["maps", "google earth", "chrome"],
+    "news": ["chrome", "msedge", "firefox"],
+    "shopping": ["chrome", "msedge", "firefox"],
+    "banking": ["chrome", "msedge", "firefox"],
+    "office": ["winword", "excel", "powerpnt", "libreoffice"],
+    "spreadsheet": ["excel", "libreoffice", "gsheets"],
+    "presentation": ["powerpnt", "libreoffice", "canva"],
+    "drawing": ["mspaint", "paint.net", "krita", "blender"],
+    "3d": ["blender", "maya", "sketchup"],
+    "game": ["steam", "epicgameslauncher", "gog"],
+    "games": ["steam", "epicgameslauncher", "xbox"],
+    "game launcher": ["steam", "epicgameslauncher", "gog", "origin"],
+    "store": ["msstore", "steam", "epicgameslauncher"],
+    "app store": ["msstore", "winget"],
+    "file manager": ["explorer", "totalcmd", "directoryopus"],
+    "task manager": ["taskmgr", "processhacker", "procexp"],
+    "system monitor": ["taskmgr", "processhacker", "perfmon"],
+    "disk cleaner": ["cleanmgr", "ccleaner", "bleachbit"],
+    "driver": ["driverbooster", "snappy", "devmgmt"],
+    "backup": ["filehistory", "macrium", "veeam"],
 }
 
 _INSTALLED_APPS_CACHE: dict[str, str] = {}
 _CACHE_FILE = Path(__file__).resolve().parent.parent / "config" / "installed_apps.json"
+
+# ADDITIVE (purana hataya nahi): Hindi colloquial names -> English app keys.
+# thefuzz/difflib stage se pehle consult hota hai taaki "ganana wala app" bhi khule.
+_HINDI_APP_NAMES: dict[str, str] = {
+    "ganana wala app": "calculator",
+    "calculator wala": "calculator",
+    "hisab wala": "calculator",
+    "likhne wala": "notepad",
+    "likhne wala app": "notepad",
+    "tasveer wala": "mspaint",
+    "photo wala app": "mspaint",
+    "gaana wala app": "spotify",
+    "gana wala": "spotify",
+    "film wala app": "vlc",
+    "video wala": "vlc",
+    "net wala app": "chrome",
+    "browser wala": "chrome",
+    "internet wala": "chrome",
+    "baat karne wala": "whatsapp",
+    "message wala app": "whatsapp",
+    "meeting wala app": "zoom",
+    "padhne wala app": "winword",
+    "hisab kitab wala": "excel",
+    "tasveer banane wala": "mspaint",
+    "setting wala": "ms-settings:",
+}
+
+
+def _scan_uwp_apps(apps: dict[str, str]) -> int:
+    """ADDITIVE: Windows UWP Store apps via Get-AppxPackage. Returns added count."""
+    if _SYSTEM != "Windows":
+        return 0
+    added = 0
+    try:
+        cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+               "Get-AppxPackage | Select-Object Name, PackageFamilyName | ConvertTo-Json"]
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=12)
+        if p.returncode == 0 and p.stdout.strip():
+            items = json.loads(p.stdout)
+            if isinstance(items, dict):
+                items = [items]
+            for item in items:
+                name = str(item.get("Name", "") or "").strip()
+                fam = str(item.get("PackageFamilyName", "") or "").strip()
+                if name and fam and name.lower() not in apps:
+                    apps[name.lower()] = fam
+                    added += 1
+    except Exception as e:
+        print(f"[open_app] UWP scan note: {e}")
+    return added
+
+
+def _scan_winget_apps(apps: dict[str, str]) -> int:
+    """ADDITIVE: winget list packages. Returns added count."""
+    if _SYSTEM != "Windows" or not shutil.which("winget"):
+        return 0
+    added = 0
+    try:
+        p = subprocess.run(["winget", "list", "--source", "winget"],
+                           capture_output=True, text=True, timeout=20)
+        if p.returncode == 0:
+            for line in p.stdout.splitlines()[1:]:
+                parts = line.strip().rsplit(None, 2)
+                if parts and len(parts[0]) > 2 and parts[0].lower() not in apps:
+                    apps[parts[0].lower()] = parts[0]
+                    added += 1
+    except Exception as e:
+        print(f"[open_app] winget scan note: {e}")
+    return added
+
+
+def _scan_steam_games(apps: dict[str, str]) -> int:
+    """ADDITIVE: Steam library game folders as launchable entries. Returns added count."""
+    added = 0
+    try:
+        steam_dirs = []
+        if _SYSTEM == "Windows":
+            for d in ("C:/Program Files (x86)/Steam", "C:/Program Files/Steam",
+                      "D:/Steam", "E:/Steam"):
+                if os.path.isdir(os.path.join(d, "steamapps")):
+                    steam_dirs.append(d)
+        elif _SYSTEM == "Linux":
+            _home = str(Path.home() / ".steam" / "steam")
+            if os.path.isdir(os.path.join(_home, "steamapps")):
+                steam_dirs.append(_home)
+        for sdir in steam_dirs:
+            _acf_dir = os.path.join(sdir, "steamapps")
+            try:
+                for f in os.listdir(_acf_dir):
+                    if f.startswith("appmanifest_") and f.endswith(".acf"):
+                        try:
+                            txt = open(os.path.join(_acf_dir, f), encoding="utf-8", errors="replace").read()
+                            import re as _re
+                            m = _re.search(r'"name"\s+"([^"]+)"', txt)
+                            aid = _re.search(r'"appid"\s+"(\d+)"', txt)
+                            if m and m.group(1).lower() not in apps:
+                                apps[m.group(1).lower()] = (
+                                    f"steam://rungameid/{aid.group(1)}" if aid else sdir)
+                                added += 1
+                        except Exception:
+                            continue
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"[open_app] Steam scan note: {e}")
+    return added
 
 
 def _scan_installed_apps(force_refresh: bool = False) -> dict[str, str]:
@@ -125,7 +286,15 @@ def _scan_installed_apps(force_refresh: bool = False) -> dict[str, str]:
                     name = item.get("Name", "").replace(".lnk", "").strip()
                     appid = item.get("AppID", "").strip()
                     if name and appid:
-                        apps[name.lower()] = appid
+                        k = name.lower()
+                        # Prefer working Store AppIDs (with '!') or valid file paths over plain names
+                        if k not in apps or ("!" in appid and "!" not in apps[k]):
+                            apps[k] = appid
+                # Auto-alias desktop variants (e.g. 'Telegram Desktop' -> 'telegram')
+                for root_name in ("telegram", "whatsapp", "spotify", "discord", "chrome"):
+                    desk_v = f"{root_name} desktop"
+                    if desk_v in apps and (root_name not in apps or "!" not in apps.get(root_name, "")):
+                        apps[root_name] = apps[desk_v]
         except Exception as e:
             print(f"[open_app] Get-StartApps scan note: {e}")
 
@@ -170,6 +339,16 @@ def _scan_installed_apps(force_refresh: bool = False) -> dict[str, str]:
                 except Exception:
                     pass
 
+    # ADDITIVE extended sources (purane 3 scanners untouched, sab try/except me):
+    try:
+        _n1 = _scan_uwp_apps(apps)
+        _n2 = _scan_winget_apps(apps)
+        _n3 = _scan_steam_games(apps)
+        if (_n1 + _n2 + _n3) > 0:
+            print(f"[open_app] Extended scan: +{_n1} UWP, +{_n2} winget, +{_n3} Steam entries.")
+    except Exception as e:
+        print(f"[open_app] Extended scan note: {e}")
+
     _INSTALLED_APPS_CACHE = apps
     if apps:
         try:
@@ -210,6 +389,10 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
     """
     key = requested.lower().strip()
     installed = _scan_installed_apps()
+
+    # ADDITIVE Stage 0: Hindi colloquial names (purane 4 stages untouched)
+    if key in _HINDI_APP_NAMES:
+        key = _HINDI_APP_NAMES[key]
 
     # Stage 1: Category fallback first (handles "browser", "editor", or missing specific app like "chrome" -> "brave")
     if key in _CATEGORY_FALLBACKS:
@@ -274,6 +457,105 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
 
 
 
+# ADDITIVE guards (purana launch flow untouched, sirf verify layer):
+# Hindi verbs/particles jo model kabhi-kabhi app naam bana deta hai ("kro", "karo").
+_GARBAGE_TOKENS = frozenset({
+    "kro", "karo", "karke", "kholo", "khol", "band", "kroo",
+    "me", "mein", "ko", "se", "par", "per", "ke", "ki", "ka", "wala", "wale", "wali",
+    "hai", "he", "hain", "ho", "ga", "ge", "gi", "do", "de", "doon", "na",
+    "naa", "re", "ji", "zara", "abhi",
+    "the", "a", "an", "it", "this", "that", "please", "pls", "ek", "bhi",
+})
+
+
+def _snapshot_pids() -> set:
+    try:
+        import psutil as _ps
+        return set(_ps.pids())
+    except Exception:
+        return set()
+
+
+def _activate_window(hint: str) -> bool:
+    """Best-effort window activation: bring existing window matching hint to front."""
+    try:
+        import pygetwindow as _gw
+        q = hint.lower().replace(".exe", "").strip()
+        toks = [t for t in q.replace("!", " ").replace("\\", " ").replace(".", " ").split() if len(t) >= 3]
+        if not toks:
+            return False
+        wins = [w for w in _gw.getAllWindows() if w.title.strip()]
+        for w in wins:
+            w_low = w.title.lower()
+            for t in toks:
+                if t in w_low:
+                    try:
+                        w.restore()
+                        w.activate()
+                        return True
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return False
+
+
+def _process_appeared(hint: str, before: set, timeout: float = 2.5) -> bool:
+    """Best-effort launch verify: koi naya non-Explorer process hint se match,
+    ya pehle se running process/window responsive hai?
+    psutil na ho to True (fail-open = purana behavior, kuch hataya nahi)."""
+    time.sleep(timeout)
+    try:
+        import psutil as _ps
+    except Exception:
+        return True
+    try:
+        toks = [t for t in hint.lower().replace(".exe", "").replace("!", " ").replace(
+            "\\", " ").replace(".", " ").replace(":", " ").split() if len(t) >= 3]
+        if not toks:
+            return True
+        # 1. New process appeared
+        for pid in _ps.pids():
+            if pid in before:
+                continue
+            try:
+                n = (_ps.Process(pid).name() or "").lower()
+            except Exception:
+                continue
+            if n in ("explorer.exe", "shellexperiencehost.exe",
+                     "startmenuexperiencehost.exe", "searchhost.exe", "sihost.exe"):
+                continue
+            base = n.replace(".exe", "")
+            for t in toks:
+                if t in base or base in t:
+                    _activate_window(hint)
+                    return True
+        # 2. Process was already running: Windows passes activation to existing instance
+        for p in _ps.process_iter(['name']):
+            try:
+                n = (p.info.get('name') or "").lower().replace(".exe", "")
+                if n in ("explorer", "shellexperiencehost", "startmenuexperiencehost", "searchhost", "sihost"):
+                    continue
+                for t in toks:
+                    if t == n or (len(t) >= 4 and (t in n or n in t)):
+                        _activate_window(hint)
+                        return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return True
+
+
+def _looks_like_appid(name: str) -> bool:
+    """shell:AppsFolder sirf plausible AppID par try karo taaki invalid ID par
+    Explorer Documents na khole (screenshot wala bug)."""
+    n = (name or "").strip()
+    if not n or " " in n or "\\" in n or "/" in n or ":" in n:
+        return False
+    return ("!" in n) or ("." in n and len(n) > 4)
+
+
 def _launch_windows(app_name: str) -> bool:
     """Launch application on Windows via path, AppID, shell protocol, or Start Menu."""
     # 1. Direct path to .lnk or .exe
@@ -308,28 +590,45 @@ def _launch_windows(app_name: str) -> bool:
         except Exception:
             pass
 
-    # 4. Windows Store / Get-StartApps AppID via shell:AppsFolder
-    if app_name:
+    # 4. Windows Store / Get-StartApps AppID via shell:AppsFolder.
+    # FIX (additive): plausible AppID par hi try + process verify. Blind return True
+    # hataya — invalid ID par Explorer Documents kholta tha + "Opened" jhooth bolta tha.
+    # UWP family-only ID par `{family}!App` bhi try karo (shell ko poora AppID chahiye).
+    if app_name and _looks_like_appid(app_name):
         try:
+            _before = _snapshot_pids()
             subprocess.Popen(f'explorer.exe "shell:AppsFolder\\\\{app_name}"', shell=True)
-            time.sleep(1.2)
-            return True
+            if _process_appeared(app_name, _before, timeout=2.5):
+                time.sleep(0.5)
+                return True
+            # Do NOT guess !App if it fails, as invalid shell:AppsFolder paths cause Windows Explorer to open Documents folder
+            print(f"[open_app] AppsFolder verify failed for {app_name}, trying Start Menu...")
         except Exception:
             pass
 
-    # 5. Last resort: Start Menu keyboard automation
-    try:
-        import pyautogui
-        pyautogui.PAUSE = 0.1
-        pyautogui.press("win")
-        time.sleep(0.7)
-        pyautogui.write(app_name, interval=0.05)
-        time.sleep(0.9)
-        pyautogui.press("enter")
-        time.sleep(2.0)
-        return True
-    except Exception as e:
-        print(f"[open_app] Start Menu search failed: {e}")
+    # 5. Last resort: Start Menu keyboard automation (verify ke saath)
+    # Never type dotted names into Start Menu — Windows interprets dots as file extensions and opens Documents folder!
+    clean_search = app_name.split(".")[0].strip() if "." in app_name else app_name
+    if len(clean_search) >= 2:
+        try:
+            import pyautogui
+            _before = _snapshot_pids()
+            pyautogui.PAUSE = 0.1
+            pyautogui.press("win")
+            time.sleep(0.7)
+            pyautogui.write(clean_search, interval=0.05)
+            time.sleep(0.9)
+            pyautogui.press("enter")
+            if _process_appeared(app_name, _before, timeout=2.5):
+                time.sleep(0.5)
+                return True
+            # Dismiss Start Menu cleanly so it doesn't stay open or select files
+            pyautogui.press("escape")
+            time.sleep(0.1)
+            pyautogui.press("escape")
+            print(f"[open_app] Start Menu verify failed for {app_name}.")
+        except Exception as e:
+            print(f"[open_app] Start Menu search failed: {e}")
 
     return False
 
@@ -501,6 +800,77 @@ def open_app(
     app_name = (params.get("app_name") or params.get("name") or "").strip()
     action = params.get("action", "open").strip().lower()
 
+    # ADDITIVE: open_with — file ko specific app me kholo (purana open untouched)
+    if action in ("open_with", "openwith", "open_in"):
+        file_path = (params.get("file_path") or params.get("file") or "").strip()
+        if not app_name or not file_path:
+            return "Please specify both app_name and file_path for open_with."
+        resolved_target, fallback_note = _resolve_app(app_name)
+        try:
+            if _SYSTEM == "Windows":
+                subprocess.Popen(f'start "" "{resolved_target}" "{file_path}"', shell=True)
+            elif _SYSTEM == "Darwin":
+                subprocess.run(["open", "-a", resolved_target, file_path], capture_output=True, timeout=8)
+            else:
+                subprocess.Popen([resolved_target, file_path],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1.2)
+            return f"Opened {file_path} in {app_name}."
+        except Exception as e:
+            return f"Failed to open file in {app_name}: {e}"
+
+    # ADDITIVE: routine save — voice se nayi routine banao (launch block untouched)
+    if action in ("save_routine", "create_routine", "routine_banao", "add_routine"):
+        routine_name = (params.get("routine") or app_name or "").strip().lower()
+        raw_apps = str(params.get("apps", "") or "").strip()
+        if not routine_name or not raw_apps:
+            return ("Routine banane ke liye naam + apps do "
+                    "(e.g. routine='movie', apps='brave, spotify').")
+        entries = [a.strip() for a in raw_apps.replace(";", ",").split(",") if a.strip()][:10]
+        if not entries:
+            return "Apps list khali hai."
+        try:
+            _rfile = Path(__file__).resolve().parent.parent / "config" / "routines.json"
+            routines = json.loads(_rfile.read_text(encoding="utf-8")) if _rfile.exists() else {}
+            if not isinstance(routines, dict):
+                routines = {}
+            routines[routine_name] = entries
+            _tmp = _rfile.with_suffix(".json.tmp")
+            _tmp.write_text(json.dumps(routines, indent=2, ensure_ascii=False), encoding="utf-8")
+            import os as _os
+            _os.replace(str(_tmp), str(_rfile))
+            return f"Routine '{routine_name}' save ho gayi ({len(entries)} apps). Chalane ke liye '{routine_name} routine chalao' bolo."
+        except Exception as e:
+            return f"Routine save failed: {e}"
+
+    # ADDITIVE: routine — config/routines.json se multi-app launch (PowerToys Workspaces style)
+    if action in ("routine", "workspace", "setup"):
+        routine_name = (params.get("routine") or app_name or "").strip().lower()
+        try:
+            _rfile = Path(__file__).resolve().parent.parent / "config" / "routines.json"
+            routines = json.loads(_rfile.read_text(encoding="utf-8")) if _rfile.exists() else {}
+        except Exception:
+            routines = {}
+        if routine_name not in routines:
+            known = ", ".join(sorted(k for k in routines.keys() if not k.startswith("_"))) or "dev, movie"
+            return (f"Routine '{routine_name}' nahi mili. Saved routines: {known}. "
+                    f"Bolo 'routine banao {routine_name}: brave, spotify'.")
+        launcher = _OS_LAUNCHERS.get(_SYSTEM)
+        opened, failed = [], []
+        for entry in routines[routine_name]:
+            try:
+                tgt, _ = _resolve_app(str(entry))
+                if launcher and launcher(tgt):
+                    opened.append(str(entry))
+                else:
+                    failed.append(str(entry))
+            except Exception:
+                failed.append(str(entry))
+        msg = f"Routine '{routine_name}': {len(opened)} opened ({', '.join(opened)})"
+        if failed:
+            msg += f"; failed: {', '.join(failed)}"
+        return msg + "."
+
     if action in ("refresh", "rescan", "refresh_apps", "scan_apps", "update_apps") or app_name.lower() in ("refresh", "refresh apps", "scan apps", "rescan", "sync apps", "apps refresh", "scan"):
         discovered = _scan_installed_apps(force_refresh=True)
         return f"System scan complete: {len(discovered)} installed applications indexed successfully on this computer."
@@ -515,6 +885,12 @@ def open_app(
     if not app_name:
         return "No application name provided."
 
+    # ADDITIVE guard: model kabhi Hindi verb ko app naam bana deta hai ("kro").
+    # Aise garbage par launcher chalane se Explorer Documents khul jata tha.
+    if app_name.lower().strip() in _GARBAGE_TOKENS or len(app_name.strip()) < 2:
+        return ("Mujhe samajh nahi aaya kaun sa app kholna hai. "
+                "App ka naam dobara bolo (e.g. 'Chrome kholo').")
+
     if action in ("close", "kill", "quit", "band", "exit"):
         return _close_app(app_name)
 
@@ -523,7 +899,13 @@ def open_app(
         return f"Unsupported operating system: {_SYSTEM}"
 
     resolved_target, fallback_note = _resolve_app(app_name)
-    print(f"[open_app] Launching: '{app_name}' → '{resolved_target}' (Note: {fallback_note})")
+    print(f"[open_app] Launching: '{app_name}' -> '{resolved_target}' (Note: {fallback_note})")
+
+    # ADDITIVE: If app window is already open and visible, bring to front directly
+    if _activate_window(app_name) or _activate_window(resolved_target):
+        if player:
+            player.write_log(f"[open_app] {app_name} (already active)")
+        return f"{app_name.capitalize()} is already open and brought to front."
 
     if player:
         player.write_log(f"[open_app] {app_name}")
@@ -551,7 +933,7 @@ def open_app(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "open_app",
-    "description": "Opens any application on the computer, closes apps, lists active running applications, or refreshes installed apps cache. Supports intelligent dynamic auto-discovery on any PC and smart category fallbacks (e.g. opens Brave if Chrome is not installed).",
+    "description": "Opens any application on the computer, closes apps, lists active running applications, refreshes installed apps cache, opens files in apps (open_with), or launches saved multi-app routines/workspaces. Supports intelligent dynamic auto-discovery on any PC and smart category fallbacks (e.g. opens Brave if Chrome is not installed).",
     "parameters": {
         "type": "OBJECT",
         "properties": {
@@ -561,7 +943,19 @@ TOOL = {
             },
             "action": {
                 "type": "STRING",
-                "description": "'open' to launch an app, 'close' to terminate an app, 'list' to list running applications, or 'refresh' to dynamically rescan installed applications."
+                "description": "'open' to launch an app, 'close' to terminate an app, 'list' to list running applications, 'refresh' to dynamically rescan installed applications, 'open_with' to open a file in an app, 'routine' to launch a saved multi-app workspace, 'save_routine' to create one by voice."
+            },
+            "file_path": {
+                "type": "STRING",
+                "description": "File to open when action is open_with (e.g. 'C:\\notes\\a.docx')"
+            },
+            "routine": {
+                "type": "STRING",
+                "description": "Routine name from config/routines.json when action is routine (e.g. 'dev setup')"
+            },
+            "apps": {
+                "type": "STRING",
+                "description": "Comma-separated app list when action is save_routine (e.g. 'brave, spotify')"
             }
         },
         "required": [

@@ -50,6 +50,37 @@ def _ensure():
         t = np.linspace(0, 0.08, int(sr * 0.08), endpoint=False)
         _save_wav(cp, 0.5 * np.sin(2 * np.pi * 2100 * t) * np.exp(-60 * t), sr)
 
+    # Additive (purana 4 untouched): error/success/thinking/typing synth
+    ep = os.path.join(SFX_DIR, 'error.wav')
+    if not os.path.exists(ep):
+        t = np.linspace(0, 0.35, int(sr * 0.35), endpoint=False)
+        w = 0.45 * np.sin(2 * np.pi * 220 * t) * np.exp(-8 * t)
+        w += 0.3 * np.sin(2 * np.pi * 165 * t + 1.0) * np.exp(-8 * t)
+        _save_wav(ep, w, sr)
+
+    sp = os.path.join(SFX_DIR, 'success.wav')
+    if not os.path.exists(sp):
+        t = np.linspace(0, 0.4, int(sr * 0.4), endpoint=False)
+        w = np.zeros_like(t)
+        for i, f in enumerate((660.0, 880.0, 1320.0)):
+            s = int(i * 0.09 * sr)
+            e = min(len(t), s + int(0.18 * sr))
+            tt = t[s:e] - t[s]
+            w[s:e] += 0.35 * np.sin(2 * np.pi * f * tt) * np.exp(-14 * tt)
+        _save_wav(sp, w, sr)
+
+    tp = os.path.join(SFX_DIR, 'typing.wav')
+    if not os.path.exists(tp):
+        t = np.linspace(0, 0.06, int(sr * 0.06), endpoint=False)
+        click = 0.5 * np.sin(2 * np.pi * 3200 * t) * np.exp(-90 * t)
+        _save_wav(tp, click, sr)
+
+    hp = os.path.join(SFX_DIR, 'thinking.wav')
+    if not os.path.exists(hp):
+        t = np.linspace(0, 1.6, int(sr * 1.6), endpoint=False)
+        hum = 0.22 * np.sin(2 * np.pi * 110 * t) + 0.12 * np.sin(2 * np.pi * 220 * t)
+        _save_wav(hp, hum * (0.6 + 0.4 * np.sin(2 * np.pi * 2.5 * t)), sr)
+
 def play_sfx(name: str) -> None:
     def _run():
         try:

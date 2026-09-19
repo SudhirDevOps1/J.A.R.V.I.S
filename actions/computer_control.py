@@ -507,6 +507,17 @@ def computer_control(
                 print(f"[ComputerControl] ⚠️ No '{field}' in memory, using random: {value}")
             return value
 
+        if action == "clear_log":
+            if player:
+                try:
+                    if hasattr(player, "_quick_clear_log"):
+                        player._quick_clear_log()
+                    elif hasattr(player, "_win") and hasattr(player._win, "_quick_clear_log"):
+                        player._win._quick_clear_log()
+                except Exception:
+                    pass
+            return "Activity log cleared."
+
         return f"Unknown action: '{action}'"
 
     except Exception as e:

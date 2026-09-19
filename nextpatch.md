@@ -1,21 +1,26 @@
 # 🛠️ J.A.R.V.I.S. — NEXT PATCH ROADMAP & IMPLEMENTATION SPECIFICATION
 > **Document:** `nextpatch.md`
-> **Status:** Research & Architecture Plan (Ready for Phase-Wise Development)
+> **Status:** Active Roadmap & Architecture Specification
 > **Target System:** J.A.R.V.I.S. (SudhirDevOps1 AI)
-> **Engine:** Gemini Live + Multi-Brain Matrix + PyQt6 Cyberpunk HUD
-> **Last Updated:** 2026-09-18
+> **Engine:** Gemini Live + Tri-Tier Edge Matrix + PyQt6 Cyberpunk HUD
+> **Last Updated:** 2026-09-19
 
 ---
 
 ## 🎯 Executive Overview
 
 J.A.R.V.I.S. ships with:
-- **27 bundled actions** in `actions/` (browser, browser control, file ops, code helper, game updater, flight finder, obsidian, BM25, swarm, and more)
-- **Tri-Tier Edge AI Router** (`core/edge_router.py`) — Needle 2 Reflex → LFM 2.5 offline → Gemini Cloud
+- **39 bundled actions** in `actions/` (including multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
+- **10 built-in plugins** in `plugins/` (Spotify, Pomodoro, Stock Quotes, Notion, Gmail, Calendar, Drive, GitHub, Slack, Smart Home)
+- **Tri-Tier Edge AI Router** (`core/edge_router.py`) — Needle 2 Reflex (<15ms, 28MB) → LFM 2.5 offline → Gemini Live Cloud
+- **Synchronized Assistant Persona Modes** — Teacher & Guru, DevOps Beast, Companion & GF, and J.A.R.V.I.S Tactical AI
+- **Headless Smart Services & Transit** — Live weather telemetry, background music playback & controls, multi-modal travel & transit routes, and eCommerce deal comparison with 0 browser popups
+- **Autonomous Self-Learning & Mistake-Correction** (`memory/self_correction_log.json`)
 - **22+ free LLM providers** with round-robin key rotation and SQLite cache
-- **PyQt6 Cyberpunk HUD** with 4 avatar modes, emotional expression badges, and live theming
-- **Offline Whisper STT** (`core/stt.py`) + **Piper Hindi TTS** (`core/tts.py`) fallback stack
-- **Native Python Git hooks** — zero Node.js overhead
+- **PyQt6 Cyberpunk HUD & PiP Companion** with 4 avatar modes, emotional expression badges, and live theming
+- **EdgeTTS & Gemini Live Realtime Neural Voice** stack with customizable pitch and tones
+- **Native Python Git hooks** — zero Node.js overhead, 86/86 passing tests
+- **Telegram Direct Protocol & Obsidian Brain** — zero-typo direct chat links, dual Local REST & filesystem note vault
 - **Subagent swarm orchestrator** (`core/subagent_swarm.py`) — Researcher, ReverseEngineer, SelfHealer, Reporter agents
 
 This document outlines the **architectural blueprint, dependency requirements, and implementation steps** for upcoming features. All additions use the self-describing `plugins/` / `actions/` drop-in architecture — no core `main.py` edits required.
@@ -344,13 +349,14 @@ This document outlines the **architectural blueprint, dependency requirements, a
 | Phase | Focus Areas | Complexity | Status & Date | Estimated Files Involved |
 |---|---|:---:|:---:|---|
 | **Phase 0** | 🇮🇳 **Native Hindi Prompt & Code-Switching** | 🟢 Low | ✅ **Done (2026-09-14)** | `core/prompt.txt`, `memory/long_term.json` |
-| **Phase 1** | 🎙️ **Piper Offline Hindi TTS (Devanagari)** + 🔊 **Stark SFX** | 🟢 Low | ✅ **Done (2026-09-14)** | `core/tts.py`, `core/models/piper/`, `core/sfx.py` |
+| **Phase 1** | 🎙️ **Piper Offline Hindi TTS (Devanagari)** + 🔊 **Stark SFX** | 🟢 Low | ✅ **Done (2026-09-14)** — ⚠️ Piper **removed 2026-09-18** per user (Edge + Gemini Live only) | `core/tts.py`, `core/models/piper/`, `core/sfx.py` |
 | **Phase 1.5**| ⚡ **Pikachu HUD, Voice Lab & Multi-Provider Health Ping** | 🟡 Medium | ✅ **Done (2026-09-15)** | `ui.py`, `core/tts.py`, `core/multi_llm.py`, `core/system_info.py` |
 | **Phase 1.6**| 🌐 **Free Open APIs, Storage Gauges, Log Deduplication & News Ticker** | 🟡 Medium | ✅ **Done (2026-09-15)** | `ui.py`, `core/system_info.py`, `core/tts.py` |
 | **Phase 2** | 🧠 **Persona Engine & Devoted GF Mode** + 🔮 **Obsidian Dual-Sync** + 🌅 **Calendar Startup Greeting** | 🟢 High Value | ✅ **Done (2026-09-17)** | `core/persona_manager.py`, `actions/obsidian_brain.py`, `main.py`, `ui.py` |
-| **Phase 3** | 🏠 **Tuya Smart Lighting Plugin** + 📅 **Workspace Bundle (Spotify/Cal)** | 🟡 Medium | ⏳ Scheduled | `plugins/smart_home.py`, `plugins/spotify.py` |
+| **Phase 3** | 🏠 **Tuya Smart Lighting Plugin** + 📅 **Workspace Bundle (Spotify/Cal)** | 🟡 Medium | ✅ **Done (2026-09-18)** — `plugins/smart_home.py` (on/off/brightness/color/movie scene), `plugins/spotify_control.py`, `plugins/calendar_tool.py` live, 10 plugins 0 rejected | `plugins/smart_home.py`, `plugins/spotify_control.py`, `plugins/calendar_tool.py` |
 | **Phase 4** | 🛡️ **Sentry Mode & Telegram Alerts** + 🎮 **OBS "Clip That"** | 🟡 Medium | ⏳ Scheduled | `actions/sentry.py`, `plugins/gaming.py` |
 | **Phase 5** | 👁️ **MediaPipe Gesture Control** + 💻 **Ollama Full Offline Stack** | 🔴 Advanced | ⏳ Scheduled | `actions/gesture_engine.py`, `core/llm_client.py` |
+| **Phase 6** | 🧠 **Zero-Dep Knowledge Graph** + ⏰ **Scheduler 2.0** + 🎨 **UI Pro Pass** | 🟢 High Value | ✅ **Done (2026-09-18)** — 37 actions, 10 plugins, 42 pytest green | `memory/knowledge_graph.py`, `actions/scheduler.py`, `actions/workflows.py`, `ui.py`, `ui_icons.py` |
 
 ---
 
@@ -410,12 +416,12 @@ This document outlines the **architectural blueprint, dependency requirements, a
 |---|---|---|:---:|:---:|---|
 | **Groq** | `llama-3.3-70b-versatile` | ⚡ **Daily Driver & General Brain** | 280–320 tok/s | Extremely Low / Free Tier | Instantaneous response time, GPT-4 level general intelligence, zero wait. |
 | **DeepSeek (Direct / OpenRouter)** | `deepseek/deepseek-r1` or `deepseek-chat` | 🛠️ **DevOps, Deep Debugging & Code Gen** | 40–80 tok/s | ~1/10th of OpenAI | World-class chain-of-thought reasoning, unbeatable for Kubernetes, Docker, and refactoring. |
-| **Google Gemini** | `gemini-2.5-flash` | 🎙️ **Live Bidirectional Voice & Vision** | Real-time | Low | The only API capable of true 16 kHz live audio streaming with native camera vision. |
+| **Google Gemini** | `gemini-2.0-flash` | 🎙️ **Live Bidirectional Voice & Vision** | Real-time | Low | The only API capable of true 16 kHz live audio streaming with native camera vision. |
 | **Groq / OpenRouter** | `llama-3.1-8b-instant` | 📉 **Ultra-Budget / Background Tasks** | 800+ tok/s | Near Zero | Perfect for background summarization, log analysis, and memory extraction. |
 | **Local / Ollama** | `qwen2.5-coder:7b` or `llama3.2:3b` | 🛡️ **100% Offline Air-Gapped Fallback** | 30–60 tok/s | **$0.00 (Free)** | Runs on local CPU/GPU when internet is completely disconnected. |
 
 * **Dynamic Autonomous Task Router:**
-  - If query is **Vision/Audio** $\to$ Route to **Gemini 2.5 Flash**.
+  - If query is **Vision/Audio** $\to$ Route to **Gemini 2.0 Flash**.
   - If query is **Coding / DevOps Architecture / Complex Debugging** $\to$ Route to **DeepSeek R1**.
   - If query is **General Command / Fast Q&A / System Control** $\to$ Route to **Groq Llama 3.3 70B**.
   - If Internet goes down $\to$ Gracefully degrade to **Local Ollama**.

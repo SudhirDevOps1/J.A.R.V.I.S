@@ -58,22 +58,37 @@ def _tokenize(text: str) -> List[str]:
     return [w.lower() for w in re.findall(r"[a-zA-Z0-9_\-\.]+", text) if len(w) > 1]
 
 
-def search_notes_bm25(query_text: str, max_results: int = 3) -> str:
+def search_notes_bm25(query_text: str, max_results: int = 5) -> str:
     """Searches memory/obsidian_vault, memory/journals, and markdown files via BM25."""
     target_dirs = [
         _ROOT / "memory" / "obsidian_vault",
         _ROOT / "memory" / "journals",
-        _ROOT / "memory",
         _ROOT / "docs",
     ]
+
+    # Also include memory/ *.md and *.txt but explicitly EXCLUDE structured JSON files
+    # (tinydb_store.json, api_keys.json etc.) — those are not searchable notes
+    _memory_dir = _ROOT / "memory"
+    _EXCLUDED_JSON = {"tinydb_store.json", "api_keys.json", "session_log.json"}
 
     files: List[Path] = []
     for td in target_dirs:
         if td.exists():
-            for ext in ("*.md", "*.txt", "*.json"):
+            for ext in ("*.md", "*.txt"):
                 files.extend(td.rglob(ext))
+            # Only *.json in dedicated vault/journal folders, not root memory/
+            for ext in ("*.json",):
+                for f in td.rglob(ext):
+                    if f.name not in _EXCLUDED_JSON:
+                        files.append(f)
 
-    files = list(set(files))
+    # Include *.md and *.txt from memory/ root (but not JSON to avoid tinydb noise)
+    if _memory_dir.exists():
+        for ext in ("*.md", "*.txt"):
+            files.extend(_memory_dir.glob(ext))
+
+    # Deduplicate and sort for deterministic ranking
+    files = sorted(set(files))
     if not files:
         return "Koi notes ya markdown files nahi mile index karne ke liye."
 
@@ -142,7 +157,8 @@ def bm25_search(
     query = (params.get("query") or params.get("keyword") or "").strip()
     if not query:
         return "Search karne ke liye koi query provide nahi ki gayi."
-    return search_notes_bm25(query)
+    max_r = int(params.get("max_results", 5))
+    return search_notes_bm25(query, max_results=max_r)
 
 
 TOOL = {

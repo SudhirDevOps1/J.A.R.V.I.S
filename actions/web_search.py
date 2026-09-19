@@ -15,6 +15,13 @@ API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
 def _get_api_key() -> str:
     try:
+        from memory.config_manager import load_api_keys
+        k = (load_api_keys().get("gemini_api_key") or "").strip()
+        if k:
+            return k
+    except Exception:
+        pass
+    try:
         if API_CONFIG_PATH.exists():
             with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
                 return json.load(f).get("gemini_api_key", "").strip()
@@ -28,7 +35,14 @@ def _gemini_search(query: str) -> str:
     if api_k:
         from google import genai
         client = genai.Client(api_key=api_k)
-        models_to_try = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"]
+        models_to_try = [
+            "gemini-2.5-flash-lite",
+            "gemini-flash-latest",
+            "gemini-2.5-flash",
+            "gemini-3.7-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+        ]
         last_err = None
         for model_name in models_to_try:
             try:
@@ -143,7 +157,14 @@ def _gemini_headlines(n: int = 5) -> tuple[list[str], str]:
     from google import genai
 
     client = genai.Client(api_key=_get_api_key())
-    models_to_try = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+    models_to_try = [
+        "gemini-2.5-flash-lite",
+        "gemini-flash-latest",
+        "gemini-2.5-flash",
+        "gemini-3.7-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+    ]
     response = None
     for model_name in models_to_try:
         try:
@@ -318,6 +339,19 @@ def web_search(
     if not query and not items:
         return "Please provide a search query."
 
+    # ADDITIVE filler guard: model kabhi "arey"/"achha" query bhej deta hai
+    # (filler word) → bekar search + lamba garbage jawab. LLM se baat karne do.
+    # ADDITIVE-2: bare screen/camera queries bhi yahan nahi (vision ka kaam hai).
+    _fillers = frozenset({
+        "arey", "are", "achha", "acha", "ok", "okay", "hmm", "haan", "nahi",
+        "tum", "tu", "yeh", "ye", "woh", "wo", "kya", "hai", "the", "a",
+        "screen", "mera screen", "meri screen", "camera", "photo", "creen",
+        "creen pr", "mera", "meri",
+    })
+    if not items and query.strip().lower() in _fillers:
+        return ("NO_SEARCH: query sirf filler/typo hai — search mat karo, "
+                "user se normal baat karo. Screen dekhni ho to 'screen dekho' suno.")
+
     if items and mode not in ("compare",):
         mode = "compare"
 
@@ -345,7 +379,7 @@ def web_search(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "web_search",
-    "description": "Searches the web. Use for ANY question about current facts, events, prices, or topics — always prefer this over guessing. Modes: 'search' (default), 'news' (latest headlines on a topic), 'research' (deep comprehensive answer), 'price' (product cost lookup), 'compare' (side-by-side comparison of items).",
+    "description": "Searches the web. Use for ANY question about current facts, events, prices, or topics — always prefer this over guessing. Modes: 'search' (default), 'news' (latest headlines on a topic), 'research' (deep comprehensive answer), 'price' (product cost lookup), 'compare' (side-by-side comparison of items). NEVER call with a single filler word (arey, achha, tum, ok) — talk to the user instead.",
     "parameters": {
         "type": "OBJECT",
         "properties": {

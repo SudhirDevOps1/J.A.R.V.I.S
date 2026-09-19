@@ -923,6 +923,9 @@ class _SessionRegistry:
 
 _registry = _SessionRegistry()
 
+# ADDITIVE double-tab guard store: normalized URL -> monotonic timestamp.
+_NAV_DEDUPE: dict[str, float] = {}
+
 def browser_control(
     parameters:    dict = None,
     response=None,
@@ -963,6 +966,21 @@ def browser_control(
     # opens here. The only exception: if an automation flow is already running,
     # navigation continues in that window (so multi-step tasks aren't split).
     if action in ("go_to", "search", "new_tab"):
+        # ADDITIVE dedupe: model kabhi same URL do baar bhejta hai (double-tab bug).
+        # 12s window me same URL = skip + purana result. Purana flow untouched.
+        try:
+            import time as _t
+            _nav_url = (params.get("url", "") or "").strip().lower().rstrip("/")
+            _now = _t.monotonic()
+            _last = _NAV_DEDUPE.get(_nav_url, 0.0) if _nav_url else 0.0
+            if _nav_url and (_now - _last) < 12.0:
+                result = f"Already opened (duplicate skipped): {params.get('url', '').strip()}"
+                _log(player, result)
+                return result
+            if _nav_url:
+                _NAV_DEDUPE[_nav_url] = _now
+        except Exception:
+            pass
         if _registry.has(browser):
             sess = _registry.get(browser)
             try:

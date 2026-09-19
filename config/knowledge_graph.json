@@ -1,0 +1,27 @@
+{
+ "nodes": {
+  "coffee": {
+   "type": "entity",
+   "label": "coffee"
+  },
+  "mummy": {
+   "type": "person",
+   "label": "mummy"
+  },
+  "whatsapp": {
+   "type": "entity",
+   "label": "whatsapp"
+  },
+  "bhajan": {
+   "type": "entity",
+   "label": "bhajan"
+  }
+ },
+ "edges": [
+  [
+   "mummy",
+   "contact_via",
+   "whatsapp"
+  ]
+ ]
+}

@@ -87,6 +87,11 @@ def check_sfx(verbose=True):
             print(f'  [!] SFX generation note: {e}')
 
 def check_piper_hindi(verbose=True):
+    # REMOVED per user request (Edge TTS + Gemini Live only) — no download, no check.
+    # Stale model files (if any) are left untouched on disk; engine never loads them.
+    if verbose:
+        print('  [--] Piper Hindi TTS: Removed (Edge + Gemini Live only)')
+    return
     base = os.path.join(PROJECT_ROOT, 'core', 'models', 'piper')
     os.makedirs(base, exist_ok=True)
     m_path = os.path.join(base, 'hi_IN-pratham-medium.onnx')

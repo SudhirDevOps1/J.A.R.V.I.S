@@ -726,7 +726,7 @@ _ALIASES = {
 }
 
 _VALUE_ACTIONS = {"volume_set", "type_text", "press_key", "reload_n",
-                  "scroll_up", "scroll_down"}
+                  "scroll_up", "scroll_down", "focus_window", "bring_to_front", "activate_window"}
 
 
 def _normalise(text: str) -> str:
@@ -875,6 +875,13 @@ def computer_settings(
         scroll_down(int(value or 500))
         return "Scrolled down."
 
+    if action in ("focus_window", "activate_window", "bring_to_front", "window_lao", "switch_to"):
+        from actions.window_tools import _walker
+        target = str(value or params.get("title", params.get("query", "")) or "").strip()
+        if not target:
+            return "Kaun si window focus karni hai? Value mein window naam do (e.g. value='chrome')."
+        return _walker(target, player)
+
     func = ACTION_MAP.get(action)
     if not func:
         return _suggest(raw_action or description)
@@ -938,6 +945,7 @@ TOOL = {
                     "brightness_up | brightness_down | sleep_display | "
                     "pause_video | close_app | close_window | full_screen | "
                     "minimize | maximize | snap_left | snap_right | "
+                    "focus_window | activate_window | bring_to_front | "
                     "switch_window | show_desktop | task_manager | focus_search | "
                     "refresh_page | close_tab | new_tab | next_tab | prev_tab | "
                     "go_back | go_forward | zoom_in | zoom_out | zoom_reset | "

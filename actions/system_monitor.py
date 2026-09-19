@@ -156,14 +156,40 @@ class SystemMonitor:
         self.thresholds   = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
         self._last_alert: dict[str, float] = {}
         self._cpu_streak  = 0
+        # ADDITIVE: escalating quiet — 1 ghante me 2nd fire par 30 min chup.
+        # "bar bar warning" band, pehli warning same time par.
+        self._fires: dict[str, list[float]] = {}
+        self._escalated_until: dict[str, float] = {}
 
     def _can_alert(self, key: str) -> bool:
+        try:
+            now = time.monotonic()
+            if now < self._escalated_until.get(key, 0.0):
+                return False
+        except Exception:
+            pass
         return (time.monotonic() - self._last_alert.get(key, 0)) > _COOLDOWN
 
     def _record(self, key: str):
-        self._last_alert[key] = time.monotonic()
+        now = time.monotonic()
+        self._last_alert[key] = now
+        # ADDITIVE escalation: 1h me 2nd fire → 30 min khamoshi (pehli warning same).
+        try:
+            hist = [t for t in self._fires.get(key, []) if now - t < 3600.0]
+            hist.append(now)
+            self._fires[key] = hist[-4:]
+            if len(hist) >= 2:
+                self._escalated_until[key] = now + 1800.0
+        except Exception:
+            pass
 
     def check(self) -> str | None:
+        # ADDITIVE global mute (voice: "warning band karo"). Purane thresholds same.
+        try:
+            if is_monitor_muted():
+                return None
+        except Exception:
+            pass
         try:
             cpu  = psutil.cpu_percent(interval=None)
             ram  = psutil.virtual_memory().percent
@@ -188,8 +214,10 @@ class SystemMonitor:
             self._cpu_streak = 0
 
         if ram >= self.thresholds["ram"] and self._can_alert("ram"):
+            _top = _top_proc()
             alerts.append(
                 f"[SYSTEM_ALERT] RAM is at {ram:.0f}% — nearly exhausted. "
+                + (f"Heaviest app: {_top}. " if _top else "") +
                 "Warn the user in their language and suggest freeing memory."
             )
             self._record("ram")
@@ -210,3 +238,44 @@ class SystemMonitor:
             self._record("gpu")
 
         return " ".join(alerts) if alerts else None
+
+
+# ── ADDITIVE module helpers: mute switch + top-process (purana class untouched) ──
+_MONITOR_MUTED = False
+
+
+def set_monitor_muted(muted: bool) -> bool:
+    """Voice switch: warning band/chalu. Returns new state. Never raises."""
+    global _MONITOR_MUTED
+    try:
+        _MONITOR_MUTED = bool(muted)
+    except Exception:
+        pass
+    return _MONITOR_MUTED
+
+
+def is_monitor_muted() -> bool:
+    try:
+        return bool(_MONITOR_MUTED)
+    except Exception:
+        return False
+
+
+def _top_proc() -> str:
+    """Sabse bhari user process (best-effort). Never raises."""
+    try:
+        best, best_v = "", 0.0
+        for p in psutil.process_iter(["name", "memory_percent"]):
+            try:
+                n = (p.info.get("name") or "").lower()
+                if not n or n in ("system", "registry", "svchost.exe", "idle",
+                                  "memory compression"):
+                    continue
+                v = float(p.info.get("memory_percent") or 0.0)
+                if v > best_v:
+                    best, best_v = n, v
+            except Exception:
+                continue
+        return f"{best} ({best_v:.1f}% mem)" if best else ""
+    except Exception:
+        return ""

@@ -1,0 +1,8 @@
+{
+  "_note": "Tuya devices: {name: {id, key, ip}}",
+  "bedroom light": {
+    "id": "",
+    "key": "",
+    "ip": ""
+  }
+}

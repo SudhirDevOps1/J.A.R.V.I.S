@@ -209,14 +209,8 @@ class EdgeTTSEngine:
         try:
             audio_bytes = loop.run_until_complete(self._synth(cleaned))
         except Exception as e:
-            print(f"[EdgeTTS] Synthesis failed ({e}). Falling back to Piper Hindi...")
-            try:
-                engine = PiperHindiTTSEngine()
-                engine.speak(cleaned)
-                return
-            except Exception as e_pipe:
-                print(f"[TTS Fallback] Piper Hindi also failed: {e_pipe}")
-                return
+            print(f"[EdgeTTS] Synthesis failed ({e}). Piper removed — no offline fallback.")
+            return
         finally:
             loop.close()
         if audio_bytes:
@@ -483,50 +477,11 @@ class ElevenLabsTTSEngine:
         _play_audio_bytes(resp.content)
 
 
-class PiperHindiTTSEngine:
-    """Offline Piper Hindi Neural TTS using Devanagari script (hi_IN-pratham-medium).
-    Runs 100% locally on CPU with natural, accent-free Indian cadence.
-    """
-
-    def __init__(self, model_path: Optional[str] = None, config_path: Optional[str] = None):
-        base_dir = os.path.dirname(__file__)
-        self.model_path = model_path or os.path.join(base_dir, "models", "piper", "hi_IN-pratham-medium.onnx")
-        self.config_path = config_path or os.path.join(base_dir, "models", "piper", "hi_IN-pratham-medium.onnx.json")
-        self._voice = None
-        self._lock = threading.Lock()
-        self._init()
-
-    def _init(self) -> None:
-        if self._voice is not None:
-            return
-        if not os.path.exists(self.model_path) or not os.path.exists(self.config_path):
-            raise FileNotFoundError(f"Piper Hindi model missing at {self.model_path}")
-        try:
-            from piper import PiperVoice
-            self._voice = PiperVoice.load(self.model_path, self.config_path)
-            print("[TTS] Piper Hindi voice engine loaded successfully.")
-        except Exception as e:
-            print(f"[TTS] Failed to load Piper voice: {e}")
-            raise
-
-    def speak(self, text: str) -> None:
-        with self._lock:
-            if self._voice is None:
-                self._init()
-            cleaned_text = clean_speech_text(text)
-            if not cleaned_text:
-                return
-
-            audio_chunks = []
-            sample_rate = 22050
-            for chunk in self._voice.synthesize(cleaned_text):
-                if chunk.audio_float_array is not None:
-                    audio_chunks.append(chunk.audio_float_array)
-                    sample_rate = chunk.sample_rate
-
-            if audio_chunks:
-                full_audio = np.concatenate(audio_chunks)
-                _play_np(full_audio, sample_rate)
+# ---------------------------------------------------------------------------
+# NOTE: PiperHindiTTSEngine REMOVED per user request (Edge TTS + Gemini Live only).
+# Any stored 'piper*' engine setting auto-migrates to Edge (see
+# memory/config_manager.get_tts_engine). Model files deleted from core/models/piper/.
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -582,7 +537,8 @@ class TTSPlayer:
 def create_tts_player(config: dict) -> TTSPlayer:
     engine_name = config.get("tts_engine", "edgetts").lower()
     if engine_name in ("piper", "piper_hindi", "piper_hi"):
-        engine = PiperHindiTTSEngine()
+        # Piper removed — migrate to Edge default voice
+        engine = EdgeTTSEngine(voice=config.get("tts_voice", "en-US-GuyNeural"))
     elif engine_name == "kokoro":
         voice  = config.get("tts_voice", "af_heart")
         speed  = float(config.get("tts_speed", 1.0))
@@ -600,15 +556,12 @@ def create_tts_player(config: dict) -> TTSPlayer:
 def test_tts_voice(engine_name: str, voice_name: str = "", text: Optional[str] = None) -> tuple[bool, str]:
     """Test and preview speech synthesis for the specified engine.
     Returns (success, message). Safe to call from background worker thread.
-    Falls back gracefully to Piper Hindi if network/dependencies are unavailable.
+    Piper removed — piper* requests report removed (no silent fallback).
     """
-    engine_id = (engine_name or "piper_hindi").lower().strip()
+    engine_id = (engine_name or "edgetts").lower().strip()
     try:
         if engine_id in ("piper", "piper_hindi", "piper_hi"):
-            sample = text or "नमस्ते सुधीर सर, यह पाइपर ऑफ़लाइन हिंदी आवाज़ है। सिस्टम पूरी तरह तैयार है।"
-            engine = PiperHindiTTSEngine()
-            engine.speak(sample)
-            return True, "Piper Hindi offline voice test passed [OK]"
+            return False, "Piper Hindi removed — use EdgeTTS or Gemini Live voice."
 
         elif engine_id in ("edgetts", "edge"):
             sample = text or "नमस्ते सुधीर सर, यह माइक्रोसॉफ्ट एज न्यूरल आवाज़ है।"
@@ -618,13 +571,7 @@ def test_tts_voice(engine_name: str, voice_name: str = "", text: Optional[str] =
                 engine.speak(sample)
                 return True, f"EdgeTTS ({v}) test passed [OK]"
             except Exception as e_net:
-                # Network or DNS unreachable -> Graceful fallback to Piper Hindi
-                try:
-                    fallback = PiperHindiTTSEngine()
-                    fallback.speak("एज टीटीएस नेटवर्क अनुपलब्ध है। पाइपर ऑफ़लाइन हिंदी आवाज़ पर स्विच किया गया।")
-                except Exception:
-                    pass
-                return False, f"EdgeTTS Network/DNS error ({e_net}). Auto-tested Piper Hindi fallback [OK]"
+                return False, f"EdgeTTS Network/DNS error ({e_net}). Check internet connection."
 
         elif engine_id == "kokoro":
             sample = text or "Hello Sudhir Sir, this is Kokoro neural voice."
@@ -633,12 +580,7 @@ def test_tts_voice(engine_name: str, voice_name: str = "", text: Optional[str] =
                 engine.speak(sample)
                 return True, "Kokoro offline voice test passed [OK]"
             except Exception as e_kokoro:
-                try:
-                    fallback = PiperHindiTTSEngine()
-                    fallback.speak("कोकोरो मॉड्यूल इन्स्टॉल नहीं है। पाइपर ऑफ़लाइन हिंदी आवाज़ सक्रिय है।")
-                except Exception:
-                    pass
-                return False, f"Kokoro not installed (pip install kokoro soundfile). Auto-tested Piper Hindi [OK]"
+                return False, f"Kokoro not installed (pip install kokoro soundfile). Error: {e_kokoro}"
 
         elif engine_id in ("gemini_live", "gemini"):
             sample = text or "नमस्ते सुधीर सर, गूगल जेमिनी लाइव 2.5 फ्लैश वॉइस मोड तैयार है।"
@@ -646,20 +588,13 @@ def test_tts_voice(engine_name: str, voice_name: str = "", text: Optional[str] =
                 engine = EdgeTTSEngine(voice="hi-IN-MadhurNeural")
                 engine.speak(sample)
                 return True, "Gemini Live voice preview passed [OK]"
-            except Exception:
-                fallback = PiperHindiTTSEngine()
-                fallback.speak(sample)
-                return True, "Gemini Live voice preview (Piper Audio) passed [OK]"
+            except Exception as e_live:
+                return False, f"Gemini Live preview failed: {e_live}"
 
         else:
             return False, f"Unknown voice engine: {engine_name}"
 
     except Exception as e:
-        # Ultimate safety net: play local piper
-        try:
-            PiperHindiTTSEngine().speak("वॉइस सिस्टम तैयार है।")
-        except Exception:
-            pass
         return False, f"Voice test error: {e}"
 
 

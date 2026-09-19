@@ -57,7 +57,7 @@ if exist ".venv\Scripts\activate.bat" (
 )
 
 :: 3. Check and Auto-Install Python Dependencies on First Run
-echo [*] Checking libraries & system dependencies...
+echo [*] Checking libraries and system dependencies...
 %PYTHON_EXE% -c "import PyQt6, google.genai, requests, sounddevice, edge_tts, PIL, psutil, tinydb, rank_bm25, thefuzz, keyboard, sklearn" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [*] Pehli baar setup ho raha hai ya missing packages hain.

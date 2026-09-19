@@ -75,7 +75,7 @@ class ResearcherAgent:
             # Ground with Gemini Flash
             try:
                 from core.multi_llm import get_llm_model
-                client = get_llm_model(model="gemini-2.5-flash")
+                client = get_llm_model(model="gemini-2.0-flash")
                 res = client.generate_content(
                     f"Provide quick, factual technical research notes on: {topic_or_url}. Focus on architecture, API structure, and key data points."
                 )
@@ -105,7 +105,7 @@ Rules:
 """
         try:
             from core.multi_llm import get_llm_model
-            client = get_llm_model(model="gemini-2.5-flash")
+            client = get_llm_model(model="gemini-2.0-flash")
             res = client.generate_content(prompt)
             code = (res.text or "").strip()
             code = re.sub(r"^```[a-zA-Z]*\n?", "", code)
@@ -168,7 +168,7 @@ Fix the script so it executes without error. Return ONLY the corrected Python co
 """
         try:
             from core.multi_llm import get_llm_model
-            client = get_llm_model(model="gemini-2.5-flash")
+            client = get_llm_model(model="gemini-2.0-flash")
             res = client.generate_content(prompt)
             code = (res.text or "").strip()
             code = re.sub(r"^```[a-zA-Z]*\n?", "", code)
@@ -192,7 +192,7 @@ Explain what was done, key findings, and next steps if any. Do not sound robotic
 """
         try:
             from core.multi_llm import get_llm_model
-            client = get_llm_model(model="gemini-2.5-flash")
+            client = get_llm_model(model="gemini-2.0-flash")
             res = client.generate_content(prompt)
             return (res.text or "").strip()
         except Exception:

@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import threading as _th
 from pathlib import Path
 
 def get_base_dir() -> Path:
@@ -57,6 +58,21 @@ def _atomic_write_json(path: Path, data: dict) -> None:
         except Exception:
             pass
         raise
+    finally:
+        # Additive: secrets chmod 600 (Windows par ignore, kuch hataya nahi)
+        try:
+            _secure_secret_perms(path)
+        except Exception:
+            pass
+
+
+def _secure_secret_perms(path: Path) -> None:
+    """api_keys.json etc par 0o600 lagao + rotate warning (additive, no delete)."""
+    try:
+        if os.name != "nt":
+            os.chmod(path, 0o600)
+    except Exception:
+        pass
 
 def ensure_config_dir() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -65,30 +81,24 @@ def config_exists() -> bool:
     return CONFIG_FILE.exists()
 
 def save_api_keys(gemini_api_key: str) -> None:
-    ensure_config_dir()
-
-    data: dict = {}
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-
-    data["gemini_api_key"] = gemini_api_key.strip()
-
-    CONFIG_FILE.write_text(
-        json.dumps(data, indent=2),
-        encoding="utf-8"
-    )
+    # Routed via _patch_config: backup + file-lock + atomic write (indent cosmetic only)
+    _patch_config(gemini_api_key=gemini_api_key.strip())
 
 def load_api_keys() -> dict:
+    """Load config with secrets transparently decrypted (in-memory only).
+    Disk stays encrypted (ENC blobs); every existing reader keeps working."""
     if not CONFIG_FILE.exists():
         return {}
     try:
-        return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     except Exception as e:
         print(f"❌ Failed to load api_keys.json: {e}")
         return {}
+    try:
+        from core.secret_vault import decrypt_dict
+        return decrypt_dict(data)
+    except Exception:
+        return data if isinstance(data, dict) else {}
 
 def get_gemini_key() -> str | None:
     return load_api_keys().get("gemini_api_key")
@@ -129,16 +139,8 @@ def get_user_name() -> str:
 
 def save_assistant_config(assistant_name: str, user_name: str) -> None:
     """Persist assistant name and user name to config."""
-    ensure_config_dir()
-    data: dict = {}
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-    data["assistant_name"] = assistant_name.strip() or "JARVIS"
-    data["user_name"] = user_name.strip()
-    CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    _patch_config(assistant_name=assistant_name.strip() or "JARVIS",
+                  user_name=user_name.strip())
 
 
 # ── Assistant voice ──────────────────────────────────────────────────────────
@@ -158,16 +160,8 @@ def get_voice() -> str:
 def save_voice(voice_name: str) -> None:
     """Persist the chosen Live voice. Unknown names collapse to the default so a
     bad value can never reach the API and break the session."""
-    ensure_config_dir()
-    data: dict = {}
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
     v = (voice_name or "").strip()
-    data["voice_name"] = v if v in AVAILABLE_VOICES else DEFAULT_VOICE
-    CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    _patch_config(voice_name=v if v in AVAILABLE_VOICES else DEFAULT_VOICE)
 
 
 def get_wake_word_enabled() -> bool:
@@ -176,15 +170,7 @@ def get_wake_word_enabled() -> bool:
 
 
 def save_wake_word_enabled(enabled: bool) -> None:
-    ensure_config_dir()
-    data: dict = {}
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-    data["wake_word_enabled"] = bool(enabled)
-    CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    _patch_config(wake_word_enabled=bool(enabled))
 
 
 def get_brief_enabled() -> bool:
@@ -192,15 +178,7 @@ def get_brief_enabled() -> bool:
 
 
 def save_brief_enabled(enabled: bool) -> None:
-    ensure_config_dir()
-    data: dict = {}
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-    data["morning_brief_enabled"] = enabled
-    CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    _patch_config(morning_brief_enabled=enabled)
 
 
 # ── Audio devices ────────────────────────────────────────────────────────────
@@ -210,28 +188,48 @@ def save_brief_enabled(enabled: bool) -> None:
 # both the factory setting and what an unresolvable saved device falls back to —
 # so unplugging a headset degrades to the built-in speakers instead of crashing.
 
+_CONFIG_LOCK = _th.Lock()
+
+
 def _patch_config(**fields) -> None:
     """Read-modify-write one or more keys in api_keys.json.
 
     Every setter in this file open-coded this. Collapsing it here means a new
     setting is one line, and there is one place where a corrupt config file is
-    handled instead of nine."""
-    ensure_config_dir()
-    data: dict = {}
-    if CONFIG_FILE.exists():
+    handled instead of nine. File-lock + backup + atomic write (crash-safe)."""
+    with _CONFIG_LOCK:
+        ensure_config_dir()
+        data: dict = {}
+        if CONFIG_FILE.exists():
+            try:
+                data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        # ADDITIVE: secret-looking values encrypted at rest (ENC blobs on disk).
+        # Plaintext readers unaffected (load decrypts); non-secrets untouched.
+        # Nested dicts (obsidian_config, plugin_config) handled recursively.
         try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            from core.secret_vault import is_secret_key, encrypt_value
+
+            def _enc_walk(obj):
+                if isinstance(obj, dict):
+                    return {k: (encrypt_value(v) if isinstance(v, str) and is_secret_key(str(k)) and v.strip() else _enc_walk(v)) for k, v in obj.items()}
+                if isinstance(obj, list):
+                    return [_enc_walk(x) for x in obj]
+                return obj
+
+            fields = _enc_walk(dict(fields))
         except Exception:
-            data = {}
-    data.update(fields)
-    try:
-        _backup_config()
-    except Exception:
-        pass
-    try:
-        _atomic_write_json(CONFIG_FILE, data)
-    except Exception:
-        CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+            pass
+        data.update(fields)
+        try:
+            _backup_config()
+        except Exception:
+            pass
+        try:
+            _atomic_write_json(CONFIG_FILE, data)
+        except Exception:
+            CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
 
 
 def get_input_device() -> str:
@@ -278,39 +276,21 @@ def get_plugin_setting(namespace: str, key: str, default=None):
 def save_plugin_config(namespace: str, values: dict) -> None:
     """Merge `values` into a namespace's stored config (read-modify-write, like
     every other helper here). Only the provided keys are touched."""
-    ensure_config_dir()
-    data: dict = {}
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-    pc = data.get("plugin_config")
-    if not isinstance(pc, dict):
-        pc = {}
+    cfg = load_api_keys().get("plugin_config")
+    pc = dict(cfg) if isinstance(cfg, dict) else {}
     cur = pc.get(namespace)
     if not isinstance(cur, dict):
         cur = {}
     cur.update(values)
     pc[namespace] = cur
-    data["plugin_config"] = pc
-    CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    _patch_config(plugin_config=pc)
 
 
 def save_plugin_enabled(plugin_name: str, enabled: bool) -> None:
-    ensure_config_dir()
-    data: dict = {}
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-    plugins_cfg = data.get("plugins_enabled")
-    if not isinstance(plugins_cfg, dict):
-        plugins_cfg = {}
+    cfg = load_api_keys().get("plugins_enabled")
+    plugins_cfg = dict(cfg) if isinstance(cfg, dict) else {}
     plugins_cfg[plugin_name] = enabled
-    data["plugins_enabled"] = plugins_cfg
-    CONFIG_FILE.write_text(json.dumps(data, indent=4), encoding="utf-8")
+    _patch_config(plugins_enabled=plugins_cfg)
 
 
 def get_sfx_enabled() -> bool:
@@ -324,8 +304,12 @@ def save_sfx_enabled(enabled: bool) -> None:
 
 
 def get_tts_engine() -> str:
-    """Return current TTS engine ('gemini_live', 'piper_hindi', 'edgetts', 'kokoro')."""
-    return (load_api_keys().get("tts_engine", "gemini_live") or "gemini_live").lower()
+    """Return current TTS engine ('gemini_live', 'edgetts', 'kokoro').
+    Piper removed per user request — stored piper* auto-migrates to Edge."""
+    eng = (load_api_keys().get("tts_engine", "gemini_live") or "gemini_live").lower()
+    if eng in ("piper_hindi", "piper", "piper_hi"):
+        return "edgetts"
+    return eng
 
 
 def save_tts_engine(engine_name: str) -> None:
@@ -578,4 +562,93 @@ def get_edge_reflex_enabled() -> bool:
 def save_edge_reflex_enabled(enabled: bool) -> None:
     """Persist Edge Reflex toggle state."""
     _patch_config(enable_edge_reflex=bool(enabled))
+
+
+def get_onboarded() -> bool:
+    """ADDITIVE: first-run onboarding shown? Default False (purani installs par ek baar dikhega)."""
+    return bool(load_api_keys().get("onboarded", False))
+
+
+def save_onboarded(done: bool = True) -> None:
+    """ADDITIVE: onboarding flag persist."""
+    _patch_config(onboarded=bool(done))
+
+
+# ── API-key encryption at rest — now machine-bound vault (DPAPI/file key) ────
+# Old MACHINE_KEY-env approach never worked (nobody set it) → delegated to
+# core.secret_vault. Same function names/signatures — existing callers untouched.
+def encrypt_secret(plain: str) -> str:
+    """Encrypt to ENC(...) via machine vault. Never raises."""
+    try:
+        from core.secret_vault import encrypt_value
+        return encrypt_value(plain)
+    except Exception:
+        return plain
+
+
+def decrypt_secret(stored: str) -> str:
+    """Decrypt ENC(...) via machine vault, else passthrough (never raises)."""
+    try:
+        from core.secret_vault import decrypt_value
+        return decrypt_value(stored)
+    except Exception:
+        return stored
+
+
+# ── Additive: session persist + plugin hot-reload + semantic cache ───────────
+def save_session_state(handle: str) -> None:
+    """Gemini Live resumption handle encrypted persist (RAM-only flow untouched)."""
+    try:
+        _patch_config(session_state={"handle": encrypt_secret(handle or "")})
+    except Exception:
+        pass
+
+
+def load_session_state() -> str:
+    """Persisted handle or '' (never raises)."""
+    try:
+        _raw = (load_api_keys().get("session_state", {}) or {}).get("handle", "")
+        return decrypt_secret(str(_raw or ""))
+    except Exception:
+        return ""
+
+
+def watch_plugins_once(callback=None) -> bool:
+    """Watchdog optional live-reload probe. watchdog na ho to False, kuch nahi todta."""
+    try:
+        import importlib.util as _u
+        if _u.find_spec("watchdog") is None:
+            return False
+        if callback:
+            try:
+                callback()
+            except Exception:
+                pass
+        return True
+    except Exception:
+        return False
+
+
+def cache_lookup_semantic(query: str, candidates: list[str]) -> str | None:
+    """bm25-based semantic cache probe. bm25 na ho to None (cache untouched)."""
+    try:
+        q = (query or "").strip().lower()
+        if not q or not candidates:
+            return None
+        from actions.bm25_search import bm25_scores as _bm
+        _sc = _bm(q, candidates)
+        _best = max(_sc, key=lambda x: x[1]) if _sc else (None, 0.0)
+        return _best[0] if _best[1] > 2.0 else None
+    except Exception:
+        try:
+            # Fallback: token-overlap (bm25 module shape alag ho to bhi kaam kare)
+            _qt = set(q.split())
+            _best, _bs = None, 0
+            for c in candidates:
+                _s = len(_qt & set(str(c).lower().split()))
+                if _s > _bs:
+                    _best, _bs = c, _s
+            return _best if _bs >= 3 else None
+        except Exception:
+            return None
 

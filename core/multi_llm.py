@@ -61,9 +61,14 @@ def _load_config() -> dict:
     if not CONFIG_PATH.exists():
         return {}
     try:
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
         return {}
+    try:  # ADDITIVE: ENC blobs transparent (plaintext passthrough)
+        from core.secret_vault import decrypt_dict
+        return decrypt_dict(data)
+    except Exception:
+        return data if isinstance(data, dict) else {}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -108,11 +113,11 @@ PROVIDER_REGISTRY: dict[str, dict] = {
         "desc": "One key for 200+ models. Free models indicated with :free suffix.",
     },
     "gemini": {
-        "name": "Google Gemini (Gemini 2.5 / 2.0 Flash)",
+        "name": "Google Gemini (Gemini 2.0 / 1.5 Flash)",
         "url": "https://generativelanguage.googleapis.com",
         "key_field": "gemini_api_key",
-        "default_model": "gemini-2.5-flash",
-        "models": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
+        "default_model": "gemini-2.0-flash",
+        "models": ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"],
         "requires_key": True,
         "placeholder": "AIzaSy...",
         "desc": "1M token context window, live audio and vision.",
@@ -307,7 +312,7 @@ PROVIDER_REGISTRY: dict[str, dict] = {
         "url": "http://localhost:20128/v1",
         "key_field": "omniroute_token",
         "default_model": "auto",
-        "models": ["auto", "gpt-4o", "claude-3.5-sonnet", "gemini-2.5-pro", "deepseek-r1"],
+        "models": ["auto", "gpt-4o", "claude-3.5-sonnet", "gemini-2.0-flash", "deepseek-r1"],
         "requires_key": False,
         "placeholder": "None needed (localhost:20128)",
         "desc": "Universal local gateway. Auto-switches across 350+ backends.",
@@ -670,7 +675,14 @@ class MultiLLMClient:
         if self.gemini_key_pool:
             from google import genai
 
-            candidate_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+            candidate_models = [
+                "gemini-flash-latest",
+                "gemini-2.5-flash-lite",
+                "gemini-2.5-flash",
+                "gemini-3.7-flash",
+                "gemini-1.5-flash",
+                "gemini-2.0-flash",
+            ]
             if self.model and self.model not in candidate_models:
                 candidate_models.insert(0, self.model)
 
@@ -680,6 +692,7 @@ class MultiLLMClient:
             for api_key in keys_to_try:
                 client = genai.Client(api_key=api_key)
                 for m in candidate_models:
+                    key_rate_limited = False
                     for attempt in range(2):
                         try:
                             resp = client.models.generate_content(model=m, contents=prompt)
@@ -688,19 +701,25 @@ class MultiLLMClient:
                             err_str = str(e).lower()
                             last_err = e
                             if "429" in err_str or "quota" in err_str or "rate" in err_str:
-                                # This key is rate-limited, try next key
-                                print(f"[MultiLLM] Gemini key ...{api_key[-6:]} rate-limited → trying next key")
+                                # This key is rate-limited, try next key (masked log, never full key)
+                                try:
+                                    from core.secret_vault import mask_secret
+                                    _km = mask_secret(api_key)
+                                except Exception:
+                                    _km = "***"
+                                print(f"[MultiLLM] Gemini key {_km} rate-limited → trying next key")
+                                key_rate_limited = True
                                 break
                             elif "503" in err_str or "unavailable" in err_str or "high demand" in err_str:
                                 time.sleep(1.5)
                                 continue
-                            elif "404" in err_str:
-                                break  # Model not found, try next model
+                            elif "404" in err_str or "not found" in err_str:
+                                break  # Model deprecated/not found, advance to next candidate model
                             else:
                                 time.sleep(1.0)
-                    else:
-                        continue
-                    break  # Key rate-limited, try next key
+                    if key_rate_limited:
+                        break  # Key rate-limited, try next key
+                    continue  # Try next candidate model
 
             raise RuntimeError(f"All LLM providers failed. Last Gemini error: {last_err}")
 
@@ -965,7 +984,7 @@ def fetch_provider_models(
                         return sorted(models)
                 except Exception:
                     pass
-            return ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+            return ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro"]
 
         elif prov in ("custom", "ollama", "local"):
             url = (custom_url.strip() or cfg.get("custom_llm_url", "")).rstrip("/")
@@ -999,7 +1018,7 @@ def fetch_provider_models(
                         return models[:50]  # Limit to 50 - OmniRoute has 1200+ models
             except Exception:
                 pass
-            return ["auto", "gpt-4o", "claude-3.5-sonnet", "gemini-2.5-pro", "deepseek-r1"]
+            return ["auto", "gpt-4o", "claude-3.5-sonnet", "gemini-2.0-flash", "deepseek-r1"]
 
         elif prov in ("custom_provider", "custom-provider"):
             url = custom_url.strip().rstrip("/")

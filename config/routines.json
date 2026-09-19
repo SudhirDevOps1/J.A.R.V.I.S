@@ -1,0 +1,12 @@
+{
+  "_note": "JARVIS routines: naam -> apps ki list. Voice se chalao: 'dev routine chalao'. Nayi routine voice se banao: 'routine banao movie: brave, spotify'.",
+  "dev": [
+    "code",
+    "chrome",
+    "terminal"
+  ],
+  "movie": [
+    "chrome",
+    "spotify"
+  ]
+}

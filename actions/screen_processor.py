@@ -69,6 +69,46 @@ _IMG_MAX_W = 1280
 _IMG_MAX_H = 720
 _JPEG_Q    = 82
 
+# ADDITIVE camera fail-fast: temporary backoff when camera is busy
+_CAM_DEAD_UNTIL = 0.0
+_CAM_COOLDOWN = 10.0
+
+
+def _silence_cv2():
+    """OpenCV C++ WARN spam (stderr) ko suppress karo. Returns restore-fn. Never raises."""
+    try:
+        import os as _os
+        _fd = _os.dup(2)
+        _dev = open(_os.devnull, "w")
+        _os.dup2(_dev.fileno(), 2)
+        def _restore():
+            try:
+                _os.dup2(_fd, 2)
+                _dev.close()
+                _os.close(_fd)
+            except Exception:
+                pass
+        return _restore
+    except Exception:
+        return lambda: None
+
+
+def _cam_dead() -> bool:
+    try:
+        import time as _t
+        return _t.monotonic() < _CAM_DEAD_UNTIL
+    except Exception:
+        return False
+
+
+def _mark_cam_dead() -> None:
+    global _CAM_DEAD_UNTIL
+    try:
+        import time as _t
+        _CAM_DEAD_UNTIL = _t.monotonic() + _CAM_COOLDOWN
+    except Exception:
+        pass
+
 
 def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]:
     if not _PIL:
@@ -115,17 +155,24 @@ def _probe_camera(index: int, backend: int, warmup: int = 5) -> bool:
 
     if not _CV2:
         return False
-    cap = cv2.VideoCapture(index, backend)
-    if not cap.isOpened():
+    _restore = _silence_cv2()  # ADDITIVE: DSHOW WARN flood band
+    try:
+        cap = cv2.VideoCapture(index, backend)
+        if not cap.isOpened():
+            cap.release()
+            return False
+        for _ in range(warmup):
+            cap.read()
+        ret, frame = cap.read()
         cap.release()
-        return False
-    for _ in range(warmup):
-        cap.read()
-    ret, frame = cap.read()
-    cap.release()
-    if not ret or frame is None:
-        return False
-    return bool(np.mean(frame) > 8)
+        if not ret or frame is None:
+            return False
+        return bool(np.mean(frame) > 8)
+    finally:
+        try:
+            _restore()
+        except Exception:
+            pass
 
 
 def _detect_camera_index() -> int:
@@ -155,21 +202,55 @@ def _capture_camera() -> tuple[bytes, str]:
     if not _CV2:
         raise RuntimeError("OpenCV (cv2) is not installed. Run: pip install opencv-python")
 
+    # ADDITIVE fail-fast: temporary backoff when camera is busy
+    if _cam_dead():
+        raise RuntimeError("Camera unavailable (recent failure). Check if another app is using the webcam or camera privacy settings.")
+
     index   = _get_camera_index()
     backend = _cv2_backend()
-    cap     = cv2.VideoCapture(index, backend)
+    _restore = _silence_cv2()
+    cap = None
+    frame = None
+    try:
+        cap = cv2.VideoCapture(index, backend)
+        if not cap.isOpened():
+            # Quick fallback: release and try alternate backend
+            try:
+                cap.release()
+            except Exception:
+                pass
+            import time as _t
+            _t.sleep(0.2)
+            alt_backend = cv2.CAP_ANY if backend != cv2.CAP_ANY else cv2.CAP_DSHOW
+            cap = cv2.VideoCapture(index, alt_backend)
 
-    if not cap.isOpened():
-        raise RuntimeError(f"Camera index {index} could not be opened.")
+        if not cap.isOpened():
+            _mark_cam_dead()
+            raise RuntimeError(f"Camera index {index} could not be opened. Another application (like Windows Camera) may be using it.")
 
-    for _ in range(10):
-        cap.read()
+        for _ in range(5):
+            cap.read()
 
-    ret, frame = cap.read()
-    cap.release()
+        ret, frame = cap.read()
+        try:
+            cap.release()
+        except Exception:
+            pass
+        cap = None
 
-    if not ret or frame is None:
-        raise RuntimeError("Camera returned no frame.")
+        if not ret or frame is None:
+            _mark_cam_dead()
+            raise RuntimeError("Camera returned no frame. Check privacy shutter or webcam permissions.")
+    finally:
+        try:
+            if cap is not None and cap.isOpened():
+                cap.release()
+        except Exception:
+            pass
+        try:
+            _restore()
+        except Exception:
+            pass
 
     if _PIL:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

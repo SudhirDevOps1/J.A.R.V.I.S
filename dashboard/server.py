@@ -62,7 +62,13 @@ def _get_gemini_key() -> str | None:
     try:
         import json as _json
         with open(BASE_DIR / "config" / "api_keys.json", "r", encoding="utf-8") as f:
-            return _json.load(f).get("gemini_api_key")
+            raw = _json.load(f).get("gemini_api_key")
+        try:  # ADDITIVE: ENC blob support (plaintext passthrough)
+            from core.secret_vault import decrypt_value
+            raw = decrypt_value(raw)
+        except Exception:
+            pass
+        return raw
     except Exception:
         return None
 
@@ -665,6 +671,10 @@ class DashboardServer:
             name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name).strip(". ")
             return name or "upload"
 
+        # ADDITIVE executable blocklist (size limit + auth + traversal untouched)
+        _BLOCKED_EXT = frozenset({".exe", ".bat", ".cmd", ".ps1", ".vbs", ".scr",
+                                  ".msi", ".com", ".pif", ".jar", ".dll"})
+
         if _UPLOAD_OK:
             @app.post("/api/upload")
             async def upload_file(req: Request, file: UploadFile = FastAPIFile(...)):
@@ -672,6 +682,11 @@ class DashboardServer:
                     return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
                 safe = _safe_filename(file.filename or "upload")
+                if Path(safe).suffix.lower() in _BLOCKED_EXT:
+                    return JSONResponse(
+                        {"error": "Executable uploads blocked (.exe/.bat/.ps1/...). Zip karo ya rename karo."},
+                        status_code=415,
+                    )
                 dest = self._uploads_dir / safe
                 stem, suffix = Path(safe).stem, Path(safe).suffix
                 counter = 1

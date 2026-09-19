@@ -25,6 +25,13 @@ def _get_base_dir() -> Path:
 
 def _get_api_key() -> str:
     try:
+        from memory.config_manager import load_api_keys
+        k = (load_api_keys().get("gemini_api_key") or "").strip()
+        if k:
+            return k
+    except Exception:
+        pass
+    try:
         path = _get_base_dir() / "config" / "api_keys.json"
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:

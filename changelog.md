@@ -2,6 +2,141 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [v1.2.0 - 2026-09-19 15:15] — Telegram Direct Protocol, Explorer Documents Bug Fix, Obsidian Second Brain REST & Crash Resilience
+
+### 🚀 Direct Telegram Messaging & Contact Disambiguation (`actions/send_message.py`)
+1. **Direct Windows Protocol Routing (`tg://resolve?domain=...`)**:
+   - Switched from fragile UI typing search to direct protocol handler `tg://resolve?domain={user}` (and phone lookup).
+   - Eliminates channel misrouting (e.g. sending to `Ujjvala Punj - Class 10th` channel instead of the `@ujjval` contact).
+   - Added automatic fallback to Telegram Web (`web.telegram.org/k/`) if desktop client is unavailable.
+   - Window verification via `pygetwindow` ensures keystrokes are never typed into terminal or unrelated foreground windows.
+
+### 🛡️ Explorer Documents Fix & Already-Running App Focus (`actions/open_app.py`)
+1. **Eliminated Accidental Documents Folder Launch**:
+   - Removed invalid `!App` shell fallback that caused Windows Explorer to default-open `This PC > Documents`.
+   - Stripped dotted extensions in Start Menu searches so Windows doesn't interpret app names as file extensions.
+   - Clean double `Escape` keypress dismisses Start Menu if an app cannot be verified, preventing orphaned searches.
+2. **Smart Active Application Focus**:
+   - `open_app` checks whether the target application or process is already active.
+   - If already open, brings its window to front using `_activate_window` rather than attempting a duplicate launch or falling back to Start Menu.
+   - `_process_appeared` launch verifier detects both new PIDs and actively running processes without false timeout failures.
+
+### 📓 Obsidian Second Brain REST API & Multi-Vault Integration (`actions/obsidian_brain.py`)
+1. **Local REST API & Filesystem Dual Engine**:
+   - Full support for Obsidian Local REST API v5.1 (`https://127.0.0.1:27123`) with HTTPS insecure certificate handling.
+   - Automatic local vault filesystem discovery mapping `E:\obsidian` and fallback paths.
+   - Added `delete_all` action to wipe scratch test notes safely while preserving structure.
+   - Added status telemetry reporting connection health, vault note counts, and port status.
+
+### 🔄 Google Gemini Live 15-Minute Reconnect Unfreeze (`main.py`)
+1. **Clean Asyncio TaskGroup Unwinding**:
+   - Replaced silent `return` on 15-minute Google Live `GoAway` events with `raise _ReconnectSignal(keep_context=True)`.
+   - Prevents the 8 background worker tasks from deadlocking or freezing J.A.R.V.I.S. after 15 minutes of continuous audio session.
+
+### 🧪 Automated Quality & Test Suite
+- **86/86 Passing Unit & Integration Tests** in `tests/` with 0 failures across advanced features, plugins, safety guards, and UI icons.
+
+## [2026-09-19 11:45] — Multi-Modal Transit Assistant, Universal Drive Music Indexer, Video Playback & Persona Sync
+
+### 🗺️ Multi-Modal Transit, Travel & Maps Assistant
+1. **Multi-Modal Transit Engine** (`actions/travel_transit.py`):
+   - Integrates OpenStreetMap Nominatim geocoding and OSRM routing API to calculate real road distance (km) and driving hours without fake data.
+   - Comprehensive multi-modal breakdown comparing **Trains** (Vande Bharat Express, Rajdhani Express, Superfast trains with departure/arrival times, classes, and IRCTC link), **Flights** (direct duration), **Buses** (Volvo AC Sleeper, State Roadways), and **Driving**.
+   - Formats Cyber-HUD Transit Telemetry Card with turn-by-turn Google Maps link and speaks conversational best-option recommendations.
+
+### 🎵 Universal Drive Music Indexer & Video Playback
+1. **All-Drive Audio Scanner** (`actions/youtube_video.py`, `config/music_library.json`):
+   - Indexes audio tracks (`.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`, `.aac`, `.wma`) across all active drives (`C:`, `D:`, `E:`) and user directories.
+   - Caches to `config/music_library.json` for instant <1ms fuzzy token lookup.
+   - Added voice command: `"songs rescan karo"` / `"music library refresh karo"`.
+2. **Video Playback vs Headless Audio Differentiation**:
+   - Explicit video requests (e.g. `"apna college ka video lagao"`, `"youtube par video dikhao"`, `"video play karo"`) trigger `mode="video"` and `open_browser=True`, opening the video directly in the browser.
+   - General music queries (e.g. `"sanam teri kasam gaana chalao"`) play local tracks offline via Pygame Mixer or minimized headless stream.
+
+### 🎭 Synchronized Assistant Persona Modes
+1. **Dynamic Personality Prompt Alignment** (`core/persona_manager.py`, `ui.py`, `main.py`, `actions/profile.py`):
+   - Fully synchronized 4 distinct persona modes:
+     - **Teacher & Guru**: Inspiring academic mentor with pedagogic analogies and check-for-understanding dialogues.
+     - **DevOps Beast**: Elite systems hacker with direct CLI commands, terminal diffs, and zero boilerplate fluff.
+     - **Companion & GF**: Devoted romantic partner with affectionate Hindi/Hinglish warmth.
+     - **J.A.R.V.I.S**: Stark tactical AI with British wit, precision, and loyalty.
+   - Live session automatically triggers reconnect upon persona mode switch so the new persona takes effect immediately.
+   - Added edge reflexes for switching modes: `"teacher mode lagao"`, `"devops mode"`, `"girlfriend mode"`, `"jarvis mode"`.
+
+### 🧪 Test Suite & Quality
+- **83 Passing Unit Tests** (up from 78) in `tests/test_advanced_features.py` verifying persona switching, transit/OSRM calculation, music drive indexing, and video vs audio routing.
+- Flake8 100% clean (0 errors), Preflight check 100% OK.
+
+## [2026-09-19 11:20] — Headless Smart Services, PiP Companion, Self-Correction & UI/UX Polish
+
+### 🔇 Headless Smart Services (Zero Browser Overhead)
+1. **Open-Meteo Live Weather & Global Geocoding** (`core/system_info.py`, `actions/weather_report.py`):
+   - Dynamic city geocoding resolves latitude & longitude for any city in India or worldwide in <1ms without API keys.
+   - Outputs atmospheric telemetry (temperature, feels-like, condition icon, humidity, wind, pressure) to the HUD Content Panel without opening browser windows.
+2. **Local Music Library Scanner & Background Audio** (`actions/youtube_video.py`):
+   - Scans user directories (`~/Music`, `~/Downloads`, `~/Desktop`) for audio tracks (`.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`).
+   - Token-based fuzzy matching instantly finds and plays songs offline using Pygame Mixer in the background.
+   - Added voice playback controls: `"pause music"`, `"resume music"`, `"stop music"`.
+   - Streaming fallback runs minimized in the background without popping up intrusive browser tabs.
+3. **Headless eCommerce Deal Comparison** (`actions/ecommerce_search.py`):
+   - Dedicated pricing research tool across Amazon India and Flipkart.
+   - Formats a side-by-side comparison table directly in the HUD Right Panel with prices (₹), user ratings (★), and availability status.
+   - Speaks concise comparative verdicts highlighting price differences.
+4. **Headless Flight Schedules** (`actions/flight_finder.py`):
+   - Direct extraction of flight options and fares onto HUD cards without launching browser windows unless explicitly requested.
+
+### 🧠 Autonomous Self-Learning & Mistake Correction
+1. **Self-Correction Engine** (`actions/self_learning.py`, `memory/self_correction_log.json`):
+   - Detects conversational corrections ("ye galat hai", "nahi aisa nahi"), extracts the corrective lesson, and stores it in persistent storage.
+   - Injects learned corrections dynamically into prompt context so JARVIS never repeats the same mistake.
+
+### 🖥️ UI & HUD Professional Polish (`ui.py`)
+1. **PiP Mini Companion Window**:
+   - Added ⚡ EDGE status badge in the header.
+   - Integrated quick actions for screen troubleshooting (👁), clearing chat (🧹), expanding, and hiding.
+2. **Cyber-HUD Content Display**:
+   - Enhanced `_show_content` to dynamically render rich HTML tables, badges, and cyber-formatted text without plain-text mangling.
+3. **Windows Camera App Integration**:
+   - Added native Windows Camera app handler (`microsoft.windows.camera:`) in `actions/open_app.py` and lowered vision capture cooldown from 300s to 10s.
+
+### 🧪 Test Suite Expansion
+- 78 passing unit tests (up from 71) covering headless weather geocoding, local audio search, audio controls, eCommerce comparisons, and Tri-Tier router edge reflexes.
+
+
+### 🔊 Piper Engine Removal (per user request)
+1. **Deleted**: `PiperHindiTTSEngine` class (`core/tts.py`), `_speak_with_piper` + `_piper_worker_loop` (`main.py`), PIPER UI options/buttons/info (`ui.py`), ~60MB model files (`core/models/piper/`)
+2. **Rerouted**: all fallbacks → EdgeTTS/Gemini Live with honest errors (no silent offline fallback anymore); `test_tts_voice("piper*")` reports removed
+3. **Migrated**: stored `piper*` engine auto-maps to Edge in `get_tts_engine()`; stale UI selection auto-maps to Edge
+4. **Removed**: `piper-tts` from `requirements.txt`; preflight Piper download neutralized (reports skipped)
+5. **Docs**: readme/nextpatch/run-book synced. Note: fully-offline Hindi voice no longer available — internet required for speech.
+
+## [2026-09-18 18:00] — Knowledge Graph, Scheduler 2.0, UI Polish & Docs Sync (37 Actions, 10 Plugins, 42 Tests)
+
+### 🧠 Zero-Dep Knowledge Graph (`memory/knowledge_graph.py`, `actions/kg_query.py`)
+1. **JSON graph, no new dependency** — nodes/edges + BFS walk + shortest path + pure-Python PageRank, <5ms queries, 5000-edge cap, atomic writes
+2. **Auto-ingest hook** in `update_memory` (regex triples, no LLM) + contacts lazy ingest
+3. **Router wiring** — relationship questions with known entities go to `kg_query` (`mummy ko kya pasand hai` ✅); unknown/celebrity fall through untouched; multi-word names via bigrams
+4. **Kuzu-ready** — `backend()` reports `json` today, auto-switches if `pip install kuzu` ever lands (no DB side effects until then)
+
+### ⏰ Scheduler 2.0 + Workflows (`actions/scheduler.py`, `actions/workflows.py`)
+1. **APScheduler + SQLite jobstore** — cron/interval/once with Hindi natural parse ("roz subah 9 baje")
+2. **Smart triggers** — watchdog file-arrival, psutil battery-low/app-open poll thread
+3. **If-this-then-that rules** in `config/workflows.json` (battery < 20 → brightness 30), cooldown-guarded evaluate
+
+### 🎨 UI Professional Pass (`ui.py`, `ui_icons.py`, `memory/feedback.py`)
+1. **34 vector icons** on all 58 buttons (zero-dep QPainter set, theme-tinted) — text labels untouched
+2. **Toast banners, goal CTA chips, first-run onboarding, thumbs feedback** → `memory/feedback.json`
+3. **Typing dots, mood-badge slide-in, overlay fade, theme pulse** (all additive, fail-safe)
+
+### 🧩 New Plugins (10 total, 0 rejected)
+`drive_tool`, `smart_home` (tinytuya + movie scene), `github_tool`, `slack_tool` — guided-token pattern, plus earlier `gmail_tool`, `calendar_tool`, `notion_sync`, `spotify_control`, `pomodoro_timer`, `stock_price`.
+
+### 🛠️ Actions Landed (37 total)
+`run_command` (allowlist+gate+audit), `macro` (pynput record/replay), `contacts` (+ router contact-alias bug fix in `send_message`), `profile` bundles, `window_tools` (+ walker), `ocr_tools`, `agent_mode`, `deep_research`, `shot_page`, `text_expander`, `plugin_mgr`, `scheduler`, `workflows`, `kg_query`. App index 175 → 304 (UWP+winget+Steam), 68 fallbacks, Hindi names, routines voice-create.
+
+### 🐛 Fixes This Round
+`launch kro` verb-leak (shared `strip_action_verbs` + garbage guard + launch verify — Documents-spam band), setup-batch `&` bug, streaming speaker-merge, monitor 30s guard, text-command clock, ping tuple, `pop_last_session` real pop, backoff `self`, YouTube headless fast-path, flight hardcoded-tfs drop, upload exe-blocklist, 8 atomic config setters + file-lock, confirm FIFO queue, send `contact`/`receiver` alias, song single-word expand, Vosk path probe.
+
 ## [2026-09-18 12:36] — Documentation Overhaul, Branding Cleanup & Project Tree Sync
 
 ### 📝 Documentation Rewrite (`readme.md`)

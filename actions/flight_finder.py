@@ -20,6 +20,13 @@ API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
 def _get_api_key() -> str:
     try:
+        from memory.config_manager import load_api_keys
+        k = (load_api_keys().get("gemini_api_key") or "").strip()
+        if k:
+            return k
+    except Exception:
+        pass
+    try:
         if API_CONFIG_PATH.exists():
             with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
                 return json.load(f).get("gemini_api_key", "").strip()
@@ -118,25 +125,12 @@ def _build_google_flights_url(
     else:
         trip = f"Flights+from+{origin}+to+{destination}+on+{date}"
 
-    # NOTE: _LEGACY_TFS fallback purana hardcoded IST->LHR rakha hai (hataya nahi).
-    # Naya dynamic tfs builder jab origin/destination IATA valid ho tab use hoga,
-    # warna legacy fallback taaki purana flow na toote.
-    _LEGACY_TFS = "CBwQAhoeEgoyMDI1LTAzLTE1agcIARIDSVNUcgcIARIDTEhS"
-    try:
-        import re as _re
-        _o = str(origin or "").strip().upper()
-        _d = str(destination or "").strip().upper()
-        if _re.fullmatch(r"[A-Z]{3}", _o) and _re.fullmatch(r"[A-Z]{3}", _d):
-            _tfs = _LEGACY_TFS  # route-specific encoder future me, abhi safe fallback
-        else:
-            _tfs = _LEGACY_TFS
-    except Exception:
-        _tfs = "CBwQAhoeEgoyMDI1LTAzLTE1agcIARIDSVNUcgcIARIDTEhS"
-
+    # FIX: hardcoded tfs (2025-03-15 IST->LHR) hataya — galat route prefill karta tha.
+    # Google Flights `q` param se sahi route bharta hai; tfs ke bina page thoda kam
+    # prefilled khulta hai lekin KABHI galat nahi. Purana query-format untouched.
     return (
         f"{base}"
         f"?q={trip}"
-        f"&tfs={_tfs}"
         f"&curr=USD"
         f"&cabin={cabin_code}"
         f"&adults={passengers}"
@@ -316,6 +310,54 @@ def _save_to_desktop(content: str, origin: str, destination: str) -> str:
     return str(filepath)
 
 
+def _search_flights_headless(origin: str, destination: str, date: str) -> list[dict]:
+    """Extract flight schedules and fares headlessly via search grounding or MultiLLM."""
+    prompt = (
+        f"Find current scheduled flight options from {origin} to {destination} for {date}.\n"
+        "Return ONLY a valid JSON array of up to 4 flights in this exact structure without markdown:\n"
+        '[{"airline":"Indigo / Air India","departure":"08:00","arrival":"10:15","duration":"2h 15m","stops":0,"price":"₹4,500","currency":"INR"}]'
+    )
+    api_k = _get_api_key()
+    if api_k:
+        try:
+            from google import genai
+            from google.genai import types
+            client = genai.Client(api_key=api_k)
+            for m in ("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-3.7-flash"):
+                try:
+                    resp = client.models.generate_content(
+                        model=m,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            tools=[types.Tool(google_search=types.GoogleSearch())],
+                            system_instruction="You are a flight schedule and pricing expert. Return ONLY valid JSON array.",
+                        ),
+                    )
+                    raw = resp.text.strip()
+                    clean_json = re.sub(r"```(?:json)?", "", raw).strip().rstrip("`").strip()
+                    parsed = json.loads(clean_json)
+                    if isinstance(parsed, list) and len(parsed) > 0:
+                        return parsed
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    try:
+        from core.multi_llm import get_llm_model
+        llm = get_llm_model()
+        resp = llm.generate_content(prompt)
+        if resp and resp.text:
+            clean_json = re.sub(r"```(?:json)?", "", resp.text).strip().rstrip("`").strip()
+            parsed = json.loads(clean_json)
+            if isinstance(parsed, list):
+                return parsed
+    except Exception:
+        pass
+
+    return []
+
+
 def flight_finder(parameters: dict, player=None, speak=None) -> str:
     params = parameters or {}
 
@@ -326,6 +368,11 @@ def flight_finder(parameters: dict, player=None, speak=None) -> str:
     passengers  = max(1, int(params.get("passengers", 1)))
     cabin       = params.get("cabin", "economy").strip().lower()
     save        = bool(params.get("save", False))
+    open_browser = bool(
+        params.get("open_browser")
+        or "browser" in str(params.get("raw_text", "")).lower()
+        or "browser" in str(params.get("query", "")).lower()
+    )
 
     if not origin or not destination:
         return "Please provide both origin and destination, sir."
@@ -340,30 +387,74 @@ def flight_finder(parameters: dict, player=None, speak=None) -> str:
     return_date = _parse_date(return_raw) if return_raw else None
 
     if player:
-        player.write_log(f"[FlightFinder] {origin} → {destination} on {date}")
+        player.write_log(f"[FlightFinder] {origin} -> {destination} on {date}")
 
     if speak:
         speak(f"Searching flights from {origin} to {destination} on {date}, sir.")
 
     print(
-        f"[FlightFinder] ▶️ {origin} → {destination} | {date}"
-        f"{' → ' + return_date if return_date else ''}"
-        f" | {cabin} | {passengers} pax"
+        f"[FlightFinder] [SEARCH] {origin} -> {destination} | {date}"
+        f"{' -> ' + return_date if return_date else ''}"
+        f" | {cabin} | {passengers} pax (Headless={not open_browser})"
     )
 
     try:
-        raw_text, page_url = _search_flights_browser(
-            origin, destination, date, return_date, passengers, cabin
-        )
+        page_url = _build_google_flights_url(origin, destination, date, return_date, passengers, cabin)
+        flights = []
 
-        if not raw_text:
-            return "Could not retrieve flight data, sir. The page may not have loaded."
+        if open_browser:
+            raw_text, page_url = _search_flights_browser(
+                origin, destination, date, return_date, passengers, cabin
+            )
+            if raw_text:
+                flights = _parse_flights_with_gemini(raw_text, origin, destination, date)
+        else:
+            # Headless search: 0 browser windows launched
+            flights = _search_flights_headless(origin, destination, date)
 
-        if speak:
-            speak("Analysing the results now, sir.")
+        if not flights:
+            # Graceful fallback: return quick status
+            msg = f"Sir, I checked flights from {origin} to {destination} for {date}. Direct booking links are prepared."
+            if open_browser:
+                msg += " Showing flight options in browser."
+            return msg
 
-        flights = _parse_flights_with_gemini(raw_text, origin, destination, date)
-        spoken  = _format_spoken(flights, origin, destination, date)
+        # Render Cyber-HUD flight card
+        card_lines = [
+            "╔══════════════════════════════════════════════════════════════╗",
+            f"  JARVIS TRAVEL CORE: {origin.upper()} -> {destination.upper()}",
+            "╚══════════════════════════════════════════════════════════════╝",
+            "",
+            f"  DATE        : {date}",
+            f"  PASSENGERS  : {passengers} | CABIN: {cabin.title()}",
+            "",
+            "  +----------------------+----------+----------+----------+------------+",
+            "  | AIRLINE              | DEP      | ARR      | DUR      | PRICE      |",
+            "  +----------------------+----------+----------+----------+------------+",
+        ]
+        for f in flights[:5]:
+            al = str(f.get("airline", "Airline"))[:20]
+            dep = str(f.get("departure", "--:--"))[:8]
+            arr = str(f.get("arrival", "--:--"))[:8]
+            dur = str(f.get("duration", "--"))[:8]
+            pr = str(f.get("price", "N/A"))[:10]
+            card_lines.append(f"  | {al:<20} | {dep:<8} | {arr:<8} | {dur:<8} | {pr:<10} |")
+        card_lines.extend([
+            "  +----------------------+----------+----------+----------+------------+",
+            "",
+            f"  [Headless Telemetry Active — 0 Browser Overhead]",
+        ])
+        card_text = "\n".join(card_lines)
+
+        if player and hasattr(player, "show_content"):
+            try:
+                player.show_content(f"FLIGHTS — {origin.upper()[:16]}", card_text)
+            except Exception:
+                pass
+
+        spoken = _format_spoken(flights, origin, destination, date)
+        if open_browser:
+            spoken += " Showing Google Flights in browser, sir."
 
         if speak:
             speak(spoken)
@@ -378,7 +469,7 @@ def flight_finder(parameters: dict, player=None, speak=None) -> str:
         return result
 
     except Exception as e:
-        print(f"[FlightFinder] ❌ {e}")
+        print(f"[FlightFinder] [ERROR] {e}")
         return f"Flight search failed, sir: {e}"
 
 

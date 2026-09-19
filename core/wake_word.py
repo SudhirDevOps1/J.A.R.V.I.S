@@ -113,13 +113,33 @@ class WakeWordDetector:
                  threshold: float = DEFAULT_THRESHOLD,
                  logger: Callable[[str], None] = print):
         self._on_detect = on_detect
-        self._threshold = threshold
         self._logger    = logger
+        # ADDITIVE: threshold config override (default 0.5 untouched).
+        # Kam sunai de to config/api_keys.json me "wake_threshold": 0.35 rakho.
+        try:
+            import json as _j
+            from pathlib import Path as _P
+            _cfg = _P(__file__).resolve().parent.parent / "config" / "api_keys.json"
+            _v = float(_j.loads(_cfg.read_text(encoding="utf-8")).get("wake_threshold", threshold))
+            threshold = min(0.9, max(0.2, _v))
+        except Exception:
+            pass
+        self._threshold = threshold
         self._queue: queue.Queue = queue.Queue(maxsize=50)
         self._thread: threading.Thread | None = None
         self._running = False
         self._model = None
         self._ready = False
+        self._last_fire = 0.0       # refractory: ek utterance par ek hi fire
+        self._err_streak = 0        # lagatar inference fail -> dead declare
+
+    def set_threshold(self, value: float) -> float:
+        """ADDITIVE runtime tuning (restart nahi chahiye). Returns applied value."""
+        try:
+            self._threshold = min(0.9, max(0.2, float(value)))
+        except Exception:
+            pass
+        return self._threshold
 
     def start(self) -> bool:
         """Load the model and spawn the inference thread. Returns True on success.
@@ -185,14 +205,33 @@ class WakeWordDetector:
                     if score == 0.0 and scores:
                         score = max(float(v) for v in scores.values())
                 if score >= self._threshold:
+                    # ADDITIVE refractory 2.5s: ek utterance par ek hi fire (double-wake band).
+                    # Dropped backlog drain purana wala untouched rakha hai.
+                    import time as _t
+                    now = _t.monotonic()
+                    if now - self._last_fire < 2.5:
+                        self._drain()
+                        continue
+                    self._last_fire = now
                     # drain any backlog so we don't double-fire on the same utterance
                     self._drain()
                     try:
                         self._on_detect()
                     except Exception as e:
                         self._logger(f"Wake word: on_detect error — {e}")
+                else:
+                    self._err_streak = 0
             except Exception as e:
                 self._logger(f"Wake word: inference error — {e}")
+                # ADDITIVE dead-detector surface: lagatar 25 fail = model/device mar gaya.
+                # Pehle silent rehta tha, UI 'ready' dikhata rehta tha.
+                try:
+                    self._err_streak += 1
+                    if self._err_streak >= 25:
+                        self._err_streak = 0
+                        self._logger("Wake word: repeated inference failures — check mic device.")
+                except Exception:
+                    pass
 
     def _drain(self) -> None:
         try:

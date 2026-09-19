@@ -47,6 +47,25 @@ def _get_user_location() -> str:
     return "Delhi"
 
 
+# ── ADDITIVE shared verb-stripper (duplicate regexon ka single source) ───────
+# "launch kro" / "brave kholo na" jaise inputs se action verbs nikalo taaki app
+# naam me verb leak na ho. Purane inline regex untouched — yah extra guard hai.
+_ACTION_VERBS = (
+    r"kro|karo|kar|kar\s*do|do|de|dena|kholo|khol|chalao|chala\s*do|chala|chalo"
+    r"|band\s*karo|band|dikhao|dikha|batao|bata|sunao|suna|lagao|laga\s*do|laga"
+    r"|chal|jao|ja|aao|aa|lo|lena|karke|krke|abhi|zara|na|naa|re|ji"
+)
+
+
+def strip_action_verbs(text: str) -> str:
+    """Hinglish action verbs strip karo (leading/trailing/embedded). Never raises."""
+    try:
+        t = re.sub(rf"\b(?:{_ACTION_VERBS})\b", " ", text or "")
+        return " ".join(t.split()).strip()
+    except Exception:
+        return (text or "").strip()
+
+
 class NeedleToolRouter:
     """Tier 1: Needle 2 Reflex Engine.
     Runs in ~28 MB RAM. Converts spoken or typed natural language commands
@@ -137,6 +156,73 @@ class NeedleToolRouter:
         except Exception:
             pass
 
+        # -- Self-Learning: Autonomous Teaching by User ("jab main X bolu to Y karo") --
+        m_teach = re.search(
+            r"(?:(?:jab|agar)\s+(?:bhi\s+)?(?:main|hum|me)\s+(.+?)\s+(?:bolu|bolun|kahu|type\s*kru|type\s*karo)\s+(?:to|tab|tabhi)\s+(.+?)(?:\s+(?:karna|karo|chalao|kholna|khol\s*do|kro|krna))?$)|"
+            r"(?:^aage\s+se\s+(?:jab\s+)?(?:main\s+)?(.+?)\s+(?:bolu|kahu)\s+to\s+(.+?)(?:\s+(?:karna|karo|chalao|kholna|kro))?$)|"
+            r"(?:^(?:whenever|when)\s+i\s+say\s+(.+?),?\s+(?:please\s+)?(?:open|run|launch|play|do|execute)\s+(.+)$)",
+            clean
+        )
+        if m_teach:
+            g = [x for x in m_teach.groups() if x is not None]
+            if len(g) >= 2:
+                p_phrase, p_cmd = g[0].strip(), g[1].strip()
+                return _dispatch("self_learning", {"action": "teach", "phrase": p_phrase, "command": p_cmd})
+
+        # -- Self-Learning: User Mistake Corrections & Strict Lessons ----------
+        # "ye galat hai", "galat bol rahe ho", "aise nahi waise", "aage se dhyan rakhna..."
+        if re.search(
+            r"^(?:ye|yeh)\s+(?:galat|wrong|kharab)\s+(?:hai|tha|baat\s+hai)|"
+            r"^(?:galat|wrong)\s+(?:bol\s*rahe\s*ho|bola|jawab\s*diya|kaha|kiya)|"
+            r"^aise\s+nahi\s+(?:karna\s*tha|karo|karte|kro)|"
+            r"^tumne\s+(?:galat|wrong)\s+(?:samjha|kiya|khol\s*diya)|"
+            r"^aage\s+se\s+(?:yaad|dhyan)\s+rakhna\s+(?:ki\s+)?|"
+            r"^correction\s*[:\-]",
+            clean
+        ):
+            return _dispatch("self_learning", {"action": "correct", "feedback": clean})
+
+        # -- Hermes Knowledge Queries: Profile & Learned Data ------------------
+        if re.search(r"\b(tum\s+mere\s+bare\s+mein\s+kya\s+jante\s+ho|meri\s+profile\s+(?:batao|dikhao)|what\s+do\s+you\s+know\s+about\s+me)\b", clean):
+            return _dispatch("self_learning", {"action": "show_profile"})
+        if re.search(r"\b(tumne\s+mujhse\s+kya\s+seekha|apni\s+learning\s+batao|kya\s+kya\s+seekha|learned\s+intents\s+(?:dikhao|batao))\b", clean):
+            return _dispatch("self_learning", {"action": "show_learned"})
+        if re.search(r"\b(apni\s+galtiyan\s+(?:dikhao|batao)|corrections\s+(?:dikhao|batao)|lessons\s+learned)\b", clean):
+            return _dispatch("self_learning", {"action": "show_corrections"})
+
+        # -- Assistant Mode & Profile Switching Reflexes ----------------------
+        # "teacher mode lagao" / "study profile" / "devops mode" / "jarvis mode" / "girlfriend mode"
+        m_prof = re.search(r"\b(teacher|guru|mentor|study|devops|coding|hacker|gaming|game|companion|girlfriend|gf|soulmate|jarvis|tactical|work)\s*(?:mode|profile|vibe)\b|\b(?:mode|profile)\s*(?:badlo|change\s*karo|lagao|switch\s*karo)\b", clean)
+        if m_prof:
+            matched_word = (m_prof.group(1) or "").lower()
+            if matched_word in ("teacher", "guru", "mentor", "study"):
+                target_p = "teacher"
+            elif matched_word in ("devops", "coding", "hacker"):
+                target_p = "devops"
+            elif matched_word in ("companion", "girlfriend", "gf", "soulmate"):
+                target_p = "companion"
+            elif matched_word in ("gaming", "game"):
+                target_p = "gaming"
+            elif matched_word in ("work",):
+                target_p = "work"
+            else:
+                target_p = "jarvis"
+            return _dispatch("profile", {"name": target_p, "action": "apply"})
+
+        # -- PiP (Picture-in-Picture Companion Window) Voice Controls ----------
+        if re.search(r"\b(pip\s*(?:mode\s*)?(?:on|kholo|chalao|dikhao|open|start)|mini\s*window\s*(?:on|kholo|dikhao))\b", clean):
+            return _dispatch("pip_mode", {"action": "on"})
+        if re.search(r"\b(pip\s*(?:mode\s*)?(?:off|band|hatao|close|chupao)|mini\s*window\s*(?:off|band|hatao))\b", clean):
+            return _dispatch("pip_mode", {"action": "off"})
+        if re.search(r"\b(pip\s*(?:mode\s*)?(?:toggle|switch)|toggle\s*pip)\b", clean):
+            return _dispatch("pip_mode", {"action": "toggle"})
+        if re.search(r"\b(pip\s*(?:bada|expand|maximize|chauda))\b", clean):
+            return _dispatch("pip_mode", {"action": "expand"})
+        if re.search(r"\b(pip\s*(?:chhota|compact|minimize|normal))\b", clean):
+            return _dispatch("pip_mode", {"action": "compact"})
+        if re.search(r"\b(pip\s*(?:clear|safai|chat\s*clear))\b", clean):
+            return _dispatch("pip_mode", {"action": "clear"})
+
         # -- Autonomous Sub-Agent Swarm (Ultra-Resilient Speech Parsing) ------
         # "subagent chalao" / "multi agent research" / "swarm run" / "background research"
         m_swarm = re.search(r"\b(subagent|multi\s*agent|multiagent|swarm|background\s*research)\b", clean)
@@ -157,10 +243,98 @@ class NeedleToolRouter:
             goal_text = re.sub(r"\b(sniff\s*api|api\s*sniff|reverse\s*engineer|network\s*sniff|api\s*dhoondho|api\s*nikaalo|karo|do|please|zara)\b", "", clean).strip()
             return _dispatch("api_sniffer", {"url": target_url, "goal": goal_text})
 
-        # -- The Hack: Pillow + Gemini 2.5 Flash Visual Debugger --------------
-        # "check karo is code mein kya error hai" / "screen par error dekho" / "troubleshoot screen"
-        if re.search(r"\b(error\s*(?:check|dekho|kya\s*hai|dhoondho|batao|solve)|troubleshoot|debug\s*(?:my\s*code|screen|error)|code\s*me\s*error|code\s*mein\s*error|screen\s*(?:pe|par|me|mein)\s*error)\b", clean):
+        # -- Visual Screen Inspector & Code Troubleshooter -------------------
+        # "mera screen dekho" / "screen dekho" / "screen par kya dikh raha hai" / "kya likha hain ye screen pr" / "troubleshoot screen"
+        if not re.search(r"\b(khula|which\s*windows?|kaun\s*si\s*window)\b", clean) and re.search(
+            r"\b((?:mera\s+|meri\s+)?(?:screen|display|desktop|creen)\s*(?:dekho|dekhna|dekh|check|kya\s*dikh|kya\s*hai|kya\s*likha|analyze|inspect|read|padho|batao)|"
+            r"(?:dekho|dekh\s*lo|check\s*karo|analyze\s*karo|padho|read\s*karo)\s*(?:mera\s+|meri\s+)?(?:screen|display|desktop|creen)|"
+            r"(?:kya\s*(?:likha|dikh|hai|chal)\s*(?:hai|hain)?\s*(?:ye|is)?\s*(?:screen|display|desktop|creen)\s*(?:pe|par|me|mein|pr)?)|"
+            r"(?:screen|creen)\s*(?:pe|par|me|mein|pr)\s*(?:kya|error|problem|issue|bug|dikh|likha)|"
+            r"error\s*(?:check|dekho|kya\s*hai|dhoondho|batao|solve)|"
+            r"troubleshoot|debug\s*(?:my\s*code|screen|error)|"
+            r"code\s*(?:me|mein)\s*error)\b",
+            clean
+        ):
             return _dispatch("troubleshoot_screen", {"query": clean})
+
+        # -- PC / System Lock ------------------------------------------------
+        if re.search(r"\b(pc\s*lock|system\s*lock|computer\s*lock|lock\s*(?:pc|screen|computer|system)|screen\s*lock\s*karo)\b", clean):
+            return _dispatch("computer_settings", {"action": "lock_screen"})
+
+        # -- Clear Chat / Log ------------------------------------------------
+        if re.search(r"\b((?:chat|log|history)\s*(?:clear|saaf)\s*(?:karo|kar\s*do|do)?|(?:clear|saaf\s*karo)\s*(?:chat|log|history))\b", clean):
+            return _dispatch("computer_control", {"action": "clear_log"})
+
+        # -- Screenshot Capture ----------------------------------------------
+        if re.search(r"\b(screenshot\s*(?:lo|le\s*lo|kheecho|capture)|screen\s*capture\s*karo|take\s*screenshot)\b", clean):
+            return _dispatch("computer_settings", {"action": "screenshot"})
+
+        # -- Volume & Brightness Edge Reflexes -------------------------------
+        if re.search(r"\b(sound\s*mute|awaz\s*mute|mute\s*karo|mute\s*kar\s*do|awaz\s*band\s*karo)\b", clean):
+            return _dispatch("computer_settings", {"action": "mute"})
+        if re.search(r"\b(unmute\s*karo|unmute|awaz\s*kholo|sound\s*on\s*karo)\b", clean):
+            return _dispatch("computer_settings", {"action": "unmute"})
+        if re.search(r"\b(volume\s*(?:badhao|up|high|tez)|aawaz\s*(?:badhao|tez))\b", clean):
+            return _dispatch("computer_settings", {"action": "volume_up"})
+        if re.search(r"\b(volume\s*(?:kam|down|low|ghatao)|aawaz\s*(?:kam|dheemi))\b", clean):
+            return _dispatch("computer_settings", {"action": "volume_down"})
+        if re.search(r"\b(brightness\s*(?:badhao|up|high|tez)|roshni\s*badhao)\b", clean):
+            return _dispatch("computer_settings", {"action": "brightness_up"})
+        if re.search(r"\b(brightness\s*(?:kam|down|low|ghatao)|roshni\s*kam)\b", clean):
+            return _dispatch("computer_settings", {"action": "brightness_down"})
+
+        # ADDITIVE KG: relationship/2-hop sawal graph se (fast <5ms, safe).
+        # "mummy ko kya pasand", "mummy ke rishte dikhao", "mummy se ayesha tak".
+        # Graph me entity mili TABHI route — warna fall-through (tinydb/web/LLM untouched).
+        try:
+            if re.search(r"\b(ko kya pasand|ko kya achha|ki sister|ki brother|ka bhai|ki behen"
+                         r"|ka rishta|ke rishte|rishte|ka relation|se .* tak|kaun hai|kiski|kiska)\b", clean):
+                from memory.knowledge_graph import neighbors as _kg_nb
+                _words = [w for w in re.findall(r"[a-zA-Z\u0900-\u097F]{3,}", clean)
+                          if w not in ("kya", "kaun", "kaunsi", "hai", "ko", "ki", "ka", "ke",
+                                       "kisko", "kiski", "kiska", "pasand", "achha",
+                                       "sister", "brother", "bhai", "behen", "rishta", "rishte",
+                                       "relation", "tak", "se", "mein", "me", "dikhao", "dikh")]
+                # ADDITIVE bigrams: "Aarav Sharma" node "aarav_sharma" se mile (singles pehle jaise)
+                _cands: list[str] = []
+                for i, _w in enumerate(_words[:4]):
+                    if i + 1 < len(_words):
+                        _cands.append(f"{_w}_{_words[i + 1]}")
+                _cands.extend(_words[:3])
+                for _c in _cands[:5]:
+                    try:
+                        if _kg_nb(_c, limit=1):
+                            return _dispatch("kg_query", {"action": "ask", "query": clean})
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
+        # ADDITIVE screen-aware + hunt-delete + monitor-mute (fast regex, safe).
+        # "screen par kya hai" -> sense | "suggest karo" -> suggest
+        if re.search(r"\b(screen\s*par\s*kya|kya\s*khula(\s*hai)?|kaun\s*si\s*window|which\s*windows?\s*open)\b", clean):
+            return _dispatch("context_sense", {"action": "sense"})
+        if re.search(r"\b(suggest\s*karo|sujhav\s*do|kya\s*karun|advise\s*me|kya\s*karna\s*chahiye)\b", clean):
+            return _dispatch("context_sense", {"action": "suggest"})
+        # "xyz dhoondh ke delete karo" -> hunt_delete (confirm-gated, undo samet)
+        m_hunt = re.search(r"(.+?)\s+(dhoondh\s*ke\s*delete|khoj\s*ke\s*delete|find\s*and\s*delete|search\s*and\s*delete)\b", clean)
+        if m_hunt:
+            _t = re.sub(r"\b(ko|ki|ka|file|files|app|koi|ek|please|zara)\b", "", m_hunt.group(1)).strip()
+            if _t and len(_t) > 1:
+                return _dispatch("file_controller", {"action": "hunt_delete", "name": _t})
+        # "warning band karo" -> monitor mute
+        if re.search(r"\b(warning|alert|monitor)\s*(band|off|mute|rok|chup)\b", clean):
+            return _dispatch("monitor_ctl", {"action": "mute"})
+        if re.search(r"\b(warning|alert|monitor)\s*(chalu|on|unmute|start)\b", clean):
+            return _dispatch("monitor_ctl", {"action": "unmute"})
+
+        # -- Live Stock Price Lookup -----------------------------------------
+        # "reliance ka stock price batao", "tcs share price", "stock price of aapl", "infy ka rate"
+        m_stock = re.search(r"\b(?:([a-zA-Z0-9\.\-]+)\s*(?:ka\s*)?(?:stock\s*price|stok\s*price|share\s*(?:price|bhav|rate)|ka\s*rate)|(?:stock\s*price|stok\s*price|share\s*(?:price|bhav|rate))\s*(?:of\s*)?([a-zA-Z0-9\.\-]+))\b", clean)
+        if m_stock:
+            ticker = (m_stock.group(1) or m_stock.group(2) or "").strip()
+            if ticker and ticker.lower() not in ("kya", "batao", "hai", "rupees", "rupee", "inr", "usd", "ka", "ki", "ke"):
+                return _dispatch("stock_price", {"symbol": ticker})
 
         # -- The Tool: TinyDB Persistent Memory & Reminders -------------------
         # "yaad rakhna kal mujhe Java ke multi-threading concepts revise karne hain"
@@ -170,6 +344,15 @@ class NeedleToolRouter:
 
         if re.search(r"\b(pending\s*tasks?|reminders?\s*(?:dikhao|kya\s*hai|list)|tasks?\s*list|kya\s*karna\s*hai)\b", clean):
             return _dispatch("tinydb_memory", {"action": "list"})
+
+        # Task complete / delete reflexes: "task #2 complete karo", "#3 done kar do"
+        m_task_complete = re.search(r"(?:task\s*)?#?(\d+)\s*(?:complete|done|finish|kar\s*do|khatam|ho\s*gaya)", clean)
+        if m_task_complete:
+            return _dispatch("tinydb_memory", {"action": "complete", "id": m_task_complete.group(1)})
+
+        m_task_delete = re.search(r"(?:task\s*)?#?(\d+)\s*(?:delete|hatao|remove|mita\s*do)", clean)
+        if m_task_delete:
+            return _dispatch("tinydb_memory", {"action": "delete", "id": m_task_delete.group(1)})
 
         # -- The Tool: Rank-BM25 Lexical Notes Search (<4ms) -----------------
         # "notes mein search karo polymorphism" / "kahan likha tha polymorphism" / "search notes docker"
@@ -197,6 +380,14 @@ class NeedleToolRouter:
         if re.search(r"\b(calculator|calc|hisaab)\b", clean) and any(w in clean for w in ("kholo", "open", "chalao", "start", "on")):
             return _dispatch("open_app", {"action": "open", "name": "calculator"})
 
+        # Camera app: "open camera", "camera kholo", "camera chalao", "launch camera"
+        if re.search(r"\b(open\s+camera|camera\s+(?:kholo|open|chalao|start|launch)|launch\s+camera|webcam\s+kholo)\b", clean) and not re.search(r"\b(band|close|hatao|off)\b", clean):
+            return _dispatch("open_app", {"action": "open", "name": "camera"})
+
+        # Camera close: "close camera", "camera band karo"
+        if re.search(r"\b(close\s+camera|camera\s+(?:band|close|off|kill|chupao)|kill\s+camera)\b", clean):
+            return _dispatch("open_app", {"action": "close", "name": "camera"})
+
         # File Explorer / This PC: "file explorer kholo", "my computer kholo"
         if re.search(r"\b(file explorer|my computer|this pc|explorer kholo)\b", clean):
             return _dispatch("computer_settings", {"action": "file_explorer"})
@@ -204,6 +395,23 @@ class NeedleToolRouter:
         # Desktop: "desktop dikhao", "show desktop", "desktop screen dikhao"
         if re.search(r"\b(show desktop|desktop dikhao|sab minimize)\b", clean):
             return _dispatch("computer_settings", {"action": "show_desktop"})
+
+        # ADDITIVE: plugin list — "plugin dikhao", "kaun se plugin hain".
+        # Pehle web_search me jaake German definition aati thi.
+        if re.search(r"\b(plugin|plugins)\b", clean) and any(
+            w in clean for w in ("dikhao", "dikh", "list", "kaun", "mere", "hain", "hai", "show", "batao")
+        ):
+            return _dispatch("plugin_mgr", {"action": "list"})
+
+        # ADDITIVE: AI chatbot browser me kholo — "gemini kholo brave me", "chatgpt open karo".
+        # open_app match se PEHLE (warna "gemini" naam ka app khulne ki koshish hoti thi).
+        m_ai = re.search(r"\b(gemini|chatgpt|chat gpt|Muse|Muse ai|copilot)\b", clean)
+        if m_ai and any(w in clean for w in ("browser", "chrome", "brave", "edge", "firefox", "me kholo", "mein kholo", "open karo", "kholo")):
+            _urls = {"gemini": "https://gemini.google.com",
+                     "chatgpt": "https://chat.openai.com", "chat gpt": "https://chat.openai.com",
+                     "Muse": "https://claude.ai", "Muse ai": "https://claude.ai",
+                     "copilot": "https://copilot.microsoft.com"}
+            return _dispatch("browser_control", {"action": "go_to", "url": _urls.get(m_ai.group(1), "https://gemini.google.com")})
 
         # Matches: "open chrome", "launch notepad", "chrome kholo", "notepad chalao", "code editor kholo"
         m_open_en = re.search(r"\b(open|launch|start|run)\s+([a-zA-Z0-9_\-\.]+(?:\s+[a-zA-Z0-9_\-\.]+)?)\b", clean)
@@ -213,9 +421,10 @@ class NeedleToolRouter:
             _folder_words = ("storage", "camera", "c drive", "d drive", "video", "youtube",
                              "downloads", "desktop", "documents", "pictures", "music", "folder",
                              "setting", "settings", "calc", "calculator", "tab", "window", "screen",
-                             "explorer", "file explorer")
+                             "explorer", "file explorer", "gaana", "gana", "song", "songs", "track")
             if not any(k in app_target for k in _folder_words):
                 app_target = re.sub(r"\s+(karo|do|please|now)$", "", app_target).strip()
+                app_target = strip_action_verbs(app_target)  # ADDITIVE: "launch kro" -> "" (garbage guard)
                 if app_target:
                     return _dispatch("open_app", {"action": "open", "name": app_target})
 
@@ -226,6 +435,7 @@ class NeedleToolRouter:
             app_target = (m_close_en.group(2) if m_close_en else m_close_hi.group(1)).strip()
             if not any(k in app_target for k in ("storage", "camera", "window", "tab", "pc", "computer", "wifi", "internet")):
                 app_target = re.sub(r"\s+(karo|do|please|now)$", "", app_target).strip()
+                app_target = strip_action_verbs(app_target)  # ADDITIVE: verb leak guard
                 if app_target:
                     return _dispatch("open_app", {"action": "close", "name": app_target})
 
@@ -290,18 +500,41 @@ class NeedleToolRouter:
             song_q = re.sub(r"\bka\b|\bki\b|\bke\b|\bne\b", "", song_q).strip(" ,.-")
             song_q = " ".join(song_q.split())  # collapse whitespace
             song_q = song_q or "popular hindi songs"
+            # ADDITIVE: 1-shabd query ("sad") par YouTube bekar result deta hai
+            if len(song_q.split()) < 2 and "popular" not in song_q:
+                song_q = f"{song_q} songs"
             return _dispatch("youtube_video", {"action": "play", "query": song_q})
 
-        # YouTube search: "youtube par X dekho", "X ka video dikhao"
+        # Music library rescan: "songs rescan karo", "music refresh karo"
+        if re.search(r"\b(music|songs?|gaane|library)\s*(?:ko\s*)?(rescan|refresh|scan)\b|\b(?:rescan|refresh)\s*(?:music|songs?|library)\b", clean):
+            return _dispatch("youtube_video", {"action": "rescan"})
+
+        # YouTube video search / playback: "youtube par video dikhao", "apna college ka video lagao", "video play karo"
+        m_yt_video = re.search(r"\b(video|videos|clip|lecture|tutorial)\b", clean)
         m_yt_platform = re.search(r"\b(youtube|yt)\b", clean)
-        m_yt_watch = any(w in clean for w in ("dekho", "dikhao", "play", "open", "chalao", "kholo", "search"))
-        if m_yt_platform and m_yt_watch:
+        m_yt_watch = any(w in clean for w in ("dekho", "dikhao", "play", "open", "chalao", "kholo", "lagao", "laga", "search", "start"))
+        if (m_yt_video or m_yt_platform) and m_yt_watch:
             vid_q = re.sub(
-                r"\b(youtube|yt|par|ka|ki|ke|video|dekho|dikhao|play|open|chalao|kholo|search|zara|yaar|bhai)\b",
+                r"\b(youtube|yt|par|pr|pe|ka|ki|ke|ko|ye|yeh|video|videos|clip|lecture|tutorial|dekho|dikhao|play|open|chalao|kholo|lagao|laga\s*do|laga|search|zara|yaar|bhai|please|karo|kar|do|de)\b",
                 "", clean
-            ).strip(" ,.-")
+            ).strip(" ,.-'\"")
             vid_q = " ".join(vid_q.split())
-            return _dispatch("youtube_video", {"action": "play", "query": vid_q or "trending"})
+            return _dispatch("youtube_video", {"action": "play", "query": vid_q or "trending", "mode": "video", "open_browser": True})
+
+        # ADDITIVE clock: "time batao" web_search me jaata tha (galat). 
+        # Zero-token local jawab. Pehle, taaki date/time web me na ghuse.
+        if re.search(r"\b(time batao|time kya|kitne baje|time dikhao|samay)\b", clean):
+            return _dispatch("clock", {"action": "time"})
+        if re.search(r"\b(aaj (kya )?date|tarikh batao|date batao)\b", clean):
+            return _dispatch("clock", {"action": "date"})
+        if re.search(r"\b(kaun sa din|aaj kaun sa din|aaj din|din batao)\b", clean):
+            return _dispatch("clock", {"action": "day"})
+
+        # ADDITIVE PiP: "pip mode on karo", "mini window kholo", "pip band karo".
+        if re.search(r"\b(pip(\s*mode)?|mini\s*window)\b", clean):
+            if re.search(r"\b(band|off|close|hat|hatao)\b", clean):
+                return _dispatch("pip_mode", {"action": "off"})
+            return _dispatch("pip_mode", {"action": "on"})
 
         # -- System Metrics & Battery -----------------------------------------
         if re.search(r"\b(cpu usage|ram usage|temperature|system status|hardware status|pc performance"
@@ -310,23 +543,14 @@ class NeedleToolRouter:
             act = "battery" if any(w in clean for w in ("battery", "charge", "charging")) else "cpu"
             return _dispatch("system_status", {"action": act})
 
-        # -- Web Search -------------------------------------------------------
-        # "google karo X" / "X dhundo" / "search karo X" / "X ke baare mein batao"
-        m_ws_en = re.search(r"\b(search|google|bing|find|lookup)\s+(?:for\s+)?(.+)", clean)
-        m_ws_hi = re.search(r"(.+?)\s+(?:dhundo|search\s*karo|google\s*karo|khojo|batao|dekho)\b", clean)
-        m_ws_kya = re.search(r"\b(kya hai|kaun hai|kahan hai|kab hai)\s+(.+)", clean)
-        if m_ws_en and "click" not in clean:
-            q = m_ws_en.group(2).strip()
-            if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting")):
-                return _dispatch("web_search", {"query": q})
-        elif m_ws_hi and "click" not in clean:
-            q = m_ws_hi.group(1).strip()
-            q = re.sub(r"\b(yaar|bhai|sir|please|zara|jaldi|mujhe|abhi)\b", "", q).strip()
-            if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting", "mausam", "weather")):
-                return _dispatch("web_search", {"query": q})
-        elif m_ws_kya and "click" not in clean:
-            q = f"{m_ws_kya.group(2)} {m_ws_kya.group(1)}".strip()
-            return _dispatch("web_search", {"query": q})
+        # ADDITIVE: "X obsidian me save karo" / "obsidian me likho X" -> daily note.
+        # Pehle ye hissa drop ho jata tha (model tool bhool jata tha).
+        m_obs = re.search(r"\bobsidian\s*(?:me|mein|ko)?\s*(?:save|likho|likh|note)\b", clean)
+        if m_obs:
+            _content = re.sub(r"\b(obsidian|me|mein|ko|save|karo|likho|likh|note|and|aur|use|ise|isko)\b", "", clean).strip(" ,.-")
+            _content = " ".join(_content.split())
+            if _content:
+                return _dispatch("obsidian_brain", {"action": "append_daily", "content": _content})
 
         # -- Weather (Memory-Aware: defaults to user location from long_term.json)
         # "Delhi ka mausam" / "aaj weather" / "kal baarish hogi kya"
@@ -343,6 +567,70 @@ class NeedleToolRouter:
             when = "tomorrow" if when_m and "kal" in (when_m.group(1) or "") else "today"
             return _dispatch("weather_report", {"city": city, "time": when})
 
+        # -- eCommerce & Price Comparison (Amazon / Flipkart) -----------------
+        # "amazon flipkart par iPhone 15 ka rate" / "flipkart price boAt" / "rate check karo samsung"
+        m_ecom = re.search(
+            r"\b(flipkart|amazon|price\s*check|rate\s*check|rate\s*pata|deal\s*check|kitne\s*ka\s*hai|sasta\s*kahan)\b",
+            clean,
+        )
+        if m_ecom:
+            prod_q = re.sub(
+                r"\b(flipkart|amazon|par|pe|ka|ki|ke|rate|price|check|karo|batao|pata|kijiye|dekho|search|dhundo|deal|deals|kitne\s*ka\s*hai|sasta|kahan|hai|inr|rupees)\b",
+                " ",
+                clean,
+            ).strip()
+            prod_q = " ".join(prod_q.split())
+            if prod_q and len(prod_q) > 2:
+                return _dispatch("ecommerce_search", {"query": prod_q})
+
+        # -- Smart Multi-Modal Transit, Train, Bus & Maps Assistant -----------
+        # "Delhi se Patna train batao" / "Mumbai to Pune bus" / "Patna kaise jaye map route"
+        m_train = re.search(r"\b(train|trains|railway|rail|gaddi|vande\s*bharat|rajdhani|shatabdi|irctc)\b", clean)
+        m_bus = re.search(r"\b(bus|buses|volvo|roadways|intercity)\b", clean)
+        m_map = re.search(r"\b(kaise\s*jaye|jaana\s*hai|jana\s*hai|route|rasta|map|direction|directions|road\s*trip)\b", clean)
+        m_flight = re.search(r"\b(flight|flights|hawai\s*jahaj|aeroplane|air\s*ticket)\b", clean)
+
+        if m_train or m_bus or m_map:
+            m_route = re.search(r"\b([a-zA-Z]+)\s+(?:se|to|from)\s+([a-zA-Z]+)\b", clean)
+            origin = m_route.group(1).title() if m_route else ""
+            dest = m_route.group(2).title() if m_route else ""
+            if not dest and re.search(r"\b([a-zA-Z]+)\s+(?:kaise\s*jaye|route|jana|jaana)\b", clean):
+                m_single = re.search(r"\b([a-zA-Z]+)\s+(?:kaise\s*jaye|route|jana|jaana)\b", clean)
+                dest = m_single.group(1).title() if m_single else ""
+            mode = "train" if m_train else ("bus" if m_bus else "all")
+            return _dispatch("travel_transit", {"origin": origin, "destination": dest or "Patna", "mode": mode})
+
+        if m_flight:
+            m_route = re.search(r"\b([a-zA-Z]+)\s+(?:se|to|from)\s+([a-zA-Z]+)\b", clean)
+            origin = m_route.group(1).title() if m_route else "Delhi"
+            dest = m_route.group(2).title() if m_route else "Mumbai"
+            return _dispatch("flight_finder", {"origin": origin, "destination": dest, "date": "tomorrow"})
+
+        # -- Web Search -------------------------------------------------------
+        # "google karo X" / "X dhundo" / "search karo X" / "X ke baare mein batao"
+        m_ws_en = re.search(r"\b(search|google|bing|find|lookup)\s+(?:for\s+)?(.+)", clean)
+        m_ws_hi = re.search(r"(.+?)\s+(?:dhundo|search\s*karo|google\s*karo|khojo|batao|dekho)\b", clean)
+        m_ws_kya = re.search(r"\b(kya hai|kaun hai|kahan hai|kab hai)\s+(.+)", clean)
+        # Screen / camera / Obsidian queries MUST NEVER go to web search
+        _is_vision_query = any(w in clean for w in ("screen", "creen", "display", "camera", "webcam", "screenshot"))
+        _is_obsidian_query = "obsidian" in clean or "second brain" in clean
+
+        if not _is_vision_query and not _is_obsidian_query and m_ws_en and "click" not in clean:
+            q = m_ws_en.group(2).strip()
+            if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting")):
+                return _dispatch("web_search", {"query": q})
+        elif not _is_vision_query and not _is_obsidian_query and m_ws_hi and "click" not in clean:
+            q = m_ws_hi.group(1).strip()
+            q = re.sub(r"\b(yaar|bhai|sir|please|zara|jaldi|mujhe|abhi)\b", "", q).strip()
+            if q.lower().strip() in ("fact", "facts", "tum", "tu", "yeh", "ye", "wo", "woh",
+                                     "mujhe", "tumhe", "batao", "kuch", "ek", "koi", "kya"):
+                pass  # fall through to LLM conversation
+            elif q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting", "mausam", "weather", "train", "flight", "bus", "route")):
+                return _dispatch("web_search", {"query": q})
+        elif not _is_vision_query and not _is_obsidian_query and m_ws_kya and "click" not in clean:
+            q = f"{m_ws_kya.group(2)} {m_ws_kya.group(1)}".strip()
+            return _dispatch("web_search", {"query": q})
+
         # -- Reminder / Alarm -------------------------------------------------
         # "5 minute baad yaad dilana" / "kal subah 8 baje reminder"
         m_remind = re.search(
@@ -358,34 +646,74 @@ class NeedleToolRouter:
             r_msg = re.sub(r"\b(lagao|set|karo|do|dena|please)\b", "", r_msg).strip() or "reminder"
             return _dispatch("reminder", {"action": "set", "time": r_time, "message": r_msg})
 
-        # -- WhatsApp / Message Send ------------------------------------------
-        # "Mummy ko WhatsApp karo" / "Rahul ko message bhejo" / "whatsapp mummy"
-        m_msg = re.search(
-            r"\b(whatsapp|message|msg|text|sms)\b.*(ko\s+|to\s+)?", clean
-        )
-        m_contact = re.search(
-            r"([a-zA-Z\u0900-\u097F]+)\s+ko\s+(?:whatsapp|message|msg|text)", clean
-        )
+        # -- WhatsApp / Telegram / Message Send -------------------------------
+        # "teligram pr ritik ko hii send kro" / "telegram par rahul ko hello bhejo" / "Mummy ko WhatsApp karo"
+        is_msg_intent = any(w in clean for w in ("whatsapp", "telegram", "teligram", "tg", "message", "msg", "sms", "text"))
+        if is_msg_intent:
+            plat = "telegram" if any(w in clean for w in ("telegram", "teligram", "tg")) else "whatsapp"
+
+            # Pattern A: "teligram pr ritik ko hii send kro" / "whatsapp par mummy ko hello bhejo"
+            m_plat_first = re.search(
+                r"(?:telegram|teligram|whatsapp|message|msg)\s*(?:par|pe|pr)?\s+([a-zA-Z\u0900-\u097F]+)\s+ko\s+(.+)",
+                clean
+            )
+            # Pattern B: "ritik ko telegram pr hii send kro" / "mummy ko whatsapp karo hello"
+            m_contact_first = re.search(
+                r"([a-zA-Z\u0900-\u097F]+)\s+ko\s+(?:telegram|teligram|whatsapp|message|msg|text|sms)?\s*(?:par|pe|pr)?\s*(?:whatsapp|telegram|teligram)?\s*(?:karo|bhejo|likho|send)?\s*(.+)?",
+                clean
+            )
+
+            matched_contact = None
+            matched_msg = ""
+
+            if m_plat_first:
+                matched_contact = m_plat_first.group(1).strip()
+                raw_txt = m_plat_first.group(2).strip()
+                raw_txt = re.sub(r"^(?:message|msg|text|ki)\s+", "", raw_txt, flags=re.IGNORECASE).strip()
+                matched_msg = re.sub(r"\s*(?:send\s*kro|send\s*karo|bhejo|bhej\s*do|likho|likhke|karo|kar\s*do)\s*$", "", raw_txt, flags=re.IGNORECASE).strip()
+            elif m_contact_first:
+                c_cand = m_contact_first.group(1).strip()
+                if c_cand not in ("ek", "koi", "kuch", "yeh", "kisi", "mujhe", "mera", "apna", "telegram", "teligram", "whatsapp"):
+                    matched_contact = c_cand
+                    raw_txt = (m_contact_first.group(2) or "").strip()
+                    raw_txt = re.sub(r"^(?:message|msg|text|ki)\s+", "", raw_txt, flags=re.IGNORECASE).strip()
+                    matched_msg = re.sub(r"\s*(?:send\s*kro|send\s*karo|bhejo|bhej\s*do|likho|likhke|karo|kar\s*do)\s*$", "", raw_txt, flags=re.IGNORECASE).strip()
+
+            if matched_contact and matched_contact not in ("ek", "koi", "kuch", "yeh", "kisi", "karo", "bhejo"):
+                return _dispatch("send_message", {
+                    "platform": plat,
+                    "contact": matched_contact,
+                    "receiver": matched_contact,
+                    "message": matched_msg,
+                    "message_text": matched_msg
+                })
+
         m_wa_direct = re.search(r"^whatsapp\s+([a-zA-Z\u0900-\u097F]+)$", clean.strip())
         if m_wa_direct:
             contact = m_wa_direct.group(1).strip()
             if contact not in ("ek", "koi", "kuch", "yeh", "kisi", "karo", "bhejo"):
-                return _dispatch("send_message", {"platform": "whatsapp", "contact": contact, "message": ""})
-        elif m_msg and m_contact:
-            contact = m_contact.group(1).strip()
-            if contact not in ("ek", "koi", "kuch", "yeh"):
-                msg_text_m = re.search(
-                    r"(?:likho|likhke|bol|bolo|bhejo)\s+(.+)$", clean
-                )
-                msg_text = msg_text_m.group(1).strip() if msg_text_m else ""
-                return _dispatch("send_message", {
-                    "platform": "whatsapp",
-                    "contact": contact,
-                    "message": msg_text
-                })
+                return _dispatch("send_message", {"platform": "whatsapp", "contact": contact, "receiver": contact, "message": "", "message_text": ""})
+
+        # ADDITIVE: "mummy ka number yaad karo 98111" -> contacts save (purana msg flow untouched)
+        m_save = re.search(
+            r"([a-zA-Z\u0900-\u097F]+)\s+ka\s+number\s+yaad\s*karo\s*(\d{6,15})?", clean
+        )
+        if m_save:
+            nm = m_save.group(1).strip()
+            ph = (m_save.group(2) or "").strip()
+            if nm and nm not in ("mera", "apna", "yeh", "ek", "koi"):
+                return _dispatch("contacts", {"action": "save", "name": nm, "phone": ph})
 
         # -- Window Control ---------------------------------------------------
         # "minimize karo" / "maximize karo" / "window band karo" / "fullscreen"
+        if re.search(r"\b(switch\s*window|window\s*badlo|agli\s*window|dusri\s*window)\b", clean):
+            return _dispatch("computer_settings", {"action": "switch_window"})
+        if re.search(r"\b(show\s*desktop|desktop\s*dikhao|saari\s*window\s*minimize|minimize\s*all)\b", clean):
+            return _dispatch("computer_settings", {"action": "show_desktop"})
+        if re.search(r"\b(screen\s*off|display\s*off|screen\s*band\s*karo|display\s*band\s*karo)\b", clean):
+            return _dispatch("computer_settings", {"action": "sleep_display"})
+        if re.search(r"\b(page\s*reload|reload\s*page|refresh\s*karo|f5\s*daba(?:o)?)\b", clean):
+            return _dispatch("computer_settings", {"action": "refresh_page"})
         if re.search(r"\b(minimize|choti\s*karo|chhupa\s*do|taskbar\s*mein)\b", clean):
             return _dispatch("computer_settings", {"action": "minimize"})
         if re.search(r"\b(maximize|badi\s*karo|fullscreen|poori\s*screen)\b", clean):
@@ -564,6 +892,73 @@ class NeedleToolRouter:
             folder_path = _folder_map.get(folder_key, str(os.path.expanduser("~")))
             return _dispatch("file_controller", {"action": "open_folder", "path": folder_path})
 
+        # -- "Sab notes delete karo" / "all notes delete" — even without "obsidian" keyword --
+        # Matches: "all sab delete kr do notes", "sab notes delete karo", "all notes hatao", "notes sab clear karo"
+        if re.search(
+            r"\b(all\s+sab\s+delete|"
+            r"sab\s+(?:notes?|notez)?\s*(?:delete|hatao|remove|mita(?:o)?|clear)|"
+            r"all\s*notes?\s*(?:delete|remove|clear|hatao)|"
+            r"notes?\s*(?:sab|all|poori?|clear)\s*(?:delete|hatao|remove|mita(?:o)?)|"
+            r"(?:vault|obsidian)\s*(?:clear|saaf|delete)\s*(?:karo|kar\s*do|do)?)\b",
+            clean
+        ):
+            return _dispatch("obsidian_brain", {"action": "delete_all"})
+
+        # -- Obsidian Second Brain Reflexes (ADDITIVE — before Needle 2 & Naive Bayes) --
+        # Must run here so LFM ear normalization cannot convert "obsidian mein search karo"
+        # into a web_search query before we get a chance to route it correctly.
+        _obs_create_words = ("banao", "bana", "likho", "create", "add", "naya", "new", "save", "daalo")
+        _obs_search_words = ("search", "dhoondh", "khojo", "dhundo", "kahan likha", "find in")
+        _obs_read_words   = ("padho", "read", "dikhao", "kholo", "open")
+        _obs_list_words   = ("list", "dikhao", "sab notes", "notes kya hain", "notes dikhao", "all notes")
+        _obs_delete_words = ("delete", "hatao", "remove", "mita", "mitao")
+        _clean_l = clean.lower()
+
+        if "obsidian" in _clean_l or re.search(r"\bsecond[\s-]?brain\b", _clean_l):
+            _obs_body = re.sub(
+                r"\b(obsidian|second\s*brain|mein|me|se|ka|ki|ke)\b", " ", _clean_l
+            ).strip()
+            if any(w in _clean_l for w in _obs_delete_words):
+                # extract note name to delete
+                _p = re.sub(
+                    r"\b(obsidian|mein|me|se|ka|ki|ke|delete|hatao|remove|mita|mitao|note|notes?)\b",
+                    " ", _clean_l
+                ).strip()
+                _p = re.sub(r"\s+", " ", _p).strip()
+                return _dispatch("obsidian_brain", {"action": "delete", "path": _p or "untitled"})
+            elif any(w in _clean_l for w in _obs_create_words):
+                _note_title = re.sub(
+                    r"\b(" + "|".join(_obs_create_words) + r"|notes?|note)\b", " ", _obs_body
+                ).strip()
+                _note_title = re.sub(r"\s+", " ", _note_title).strip(" -_.")
+                _note_path  = (_note_title.replace(" ", "_") or "untitled") + ".md"
+                _note_content = (
+                    f"# {_note_title.title()}\n\n"
+                    f"*Created by J.A.R.V.I.S. on {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M')}*\n\n"
+                )
+                return _dispatch("obsidian_brain", {
+                    "action": "write",
+                    "path": _note_path,
+                    "content": _note_content,
+                })
+            elif any(w in _clean_l for w in _obs_search_words):
+                _q = re.sub(
+                    r"\b(obsidian|mein|me|search|dhoondh|khojo|dhundo|kahan\s*likha|find\s*in)\b",
+                    " ", _clean_l
+                ).strip()
+                return _dispatch("obsidian_brain", {"action": "search", "query": _q or clean})
+            elif any(w in _clean_l for w in _obs_read_words):
+                _p = re.sub(
+                    r"\b(obsidian|mein|me|se|ka|ki|ke|padho|read|dikhao|kholo|open|note|notes?)\b",
+                    " ", _clean_l
+                ).strip()
+                _p = re.sub(r"\s+", " ", _p).strip()
+                return _dispatch("obsidian_brain", {"action": "read", "path": _p or clean})
+            elif any(w in _clean_l for w in _obs_list_words):
+                return _dispatch("obsidian_brain", {"action": "list"})
+            else:
+                return _dispatch("obsidian_brain", {"action": "status"})
+
         # -- Neural Needle 2 Engine Fallback (foundation model tool extraction) --
 
         if self._needle_loaded and self._needle_instance is not None:
@@ -603,13 +998,30 @@ class NeedleToolRouter:
                 if intent_name == "troubleshoot_screen":
                     return _dispatch("troubleshoot_screen", {"query": clean})
                 elif intent_name == "tinydb_memory":
-                    t_text = re.sub(r"^(yaad\s*rakhna|yaad\s*rakho|remember\s*that|ki)\s*", "", clean).strip()
-                    return _dispatch("tinydb_memory", {"action": "add", "task": t_text or clean})
+                    # Guard: must have explicit memory/reminder keywords — prevents
+                    # generic questions from being stored as tasks.
+                    _mem_keywords = ("yaad", "remember", "reminder", "mat bhulo", "note karo")
+                    if any(w in clean for w in _mem_keywords):
+                        t_text = re.sub(r"^(yaad\s*rakhna|yaad\s*rakho|remember\s*that|ki)\s*", "", clean).strip()
+                        return _dispatch("tinydb_memory", {"action": "add", "task": t_text or clean})
                 elif intent_name == "tinydb_list":
-                    return _dispatch("tinydb_memory", {"action": "list"})
+                    # Guard: must have task/reminder listing keywords — prevents
+                    # file-inspection queries like "desktop pr kya hain" from
+                    # triggering the task list.
+                    _list_keywords = ("task", "tasks", "kaam", "reminder", "reminders", "todo", "pending")
+                    if any(w in clean for w in _list_keywords):
+                        return _dispatch("tinydb_memory", {"action": "list"})
                 elif intent_name == "bm25_search":
-                    q_text = re.sub(r"\b(notes?\s*(?:me|mein|par)?\s*search\s*karo|search\s*notes?|kahan\s*likha\s*tha|notes?\s*dhoondho|karo|do|please|zara)\b", "", clean).strip()
-                    return _dispatch("bm25_search", {"query": q_text or clean})
+                    # Guard: must have explicit search verbs AND must NOT have
+                    # creation verbs — prevents "obsidian mein notes banao" and
+                    # "file mein kya hain" from matching bm25_search.
+                    _srch_kw   = ("search", "dhoondh", "khoj", "kahan likha", "find")
+                    _creat_kw  = ("banao", "bana", "likho", "create", "add", "likh")
+                    _has_srch  = any(w in clean for w in _srch_kw)
+                    _has_creat = any(w in clean for w in _creat_kw)
+                    if _has_srch and not _has_creat:
+                        q_text = re.sub(r"\b(notes?\s*(?:me|mein|par)?\s*search\s*karo|search\s*notes?|kahan\s*likha\s*tha|notes?\s*dhoondho|karo|do|please|zara)\b", "", clean).strip()
+                        return _dispatch("bm25_search", {"query": q_text or clean})
                 elif intent_name == "find_files":
                     return _dispatch("file_controller", {"action": "find", "name": clean, "path": "home"})
         except Exception:
@@ -708,10 +1120,12 @@ class LFMChatEngine:
             if any(w in clean for w in ("mute", "band", "chup")):
                 return "volume mute", "volume_mute"
 
-        # Semantic Mapping 4: Screen capture / photo
-        # E.g. "screen ka photo le lo", "tasveer kheecho", "snap lo"
+        # Semantic Mapping 4: Screen capture / photo / inspection
+        # E.g. "screen ka photo le lo", "tasveer kheecho", "screen dekho", "screen par kya hai"
         if any(w in clean for w in ("photo", "tasveer", "snap", "pic", "picture")) and any(w in clean for w in ("screen", "display")):
             return "take screenshot", "take_screenshot"
+        if any(w in clean for w in ("screen", "display", "creen")) and any(w in clean for w in ("dekho", "dekh", "check", "kya hai", "kya dikh", "kya chal")):
+            return "screen dekho", "troubleshoot_screen"
 
         # Semantic Mapping 5: Running Apps
         # E.g. "kaun se apps chal rahe hain", "kya khula hai"
@@ -980,6 +1394,20 @@ class TriTierDispatcher:
 
     def route(self, user_text: str, is_online: bool = True) -> Dict[str, Any]:
         """Determine execution tier and routing payload."""
+        # Step 0: Fast-path Obsidian check on raw text BEFORE LFM normalization.
+        # This prevents LFM from converting "obsidian mein search karo" →
+        # "search obsidian mein java" which then hits web_search instead.
+        _raw_lower = (user_text or "").lower()
+        if "obsidian" in _raw_lower or "second brain" in _raw_lower:
+            _obs_raw_call = self.needle.classify_tool_intent(user_text)
+            if _obs_raw_call is not None and isinstance(_obs_raw_call, tuple) and _obs_raw_call[0] == "obsidian_brain":
+                return {
+                    "tier": 1, "engine": "needle_2", "ear": "lfm2.5-230m",
+                    "ear_normalized": None, "intent": "obsidian",
+                    "tool": _obs_raw_call, "target": "local_tool",
+                    "ram_footprint": "28 MB", "latency_estimate": "10ms",
+                }
+
         # Step 1: Pass through LFM2.5 Semantic "Ear" to normalize colloquial speech
         norm_text, intent_label = self.lfm.interpret_command(user_text)
         query_to_eval = norm_text if norm_text else user_text

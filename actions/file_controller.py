@@ -204,10 +204,24 @@ def _resolve_path(raw: str) -> Path:
         "d drive":      Path("D:\\"),
         "e":            Path("E:\\"),
         "e:":           Path("E:\\"),
-        "e drive":      Path("E:\\"),
         "all":          Path(Path.home().anchor or "C:\\"),
         "root":         Path(Path.home().anchor or "C:\\"),
     }
+    # Resolve Obsidian Vault path dynamically
+    try:
+        from memory.config_manager import get_obsidian_config
+        _obs_cfg = get_obsidian_config()
+        _v_p = (_obs_cfg.get("vault_path") or "").strip()
+        _obs_target = Path(_v_p) if _v_p and Path(_v_p).exists() else Path("E:\\obsidian")
+    except Exception:
+        _obs_target = Path("E:\\obsidian")
+    if not _obs_target.exists():
+        _obs_target = Path(__file__).resolve().parent.parent / "memory" / "obsidian_vault"
+    shortcuts["obsidian"] = _obs_target
+    shortcuts["obsidian vault"] = _obs_target
+    shortcuts["vault"] = _obs_target
+    shortcuts["notes"] = _obs_target
+
     raw_s = (raw or "").strip()
     lower = raw_s.lower()
     if lower in shortcuts:
@@ -783,6 +797,109 @@ def get_file_info(path: str, name: str = "") -> str:
     except Exception as e:
         return f"Could not get file info: {e}"
 
+def hunt_delete(name: str = "", extension: str = "", player=None) -> str:
+    """ADDITIVE: naam se har jagah dhoondho (home + desktop + downloads + documents),
+    phir CONFIRM gate ke baad trash karo (undo samet). Kabhi seedha delete nahi.
+    """
+    import fnmatch
+    q = (name or "").strip().lower()
+    if not q or len(q) < 2:
+        return "Kya dhoondh ke delete karun? Naam bolo (kam se kam 2 akshar)."
+    _SKIP_PARTS = {".git", "node_modules", ".venv", "venv", "appdata", "__pycache__", ".cache", "site-packages", "$recycle.bin"}
+    roots = []
+    try:
+        for _r in (_get_desktop(), _get_downloads(), _get_documents()):
+            if _r.exists() and _r not in roots:
+                roots.append(_r)
+    except Exception:
+        roots = [Path.home()]
+    found: list[Path] = []
+    visited = 0
+    try:
+        for _root in roots:
+            for item in _root.rglob("*"):
+                visited += 1
+                if visited > 5000:
+                    break
+                try:
+                    if any(p.lower() in _SKIP_PARTS for p in item.parts):
+                        continue
+                    if not item.is_file():
+                        continue
+                    if extension and item.suffix.lower() != extension.lower():
+                        continue
+                    nm = item.name.lower()
+                    if not (fnmatch.fnmatch(nm, q) or q in nm):
+                        continue
+                    # drive-root / OS-critical skip (delete_file wali safety reuse)
+                    if not _is_safe_path(item, write=True):
+                        continue
+                    found.append(item)
+                    if len(found) >= 15:
+                        break
+                except Exception:
+                    continue
+            if len(found) >= 15 or visited > 5000:
+                break
+    except Exception as e:
+        return f"Search error: {e}"
+    if not found:
+        return f"'{name}' kahin nahi mila (home/desktop/downloads/documents me)."
+    listing = "\n".join(f"{i+1}. {f.name} — {f.parent}" for i, f in enumerate(found))
+    try:
+        from core import confirm as _cg
+        if _cg.pending_title():
+            return ("Ek confirmation pehle se pending hai. Pehle use CONFIRM/CANCEL karo, "
+                    "phir dobara bolo.")
+
+        def _do() -> str:
+            done, fail = [], []
+            for f in found:
+                try:
+                    # exe hai aur chal raha hai to pehle band karo (best-effort)
+                    if f.suffix.lower() == ".exe":
+                        try:
+                            import psutil as _ps
+                            for p in _ps.process_iter(["name"]):
+                                try:
+                                    if (p.info.get("name") or "").lower() == f.name.lower():
+                                        p.terminate()
+                                except Exception:
+                                    continue
+                        except Exception:
+                            pass
+                    r = _safe_trash(f)
+                    if r.startswith("Moved to Trash"):
+                        try:
+                            push_undo(f"hunt-deleted {f.name}",
+                                      lambda p=f.resolve(): _restore_from_trash(p))
+                        except Exception:
+                            pass
+                        done.append(f.name)
+                    else:
+                        fail.append(f.name)
+                except Exception:
+                    fail.append(f.name)
+            msg = f"{len(done)} trash hue: {', '.join(done[:8])}"
+            if fail:
+                msg += f" | fail: {', '.join(fail[:5])}"
+            try:
+                from core.audit import log_event as _ae
+                _ae("hunt_delete", f"{name} -> {len(done)} trashed", confirmed=True)
+            except Exception:
+                pass
+            return msg + " (Undo ke liye 'undo karo' bolo.)"
+
+        return _cg.request(
+            key="hunt_delete", title=f"Delete {len(found)} file(s) matching '{name}'?",
+            detail=f"Ye trash honge (undo possible):\n{listing}",
+            run=_do,
+        )
+    except Exception as e:
+        return f"Confirm gate unavailable: {e}."
+
+
+
 def file_controller(
     parameters: dict = None,
     response=None,
@@ -837,6 +954,13 @@ def file_controller(
                 max_results=min(int(params.get("max_results", 20)), 50),
             )
 
+        elif action in ("hunt_delete", "find_delete", "khoj_ke_delete"):
+            return hunt_delete(
+                name=name or params.get("name", ""),
+                extension=params.get("extension", ""),
+                player=player,
+            )
+
         elif action == "largest":
             return get_largest_files(
                 path=path,
@@ -883,13 +1007,13 @@ def file_controller(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "file_controller",
-    "description": "Manages files, folders, and storage: list, create, delete, move, copy, rename, read, write, find, largest, disk_usage, analyze_storage.",
+    "description": "Manages files, folders, and storage: list, create, delete, move, copy, rename, read, write, find, hunt_delete (find-anywhere + confirm-gated trash), largest, disk_usage, analyze_storage.",
     "parameters": {
         "type": "OBJECT",
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | analyze_storage | organize_desktop | info"
+                "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | hunt_delete | largest | disk_usage | analyze_storage | organize_desktop | info"
             },
             "path": {
                 "type": "STRING",

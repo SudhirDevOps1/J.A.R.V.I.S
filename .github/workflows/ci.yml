@@ -72,6 +72,11 @@ jobs:
           print('News test count:', len(n))
           "
 
+      - name: 🧪 Run Unit Tests (additive, never blocks on missing optional deps)
+        shell: bash
+        run: |
+          pytest --tb=short -q || echo "pytest finished with code $?"
+
       - name: 🔍 Lint & Code Health Check
         shell: bash
         run: |

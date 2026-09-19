@@ -106,20 +106,49 @@ def get_network_latency() -> dict:
 def get_free_weather(lat: float = None, lon: float = None, city: str = None) -> dict:
     """
     Fetch hyper-local weather from Open-Meteo API (100% Free, NO API key, 0 tokens).
-    If coordinates are not provided, auto-resolves via user's live IP geo-location.
+    If city is provided, resolves exact latitude/longitude via Open-Meteo geocoding API.
+    If coordinates and city are not provided, auto-resolves via user's live IP geo-location.
     """
     try:
-        loc = get_ip_location()
+        resolved_city = city
+        resolved_region = ""
+        resolved_country = ""
+
+        # If a specific city is requested, resolve coordinates via Open-Meteo Geocoding
+        if city and (lat is None or lon is None):
+            try:
+                from urllib.parse import quote_plus
+                geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={quote_plus(city.strip())}&count=1&language=en&format=json"
+                geo_resp = requests.get(geo_url, timeout=3.0)
+                if geo_resp.status_code == 200:
+                    geo_data = geo_resp.json()
+                    results = geo_data.get("results")
+                    if results and len(results) > 0:
+                        top = results[0]
+                        lat = float(top.get("latitude"))
+                        lon = float(top.get("longitude"))
+                        resolved_city = top.get("name", city)
+                        resolved_region = top.get("admin1", "")
+                        resolved_country = top.get("country", "")
+            except Exception:
+                pass
+
+        # Fallback to IP geolocation if still None
         if lat is None or lon is None:
+            loc = get_ip_location()
             lat = loc.get("lat", 28.6139)
             lon = loc.get("lon", 77.2090)
-        if not city:
-            city = loc.get("city", "Local")
+            if not resolved_city:
+                resolved_city = loc.get("city", "Local")
+            if not resolved_region:
+                resolved_region = loc.get("region", "")
+            if not resolved_country:
+                resolved_country = loc.get("country", "")
 
         url = (
             f"https://api.open-meteo.com/v1/forecast?"
             f"latitude={lat}&longitude={lon}&current_weather=true"
-            f"&hourly=relativehumidity_2m,apparent_temperature,surface_pressure"
+            f"&hourly=relativehumidity_2m,apparent_temperature,surface_pressure,precipitation_probability"
             f"&timezone=auto"
         )
         resp = requests.get(url, timeout=4.0)
@@ -160,9 +189,9 @@ def get_free_weather(lat: float = None, lon: float = None, city: str = None) -> 
                 weather_icon = "⛈️"
 
             return {
-                "city": city,
-                "region": loc.get("region", ""),
-                "country": loc.get("country", ""),
+                "city": resolved_city or city or "Local",
+                "region": resolved_region,
+                "country": resolved_country,
                 "temp": f"{temp}°C",
                 "feels_like": feels_like,
                 "wind": f"{wind} km/h",

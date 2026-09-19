@@ -27,6 +27,13 @@ from datetime import datetime
 
 def _get_api_key() -> str:
     try:
+        from memory.config_manager import load_api_keys
+        k = (load_api_keys().get("gemini_api_key") or "").strip()
+        if k:
+            return k
+    except Exception:
+        pass
+    try:
         config_path = Path(__file__).resolve().parent.parent / "config" / "api_keys.json"
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:

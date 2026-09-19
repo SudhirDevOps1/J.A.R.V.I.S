@@ -32,6 +32,13 @@ OUTPUT_SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _get_api_key() -> str:
+    try:
+        from memory.config_manager import load_api_keys
+        k = (load_api_keys().get("gemini_api_key") or "").strip()
+        if k:
+            return k
+    except Exception:
+        pass
     path = BASE_DIR / "config" / "api_keys.json"
     if path.exists():
         try:
@@ -60,7 +67,7 @@ Please analyze the traffic:
 """
     try:
         from core.multi_llm import get_llm_model
-        client = get_llm_model(model="gemini-2.5-flash")
+        client = get_llm_model(model="gemini-2.0-flash")
         res = client.generate_content(prompt)
         return (res.text or "").strip()
     except Exception as e:

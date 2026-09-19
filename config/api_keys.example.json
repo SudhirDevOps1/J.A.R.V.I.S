@@ -17,7 +17,7 @@
         "cerebras": "llama-3.3-70b",
         "groq": "llama-3.3-70b-versatile",
         "openrouter": "deepseek/deepseek-r1:free",
-        "gemini": "gemini-2.5-flash",
+        "gemini": "gemini-2.0-flash",
         "gemini-web": "gemini-3.7-flash",
         "nvidia": "meta/llama-3.3-70b-instruct",
         "mistral": "mistral-small-latest",

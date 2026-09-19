@@ -163,6 +163,12 @@ def update_memory(memory_update: dict) -> dict:
     if _recursive_update(memory, memory_update):
         save_memory(memory)
         print(f"[Memory] 💾 Saved: {list(memory_update.keys())}")
+        # ADDITIVE KG hook: graph triples (regex, no LLM). Fail-safe, purana save untouched.
+        try:
+            from memory.knowledge_graph import ingest_memory_update
+            ingest_memory_update(memory_update)
+        except Exception:
+            pass
     return memory
 
 def _entry_value(entry) -> str:

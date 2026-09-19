@@ -79,8 +79,27 @@ class VoskSTT:
         if model_path:
             model = Model(model_path)
         else:
-            lang  = language.strip().lower() if language and language.strip().lower() != "auto" else "en-us"
-            model = Model(lang=lang)
+            # Additive fix: vosk.Model takes a filesystem path, not lang=.
+            # Purana Model(lang=) call fallback me rakha hai (hataya nahi), pehle
+            # common cache paths probe karo taaki offline first-boot crash na ho.
+            import os as _os
+            lang = language.strip().lower() if language and language.strip().lower() != "auto" else "en-us"
+            _candidates = [
+                _os.path.join("core", "models", "vosk", lang),
+                _os.path.join("models", "vosk", lang),
+                _os.path.expanduser(f"~/.cache/vosk/{lang}"),
+            ]
+            _found = next((p for p in _candidates if _os.path.isdir(p)), None)
+            if _found:
+                model = Model(_found)
+            else:
+                try:
+                    model = Model(lang=lang)
+                except TypeError:
+                    raise RuntimeError(
+                        f"Vosk model folder not found. Tried: {', '.join(_candidates)}. "
+                        f"Download a Vosk model (e.g. vosk-model-small-en-us-0.15) and pass model_path."
+                    )
         self._rec = KaldiRecognizer(model, 16000)
         print("[STT] Vosk ready.")
 
@@ -91,3 +110,30 @@ class VoskSTT:
             return result.get("text", ""), True
         partial = json.loads(self._rec.PartialResult())
         return partial.get("partial", ""), False
+
+
+# ── Additive offline fallback (purana untouched) ─────────────────────────────
+# main.py Live loop se optional call: Gemini deaf ho to Whisper base/en se suno.
+# Lazy import + cached singleton taaki first-boot par 75-290MB download ek baar ho.
+_WHISPER_SINGLETON: dict = {}
+
+
+def is_offline_stt_available() -> bool:
+    """True agar faster-whisper import ho jaye (model cache check nahi, sirf pkg)."""
+    try:
+        import importlib.util as _u
+        return _u.find_spec("faster_whisper") is not None
+    except Exception:
+        return False
+
+
+def transcribe_fallback(audio: np.ndarray, model_name: str = "base", language: str | None = None) -> str:
+    """Offline Whisper fallback. Raises nahi — fail par '' taaki caller Live par rahe."""
+    try:
+        key = f"{model_name}:{language or 'auto'}"
+        if key not in _WHISPER_SINGLETON:
+            _WHISPER_SINGLETON[key] = WhisperSTT(model_name=model_name, language=language)
+        return _WHISPER_SINGLETON[key].transcribe(audio) or ""
+    except Exception as e:
+        print(f"[STT] Fallback unavailable: {e}")
+        return ""

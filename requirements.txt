@@ -4,7 +4,7 @@ sounddevice
 numpy
 google-genai>=2.8.0
 edge-tts
-piper-tts
+# NOTE: piper-tts REMOVED per user request (Edge TTS + Gemini Live only).
 
 # ── Web search & browser control ──────────────────────────────────────────────
 requests
@@ -35,6 +35,11 @@ rank-bm25
 thefuzz
 keyboard
 scikit-learn
+
+# ── Automation: macros, scheduler, file triggers (installed, progress me jode) ─
+pynput
+apscheduler
+watchdog
 
 # ── Remote dashboard (control from your phone) ────────────────────────────────
 fastapi

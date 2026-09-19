@@ -196,6 +196,21 @@ def retheme_all_widgets(old: dict[str, str], new: dict[str, str]) -> None:
             w.update()
         except Exception:
             pass
+    # ADDITIVE theme pulse: recolor ke baad 380ms suit-change glow (top windows only).
+    # Purana instant-recolor untouched — ye sirf uske upar cosmetic pulse hai.
+    try:
+        for _tw in app.topLevelWidgets():
+            try:
+                _pa = QPropertyAnimation(_tw, b"windowOpacity", _tw)
+                _pa.setDuration(380)
+                _pa.setStartValue(0.55)
+                _pa.setEndValue(1.0)
+                _pa.setEasingCurve(QEasingCurve.Type.OutCubic)
+                _pa.start(QPropertyAnimation.DeletionPolicy.KeepWhenStopped)
+            except Exception:
+                continue
+    except Exception:
+        pass
 
 
 def qcol(h: str, a: int = 255) -> QColor:
@@ -433,6 +448,7 @@ class HudCanvas(QWidget):
 
         # Real-Time Emotional State & Expression Engine
         self._expression = ""
+        self._expr_at = 0.0  # ADDITIVE: badge slide-in animation start time
         self._expr_timer = QTimer(self)
         self._expr_timer.setSingleShot(True)
         self._expr_timer.timeout.connect(self._clear_expression)
@@ -582,6 +598,11 @@ class HudCanvas(QWidget):
         if self._expression:
             self._expr_timer.stop()
             self._expr_timer.start(int(duration_sec * 1000))
+            try:  # ADDITIVE slide-in start time (purana timer untouched)
+                import time as _tm
+                self._expr_at = _tm.monotonic()
+            except Exception:
+                pass
         self.update()
 
     def _clear_expression(self) -> None:
@@ -1243,9 +1264,20 @@ class HudCanvas(QWidget):
         if expr_info:
             p.save()
             bw_w = 260
-            badge_r = QRectF(cx - bw_w / 2.0, sy - 2, bw_w, 24)
+            # ADDITIVE slide-in: badge left se glide + fade (0.45s ease-out). Purana rect same.
+            _bx_off, _b_alpha = 0.0, 215
+            try:
+                import time as _tm
+                _el = _tm.monotonic() - float(getattr(self, "_expr_at", 0.0) or 0.0)
+                _sl = max(0.0, min(1.0, _el / 0.45))
+                _ease = 1.0 - (1.0 - _sl) * (1.0 - _sl)
+                _bx_off = (1.0 - _ease) * -70.0
+                _b_alpha = int(60 + 155 * _ease)
+            except Exception:
+                pass
+            badge_r = QRectF(cx - bw_w / 2.0 + _bx_off, sy - 2, bw_w, 24)
             p.setPen(QPen(QColor(expr_info["primary"]), 1))
-            p.setBrush(QBrush(QColor(0, 10, 16, 215)))
+            p.setBrush(QBrush(QColor(0, 10, 16, max(0, min(255, _b_alpha)))))
             p.drawRoundedRect(badge_r, 4, 4)
             p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
             p.setPen(QPen(QColor(expr_info["primary"]), 1))
@@ -1255,6 +1287,22 @@ class HudCanvas(QWidget):
             p.setPen(QPen(status_col, 1))
             p.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
             p.drawText(QRectF(0, sy, W, 22), Qt.AlignmentFlag.AlignCenter, status_txt)
+
+        # ADDITIVE typing indicator: THINKING me 3 bouncing dots (purana status untouched).
+        # Iron-Man "working" feel — cheap tick-based bounce, koi state change nahi.
+        try:
+            if self.state in ("THINKING", "PROCESSING") and not expr_info and not self.muted:
+                _dy0 = sy + 26
+                for _di in range(3):
+                    _ph = self._tick * 0.35 + _di * 2.1
+                    _bo = math.sin(_ph) * 3.0
+                    _dx = cx + (_di - 1) * 16.0
+                    _al = int(140 + 100 * (0.5 + 0.5 * math.sin(_ph)))
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QBrush(qcol(C.ACC2, max(0, min(255, _al)))))
+                    p.drawEllipse(QPointF(_dx, _dy0 + _bo), 3.2, 3.2)
+        except Exception:
+            pass
 
         # Center-weighted voice spectrum equalizer (if enabled)
         if self._hud_fx.get("spectrum", True):
@@ -1415,6 +1463,23 @@ class LogWidget(QTextEdit):
                 self._typing = False
                 self._text = ""
                 self._pos = 0
+
+            # Additive guard: speaker badal jaye to purani open line close karo (bina hataye).
+            # Nahi to user transcript + AI jawab ek hi "You:" line me chipak jate hain.
+            try:
+                _new_spk = (speaker or "").strip().lower()
+                _old_spk = (self._streaming_speaker or "").strip().lower()
+                if self._streaming_active and _new_spk and _old_spk and _new_spk != _old_spk:
+                    _cur = self.textCursor()
+                    _cur.movePosition(_cur.MoveOperation.End)
+                    _cur.insertText("\n")
+                    self.setTextCursor(_cur)
+                    self.ensureCursorVisible()
+                    self._streaming_active = False
+                    self._streaming_speaker = ""
+                    self._streaming_has_content = False
+            except Exception:
+                pass
 
             # If not currently in active streaming mode, start line with speaker prefix
             if not self._streaming_active:
@@ -2133,7 +2198,7 @@ class ProviderSettingsOverlay(QWidget):
 
         # Header
         main_lay.addWidget(_lbl("⚡  STARK NEURAL CONFIG & LAB", 11, True, color=C.PRI, align=Qt.AlignmentFlag.AlignCenter))
-        main_lay.addWidget(_lbl("Multi-Brain Matrix • Offline Piper Voice Lab • Telemetry", 7, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignCenter))
+        main_lay.addWidget(_lbl("Multi-Brain Matrix • Edge Voice Lab • Telemetry", 7, color=C.TEXT_DIM, align=Qt.AlignmentFlag.AlignCenter))
 
         # Top Navigation Tabs (Pikachu-Style)
         tab_row = QHBoxLayout()
@@ -2621,11 +2686,13 @@ class ProviderSettingsOverlay(QWidget):
         self._tts_combo.view().setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         tts_options = [
             ("gemini_live", "Google Gemini Live (Multilingual Realtime Voice)"),
-            ("piper_hindi", "Piper Offline Hindi (Devanagari - hi_IN Pratham)"),
             ("edgetts", "Microsoft EdgeTTS (Cloud Natural - Guy / Swara)"),
             ("kokoro", "Kokoro Neural TTS (Offline English - af_heart)"),
         ]
+        # NOTE: Piper option removed per user request (Edge + Gemini Live only).
         curr_tts = (self.cfg.get("tts_engine") or "gemini_live").lower().strip()
+        if curr_tts.startswith("piper"):
+            curr_tts = "edgetts"  # auto-migrate stale selection
         for idx, (t_id, t_label) in enumerate(tts_options):
             self._tts_combo.addItem(t_label, t_id)
             if curr_tts == t_id:
@@ -2634,8 +2701,8 @@ class ProviderSettingsOverlay(QWidget):
 
         # Voice Info Banner
         self._voice_info_card = QLabel(
-            "⚡ Piper Hindi: 100% Offline Neural Speech\n"
-            "   Devanagari script support | Zero latency | Zero cloud tokens"
+            "🔊 EdgeTTS + Gemini Live voices\n"
+            "   Cloud natural speech | Multi-voice | Live realtime"
         )
         self._voice_info_card.setFont(QFont("Courier New", 7))
         self._voice_info_card.setStyleSheet(f"""
@@ -2672,7 +2739,7 @@ class ProviderSettingsOverlay(QWidget):
         lay_voice.addWidget(self._voice_stat_lbl)
 
         def _on_test_voice_click():
-            eng = self._tts_combo.currentData() or "piper_hindi"
+            eng = self._tts_combo.currentData() or "gemini_live"
             self._voice_stat_lbl.setText("🟡 [Synthesizing & Playing preview...]")
             self._voice_stat_lbl.setStyleSheet("color: #ffaa00;")
             self._voice_test_btn.setEnabled(False)
@@ -2811,9 +2878,7 @@ class ProviderSettingsOverlay(QWidget):
         # Dynamic TTS description update
         def _on_tts_change():
             eng = self._tts_combo.currentData() or ""
-            if eng == "piper_hindi":
-                self._voice_info_card.setText("⚡ Piper Hindi: 100% Offline Neural Speech\n   Devanagari script support | Zero latency | Zero cloud tokens")
-            elif eng == "edgetts":
+            if eng == "edgetts":
                 self._voice_info_card.setText("🌐 EdgeTTS: Microsoft Azure Natural Voice (Guy/Swara)\n   Clear pronunciation | Requires active internet connection")
             elif eng == "gemini_live":
                 self._voice_info_card.setText("🎙️ Gemini Live: Real-time bi-directional voice\n   Ultra-low latency streaming voice over WebSockets")
@@ -3647,9 +3712,9 @@ class CustomizeOverlay(QWidget):
         self._tts_btns = {}
         tts_engines = [
             ("edge_tts", "⚡ EDGE-TTS (Neural)"),
-            ("piper", "🎙️ PIPER (Offline)"),
             ("gemini", "🌐 GEMINI LIVE"),
         ]
+        # NOTE: PIPER button removed per user request (Edge + Gemini only).
         for eng_key, eng_label in tts_engines:
             b = QPushButton(eng_label)
             b.setFixedHeight(26)
@@ -4310,6 +4375,31 @@ class _HudOverlay(QWidget):
     painting around them and their last frame stays on screen as a ghost. Any
     overlay positioned with _centre_overlay needs this."""
 
+    def showEvent(self, e):
+        # ADDITIVE open-fade: panel 120ms me glide-in (Iron-Man feel).
+        # Fail ho to bhi panel dikhega — animation purely cosmetic hai.
+        try:
+            _anim = QPropertyAnimation(self, b"windowOpacity", self)
+            _anim.setDuration(140)
+            _anim.setStartValue(0.35)
+            _anim.setEndValue(1.0)
+            _anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            _anim.start(QPropertyAnimation.DeletionPolicy.KeepWhenStopped)
+            self._open_fade = _anim
+        except Exception:
+            try:
+                self.setWindowOpacity(1.0)
+            except Exception:
+                pass
+        # ADDITIVE: baad me bane buttons (settings panels) par bhi icons.
+        try:
+            _w = self.window()
+            if hasattr(_w, "_apply_button_icons"):
+                _w._apply_button_icons()
+        except Exception:
+            pass
+        super().showEvent(e)
+
     def hideEvent(self, e):
         p = self.parentWidget()
         if p is not None:
@@ -4879,41 +4969,48 @@ class PluginSettingsOverlay(QWidget):
         sep.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
         root.addWidget(sep)
 
+        # ADDITIVE credentials hub (auto-detect + guided save). Generic engine untouched.
+        self._cred_widgets: dict[str, object] = {}   # config-key -> QLineEdit
+        self._cred_dots: dict[str, QLabel] = {}      # plugin id -> status QLabel
+        self._smart_widgets: dict[str, object] = {}  # smart-home field -> QLineEdit
+
+        # Scroll area hamesha (credentials section ke liye — generic empty-state untouched rakha neeche)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        inner = QWidget()
+        inner.setStyleSheet("background: transparent;")
+        form = QVBoxLayout(inner)
+        form.setContentsMargins(0, 0, 6, 0)
+        form.setSpacing(6)
+        self._build_creds_section(form)  # ADDITIVE: credentials sabse upar
         if not self._sections:
-            root.addWidget(self._lbl(
+            form.addWidget(self._lbl(
                 "No configurable plugins are installed.\nDrop a plugin that needs "
                 "settings (like the 3D-printer suite) into the plugins folder and "
                 "it will show up here.", 9, color=C.TEXT_DIM))
         else:
-            scroll = QScrollArea()
-            scroll.setWidgetResizable(True)
-            scroll.setFrameShape(QFrame.Shape.NoFrame)
-            scroll.setStyleSheet("QScrollArea { background: transparent; }")
-            inner = QWidget()
-            inner.setStyleSheet("background: transparent;")
-            form = QVBoxLayout(inner)
-            form.setContentsMargins(0, 0, 6, 0)
-            form.setSpacing(6)
             for sec in self._sections:
                 self._build_section(form, sec)
-            form.addStretch(1)
-            scroll.setWidget(inner)
-            root.addWidget(scroll, 1)
+        form.addStretch(1)
+        scroll.setWidget(inner)
+        root.addWidget(scroll, 1)
 
         # ── bottom buttons ───────────────────────────────────────────────────
+        # ADDITIVE: SAVE hamesha (credentials ke liye) — purana conditional halka kiya, buttons same.
         btn_row = QHBoxLayout(); btn_row.setSpacing(8)
-        if self._sections:
-            save_btn = QPushButton("▸  SAVE")
-            save_btn.setFixedHeight(34)
-            save_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
-            save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            save_btn.setStyleSheet(f"""
-                QPushButton {{ background: transparent; color: {C.PRI};
-                    border: 1px solid {C.PRI_DIM}; border-radius: 3px; }}
-                QPushButton:hover {{ background: {C.PRI_GHO}; border: 1px solid {C.PRI}; }}
-            """)
-            save_btn.clicked.connect(self._save_all)
-            btn_row.addWidget(save_btn)
+        save_btn = QPushButton("▸  SAVE")
+        save_btn.setFixedHeight(34)
+        save_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {C.PRI};
+                border: 1px solid {C.PRI_DIM}; border-radius: 3px; }}
+            QPushButton:hover {{ background: {C.PRI_GHO}; border: 1px solid {C.PRI}; }}
+        """)
+        save_btn.clicked.connect(self._save_all)
+        btn_row.addWidget(save_btn)
 
         close_btn = QPushButton("CLOSE")
         close_btn.setFixedHeight(34)
@@ -4936,6 +5033,189 @@ class PluginSettingsOverlay(QWidget):
                         QFont.Weight.Bold if bold else QFont.Weight.Normal))
         w.setStyleSheet(f"color: {color}; background: transparent;")
         return w
+
+    def _build_creds_section(self, form: QVBoxLayout) -> None:
+        """ADDITIVE 🔑 CREDENTIALS hub: auto-detect dots + paste/import/save.
+        Generic PLUGIN_SETTINGS engine untouched — ye alag block hai."""
+        try:
+            from core.plugin_creds import SPECS
+        except Exception:
+            return
+        try:
+            form.addWidget(self._lbl("🔑  CREDENTIALS — AUTO-DETECT", 10, True, C.ACC2))
+            form.addWidget(self._lbl(
+                "Paste key → SAVE. Google wali JSON download karke IMPORT dabao. "
+                "GET KEY se browser me key-page khulegi.", 8, color=C.TEXT_DIM))
+            for spec in SPECS:
+                try:
+                    self._build_cred_row(form, spec)
+                except Exception:
+                    continue
+            line = QFrame(); line.setFrameShape(QFrame.Shape.HLine)
+            line.setStyleSheet(f"color: {C.BORDER}; margin: 4px 0;")
+            form.addWidget(line)
+        except Exception:
+            pass
+
+    def _cred_dot(self, ok: bool) -> str:
+        return "🟢 Connected" if ok else "🔴 Missing"
+
+    def _build_cred_row(self, form: QVBoxLayout, spec: dict) -> None:
+        pid = spec.get("plugin", "?")
+        try:
+            ok = bool(spec.get("detect", lambda: False)())
+        except Exception:
+            ok = False
+        dot = QLabel(f"{spec.get('label', pid)}  {self._cred_dot(ok)}")
+        dot.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        dot.setStyleSheet(f"color: {C.GREEN if ok else C.TEXT_MED}; background: transparent;")
+        form.addWidget(dot)
+        self._cred_dots[pid] = dot
+        form.addWidget(self._lbl(spec.get("help_text", ""), 8, color=C.TEXT_DIM))
+
+        kind = (spec.get("kind") or "").lower()
+        if kind == "keys":
+            for fld in spec.get("fields", []):
+                if not isinstance(fld, dict) or not fld.get("key"):
+                    continue
+                form.addWidget(self._lbl(str(fld.get("label") or fld["key"]).upper(), 8, color=C.TEXT_DIM))
+                w = QLineEdit()
+                w.setFont(QFont("Courier New", 9))
+                w.setFixedHeight(30)
+                w.setStyleSheet(self._fs)
+                w.setPlaceholderText(f"paste {fld.get('label', fld['key'])}…")
+                if fld.get("secret"):
+                    w.setEchoMode(QLineEdit.EchoMode.Password)
+                self._cred_widgets[fld["key"]] = w
+                form.addWidget(w)
+        elif kind == "file":
+            ib = QPushButton(f"📥 IMPORT {spec.get('file_kind', '').upper()} JSON")
+            ib.setFixedHeight(30)
+            ib.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            ib.setCursor(Qt.CursorShape.PointingHandCursor)
+            ib.setStyleSheet(f"""
+                QPushButton {{ background: #00091a; color: {C.PRI};
+                    border: 1px solid {C.PRI_DIM}; border-radius: 3px; }}
+                QPushButton:hover {{ background: {C.PRI_GHO}; border-color: {C.PRI}; }}
+            """)
+            ib.clicked.connect(lambda _=False, fk=spec.get("file_kind", ""): self._import_cred_file(fk))
+            form.addWidget(ib)
+        elif kind == "smart":
+            for _fk, _lbl in (("dev_name", "DEVICE NAME (e.g. bedroom light)"),
+                              ("dev_id", "DEVICE ID"), ("dev_key", "LOCAL KEY"),
+                              ("dev_ip", "IP (optional)")):
+                form.addWidget(self._lbl(_lbl, 8, color=C.TEXT_DIM))
+                w = QLineEdit()
+                w.setFont(QFont("Courier New", 9))
+                w.setFixedHeight(30)
+                w.setStyleSheet(self._fs)
+                if _fk == "dev_key":
+                    w.setEchoMode(QLineEdit.EchoMode.Password)
+                self._smart_widgets[_fk] = w
+                form.addWidget(w)
+            ab = QPushButton("＋ ADD DEVICE")
+            ab.setFixedHeight(30)
+            ab.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            ab.setCursor(Qt.CursorShape.PointingHandCursor)
+            ab.setStyleSheet(f"""
+                QPushButton {{ background: #00091a; color: {C.PRI};
+                    border: 1px solid {C.PRI_DIM}; border-radius: 3px; }}
+                QPushButton:hover {{ background: {C.PRI_GHO}; border-color: {C.PRI}; }}
+            """)
+            ab.clicked.connect(self._add_smart_device)
+            form.addWidget(ab)
+
+        url = (spec.get("help_url") or "").strip()
+        if url:
+            gb = QPushButton("↗ GET KEY (browser me kholo)")
+            gb.setFixedHeight(26)
+            gb.setFont(QFont("Courier New", 7))
+            gb.setCursor(Qt.CursorShape.PointingHandCursor)
+            gb.setStyleSheet(f"""
+                QPushButton {{ background: transparent; color: {C.TEXT_DIM};
+                    border: 1px solid {C.BORDER}; border-radius: 3px; }}
+                QPushButton:hover {{ color: {C.TEXT}; border-color: {C.BORDER_B}; }}
+            """)
+            gb.clicked.connect(lambda _=False, _u=url: self._open_cred_url(_u))
+            form.addWidget(gb)
+        form.addSpacing(4)
+
+    def _open_cred_url(self, url: str) -> None:
+        try:
+            from PyQt6.QtCore import QUrl
+            from PyQt6.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl(url))
+        except Exception:
+            try:
+                import webbrowser
+                webbrowser.open(url)
+            except Exception:
+                pass
+
+    def _import_cred_file(self, kind: str) -> None:
+        try:
+            from PyQt6.QtWidgets import QFileDialog
+            from core.plugin_creds import import_cred_file
+            path, _ = QFileDialog.getOpenFileName(self, f"Import {kind} JSON", "", "JSON (*.json)")
+            if not path:
+                return
+            ok, msg = import_cred_file(kind, path)
+            self._toast_cred(kind, ok, msg)
+            self._refresh_cred_dots()
+        except Exception as e:
+            self._toast_cred(kind, False, str(e))
+
+    def _add_smart_device(self) -> None:
+        try:
+            from core.plugin_creds import save_smart_device
+            g = lambda k: self._smart_widgets.get(k).text().strip() if self._smart_widgets.get(k) else ""
+            ok, msg = save_smart_device(g("dev_name"), g("dev_id"), g("dev_key"), g("dev_ip"))
+            self._toast_cred("smart_home", ok, msg)
+            self._refresh_cred_dots()
+        except Exception as e:
+            self._toast_cred("smart_home", False, str(e))
+
+    def _toast_cred(self, pid: str, ok: bool, msg: str) -> None:
+        try:
+            dot = self._cred_dots.get(pid)
+            if dot is not None:
+                from core.plugin_creds import SPECS
+                spec = next((s for s in SPECS if s.get("plugin") == pid
+                             or s.get("file_kind") == pid), None)
+                label = (spec or {}).get("label", pid)
+                # re-detect real state (import hua to green)
+                try:
+                    rok = bool((spec or {}).get("detect", lambda: False)())
+                except Exception:
+                    rok = bool(ok)
+                dot.setText(f"{label}  {self._cred_dot(rok)}")
+                dot.setStyleSheet(f"color: {C.GREEN if rok else C.RED}; background: transparent;")
+            # popup toast bhi (MainWindow mile to), warna dot hi kaafi
+            try:
+                w = self.window()
+                if hasattr(w, "toast"):
+                    w.toast(str(msg)[:120], "ok" if ok else "err")
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _refresh_cred_dots(self) -> None:
+        try:
+            from core.plugin_creds import SPECS
+            for spec in SPECS:
+                pid = spec.get("plugin", "?")
+                dot = self._cred_dots.get(pid)
+                if dot is None:
+                    continue
+                try:
+                    ok = bool(spec.get("detect", lambda: False)())
+                except Exception:
+                    ok = False
+                dot.setText(f"{spec.get('label', pid)}  {self._cred_dot(ok)}")
+                dot.setStyleSheet(f"color: {C.GREEN if ok else C.TEXT_MED}; background: transparent;")
+        except Exception:
+            pass
 
     def _build_section(self, form: QVBoxLayout, sec: dict):
         ns     = sec.get("namespace") or sec.get("plugin") or "plugin"
@@ -5056,6 +5336,26 @@ class PluginSettingsOverlay(QWidget):
                 if lbl:
                     lbl.setText("Saved ✓")
                     lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        # ADDITIVE credentials save (paste-box keys -> api_keys.json atomic)
+        try:
+            from core.plugin_creds import save_keys
+            vals = {}
+            for key, w in (self._cred_widgets or {}).items():
+                try:
+                    t = w.text().strip()
+                    if t:
+                        vals[key] = t
+                except Exception:
+                    continue
+            if vals and save_keys(vals):
+                for w in (self._cred_widgets or {}).values():
+                    try:
+                        w.clear()
+                    except Exception:
+                        pass
+            self._refresh_cred_dots()
+        except Exception:
+            pass
 
     def _run_action(self, ns: str):
         sec = next((s for s in self._sections
@@ -5328,6 +5628,330 @@ class RemoteKeyOverlay(QWidget):
         self.closed.emit()
 
 
+class ToastStack(QWidget):
+    """ADDITIVE self-dismissing toast banners (research-backed clutter-free pattern).
+    Child of central widget, top-right. toast(text, kind). Kinds: ok/info/err.
+    Purely cosmetic — fail ho to silently skip, app flow untouched."""
+
+    _COLORS = {"ok": ("#00ff88", "#00331c"), "info": ("#00d4ff", "#001f2e"),
+               "err": ("#ff5566", "#330a10"), "warn": ("#ffcc00", "#332700")}
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+        lay.addStretch()
+        self.hide()
+
+    def toast(self, text: str, kind: str = "info") -> None:
+        try:
+            fg, bg = self._COLORS.get((kind or "info").lower(), self._COLORS["info"])
+            lbl = QLabel((text or "")[:120])
+            lbl.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet(
+                f"color: {fg}; background: {bg}; border: 1px solid {fg}; "
+                f"border-radius: 4px; padding: 6px 10px;"
+            )
+            lay = self.layout()
+            lay.insertWidget(lay.count() - 1, lbl)
+            while lay.count() > 5:
+                _old = lay.takeAt(0).widget()
+                if _old:
+                    _old.deleteLater()
+            cw = self.parentWidget()
+            if cw is not None:
+                self.setGeometry(cw.width() - 330, 60, 318, 200)
+            self.show()
+            self.raise_()
+            QTimer.singleShot(4000, lambda: self._drop(lbl))
+        except Exception:
+            pass
+
+    def _drop(self, lbl) -> None:
+        try:
+            # fade-out phir remove (fail-safe: seedha hide)
+            try:
+                _a = QPropertyAnimation(lbl, b"windowOpacity", lbl)
+                _a.setDuration(350)
+                _a.setStartValue(1.0)
+                _a.setEndValue(0.0)
+                _a.finished.connect(lbl.deleteLater)
+                _a.start(QPropertyAnimation.DeletionPolicy.KeepWhenStopped)
+            except Exception:
+                lbl.deleteLater()
+            if self.layout().count() <= 1:
+                QTimer.singleShot(500, self.hide)
+        except Exception:
+            pass
+
+
+class PipWindow(QWidget):
+    """ADDITIVE mini always-on-top companion (PiP mode).
+    Browser/app ke upar sleek cyber window: state dot + scrollable chat history + quick actions + text input.
+    Voice bhi chalti rehti hai (mic main loop me hai) — ye sath-sath chat dekhne + control karne ke liye.
+    Draggable (frameless). Purely additive — main HUD untouched."""
+
+    _DOT = {"SPEAKING": "#ffcc00", "LISTENING": "#00ff88", "THINKING": "#00d4ff",
+            "SLEEPING": "#556677", "MUTED": "#ff5566"}
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint
+                            | Qt.WindowType.WindowStaysOnTopHint
+                            | Qt.WindowType.Tool)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._expanded = False
+        self.setFixedSize(380, 260)
+        self.on_send = None     # callable(text) — MainWindow wires on_text_command
+        self._drag = None
+
+        # Fetch persona name
+        self._asst = "JARVIS"
+        try:
+            from memory.config_manager import load_api_keys
+            self._asst = (load_api_keys().get("assistant_name") or "JARVIS").upper()
+        except Exception:
+            pass
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(10, 8, 10, 8)
+        root.setSpacing(6)
+        self.setStyleSheet(f"""
+            PipWindow {{
+                background: rgba(4, 12, 20, 245);
+                border: 1px solid rgba(0, 229, 255, 0.4);
+                border-radius: 10px;
+            }}
+        """)
+
+        # Header: dot + title + quick buttons (screen, cam, clear, expand, hide)
+        hdr = QHBoxLayout(); hdr.setSpacing(5)
+        self._dot = QLabel("●")
+        self._dot.setFont(QFont("Courier New", 12, QFont.Weight.Bold))
+        self._dot.setStyleSheet("color: #00ff88; background: transparent; border: none;")
+        hdr.addWidget(self._dot)
+
+        self._t = QLabel(f"{self._asst} PiP")
+        self._t.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._t.setStyleSheet(f"color: {C.PRI}; background: transparent; border: none;")
+        hdr.addWidget(self._t)
+
+        self._badge = QLabel("⚡ EDGE")
+        self._badge.setStyleSheet("color: #00e5ff; background: rgba(0, 229, 255, 0.15); border: 1px solid rgba(0, 229, 255, 0.3); border-radius: 4px; padding: 1px 4px; font-size: 8px; font-family: monospace;")
+        hdr.addWidget(self._badge)
+
+        hdr.addStretch()
+
+        # Mini Action: Screen Troubleshoot
+        _btn_eye = QPushButton("👁")
+        _btn_eye.setFixedSize(22, 20)
+        _btn_eye.setFont(QFont("Segoe UI Emoji", 8))
+        _btn_eye.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_eye.setToolTip("Inspect Screen & Code Errors")
+        _btn_eye.setStyleSheet("QPushButton { background: transparent; color: #00e5ff; border: 1px solid rgba(0,229,255,0.3); border-radius: 3px; } QPushButton:hover { background: rgba(0,229,255,0.2); }")
+        _btn_eye.clicked.connect(lambda: self._quick_action("screen dekho"))
+        hdr.addWidget(_btn_eye)
+
+        # Mini Action: Clear Chat
+        _btn_clr = QPushButton("🧹")
+        _btn_clr.setFixedSize(22, 20)
+        _btn_clr.setFont(QFont("Segoe UI Emoji", 8))
+        _btn_clr.setCursor(Qt.CursorShape.PointingHandCursor)
+        _btn_clr.setToolTip("Clear PiP Chat History")
+        _btn_clr.setStyleSheet("QPushButton { background: transparent; color: #ffaa00; border: 1px solid rgba(255,170,0,0.3); border-radius: 3px; } QPushButton:hover { background: rgba(255,170,0,0.2); }")
+        _btn_clr.clicked.connect(self.clear_chat)
+        hdr.addWidget(_btn_clr)
+
+        # Mini Action: Expand / Shrink
+        self._btn_exp = QPushButton("🗖")
+        self._btn_exp.setFixedSize(22, 20)
+        self._btn_exp.setFont(QFont("Segoe UI Emoji", 8))
+        self._btn_exp.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._btn_exp.setToolTip("Expand / Compact PiP Window")
+        self._btn_exp.setStyleSheet(f"QPushButton {{ background: transparent; color: {C.TEXT_DIM}; border: 1px solid {C.BORDER}; border-radius: 3px; }} QPushButton:hover {{ color: {C.TEXT}; }}")
+        self._btn_exp.clicked.connect(self._toggle_expand)
+        hdr.addWidget(self._btn_exp)
+
+        # Mini Action: Close / Hide
+        _hide = QPushButton("✕")
+        _hide.setFixedSize(22, 20)
+        _hide.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        _hide.setCursor(Qt.CursorShape.PointingHandCursor)
+        _hide.setToolTip("Hide PiP Window")
+        _hide.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {C.TEXT_DIM};
+                border: 1px solid {C.BORDER}; border-radius: 3px; }}
+            QPushButton:hover {{ color: #ff5566; border-color: #ff5566; }}
+        """)
+        _hide.clicked.connect(self.hide)
+        hdr.addWidget(_hide)
+        root.addLayout(hdr)
+
+        # Scrollable Rich Chat Area
+        self._chat = QTextEdit()
+        self._chat.setReadOnly(True)
+        self._chat.setFont(QFont("Courier New", 8))
+        self._chat.setStyleSheet(f"""
+            QTextEdit {{
+                background: rgba(0, 8, 14, 180);
+                color: {C.TEXT};
+                border: 1px solid rgba(0, 200, 255, 0.2);
+                border-radius: 6px;
+                padding: 4px;
+            }}
+            QScrollBar:vertical {{
+                background: transparent;
+                width: 5px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgba(0, 229, 255, 0.4);
+                border-radius: 2px;
+                min-height: 15px;
+            }}
+        """)
+        root.addWidget(self._chat)
+
+        # Backward compatibility: list of lines
+        self._lines: list = []
+
+        # Input row
+        irow = QHBoxLayout(); irow.setSpacing(5)
+        self._input = QLineEdit()
+        self._input.setPlaceholderText("Type here… (voice bhi on hai)")
+        self._input.setFont(QFont("Courier New", 8))
+        self._input.setFixedHeight(28)
+        self._input.setStyleSheet(f"""
+            QLineEdit {{
+                background: #000d14; color: {C.WHITE};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 3px 7px;
+            }}
+            QLineEdit:focus {{ border: 1px solid {C.PRI}; }}
+        """)
+        self._input.returnPressed.connect(self._do_send)
+        irow.addWidget(self._input)
+
+        _go = QPushButton("▸")
+        _go.setFixedSize(30, 28)
+        _go.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
+        _go.setCursor(Qt.CursorShape.PointingHandCursor)
+        _go.setStyleSheet(f"""
+            QPushButton {{ background: {C.PANEL}; color: {C.PRI};
+                border: 1px solid {C.PRI_DIM}; border-radius: 3px; }}
+            QPushButton:hover {{ background: rgba(0,229,255,0.25); }}
+        """)
+        _go.clicked.connect(self._do_send)
+        irow.addWidget(_go)
+        root.addLayout(irow)
+
+        try:
+            from ui_icons import set_btn_icon
+            set_btn_icon(_go, "send", 14)
+        except Exception:
+            pass
+
+    def _toggle_expand(self) -> None:
+        if self._expanded:
+            self.setFixedSize(380, 260)
+            self._expanded = False
+            self._btn_exp.setText("🗖")
+        else:
+            self.setFixedSize(440, 380)
+            self._expanded = True
+            self._btn_exp.setText("🗗")
+
+    def _quick_action(self, cmd: str) -> None:
+        self.push_line(f"You: {cmd}")
+        cb = getattr(self, "on_send", None)
+        if callable(cb):
+            import threading as _th
+            _th.Thread(target=cb, args=(cmd,), daemon=True).start()
+
+    def clear_chat(self) -> None:
+        try:
+            self._chat.clear()
+            self._lines.clear()
+        except Exception:
+            pass
+
+    def _do_send(self) -> None:
+        try:
+            txt = self._input.text().strip()
+            if not txt:
+                return
+            self._input.clear()
+            self.push_line(f"You: {txt}")
+            cb = getattr(self, "on_send", None)
+            if callable(cb):
+                import threading as _th
+                _th.Thread(target=cb, args=(txt,), daemon=True).start()
+        except Exception:
+            pass
+
+    def push_line(self, text: str) -> None:
+        """Rich colored auto-scrolling transcript. Thread-safe."""
+        try:
+            t = (text or "").strip()
+            if not t:
+                return
+            import html
+            esc = html.escape(t)
+            if t.lower().startswith("you:"):
+                body = esc[4:].strip()
+                html_line = f"<div style='color: #00e5ff; margin-bottom: 4px;'><b>You:</b> {body}</div>"
+            elif ":" in t and any(t.lower().startswith(p) for p in ("friday:", "jarvis:", "maya:", "assistant:")):
+                parts = esc.split(":", 1)
+                speaker = parts[0].strip()
+                body = parts[1].strip() if len(parts) > 1 else ""
+                col = "#ff69b4" if "friday" in speaker.lower() else "#00d4ff"
+                html_line = f"<div style='color: {col}; margin-bottom: 4px;'><b>{speaker}:</b> {body}</div>"
+            elif t.startswith("SYS:") or t.startswith("⚡") or t.startswith("["):
+                html_line = f"<div style='color: #88a0b0; font-size: 9px; margin-bottom: 2px;'><i>{esc}</i></div>"
+            else:
+                html_line = f"<div style='color: #e0e8f0; margin-bottom: 3px;'>{esc}</div>"
+
+            self._chat.append(html_line)
+            sb = self._chat.verticalScrollBar()
+            if sb is not None:
+                sb.setValue(sb.maximum())
+
+            # Store recent lines for compatibility
+            self._lines.append(t)
+            if len(self._lines) > 50:
+                self._lines = self._lines[-50:]
+        except Exception:
+            pass
+
+    def set_dot(self, state: str) -> None:
+        try:
+            col = self._DOT.get((state or "").upper(), "#00d4ff")
+            self._dot.setStyleSheet(f"color: {col}; background: transparent; border: none;")
+        except Exception:
+            pass
+
+    def mousePressEvent(self, e) -> None:
+        try:
+            if e.button() == Qt.MouseButton.LeftButton:
+                self._drag = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
+        except Exception:
+            pass
+        super().mousePressEvent(e)
+
+    def mouseMoveEvent(self, e) -> None:
+        try:
+            if self._drag is not None:
+                self.move(e.globalPosition().toPoint() - self._drag)
+        except Exception:
+            pass
+        super().mouseMoveEvent(e)
+
+    def mouseReleaseEvent(self, e) -> None:
+        self._drag = None
+        super().mouseReleaseEvent(e)
+
+
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _stream_log_sig = pyqtSignal(str, str, bool)   # (speaker, chunk, is_final) — live real-time speech streaming
@@ -5342,6 +5966,7 @@ class MainWindow(QMainWindow):
     _confirm_hide_sig = pyqtSignal()
     _wake_dl_sig    = pyqtSignal(bool, str)  # wake-word install finished (ok, message)
     _expression_sig = pyqtSignal(str, float) # (expression_name, duration_sec) live HUD avatar reaction
+    _toast_sig      = pyqtSignal(str, str)   # ADDITIVE (text, kind) — self-dismissing toast banners
 
     def __init__(self, face_path: str):
         super().__init__()
@@ -5529,7 +6154,17 @@ class MainWindow(QMainWindow):
         self._clipboard_sig.connect(self._show_clipboard_panel)
         self._wake_dl_sig.connect(self._on_wake_install_done)
         self._expression_sig.connect(lambda expr, dur: self.hud.set_expression(expr, dur))
+        self._toast_sig.connect(self._show_toast)  # ADDITIVE toast banners
         self._cam_stop = threading.Event()
+
+        # ADDITIVE toast stack (child of central widget, top-right)
+        self._toasts = ToastStack(self.centralWidget())
+
+        # ADDITIVE first-run onboarding (30s coach: 3 suggested prompts, ek baar)
+        try:
+            QTimer.singleShot(2500, self._maybe_onboard)
+        except Exception:
+            pass
 
         # Camera preview overlay (child of central widget, positioned in resizeEvent)
         self._cam_preview = _CameraPreview(self.centralWidget())
@@ -5540,6 +6175,7 @@ class MainWindow(QMainWindow):
         QApplication.clipboard().dataChanged.connect(self._on_clipboard_changed)
 
         self._overlay: SetupOverlay | None = None
+        self._pip: PipWindow | None = None  # ADDITIVE mini always-on-top companion
         self._ready = self._check_config()
         if not self._ready:
             self._show_setup()
@@ -5554,6 +6190,76 @@ class MainWindow(QMainWindow):
         try:
             from core.sfx import play_sfx
             play_sfx("boot")
+        except Exception:
+            pass
+
+        # ADDITIVE real icons on all buttons (text same rahega). Fail-safe.
+        try:
+            self._apply_button_icons()
+        except Exception:
+            pass
+
+    def _apply_button_icons(self) -> None:
+        """ADDITIVE: har QPushButton par vector icon (words same rahenge).
+        Icon lagte hi emoji-prefix hat jata hai (double-glyph fix) — text words untouched.
+        Sirf jinme icon nahi hai unhe touch karta hai — repeat call sasti hai."""
+        try:
+            from ui_icons import set_btn_icon, strip_emoji, BUTTON_ICONS
+            for btn in self.findChildren(QPushButton):
+                try:
+                    if not btn.icon().isNull():
+                        continue
+                    txt = (btn.text() or "").upper()
+                    if not txt.strip():
+                        continue
+                    for key, glyph in BUTTON_ICONS.items():
+                        if key in txt:
+                            if set_btn_icon(btn, glyph, 16):
+                                # icon verified — emoji hatao ("✕"-only icon-only ban jayega)
+                                btn.setText(strip_emoji(btn.text()))
+                            break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    def toggle_pip(self) -> bool:
+        """ADDITIVE PiP show/hide. Returns True if now visible. Fail-safe."""
+        try:
+            if self._pip is None:
+                self._pip = PipWindow()
+                self._pip.on_send = (lambda t: self.on_text_command(t)
+                                     if callable(getattr(self, "on_text_command", None)) else None)
+                try:
+                    self._log_sig.connect(self._pip_on_log)
+                    self._state_sig.connect(self._pip_on_state)
+                except Exception:
+                    pass
+                try:
+                    scr = QApplication.primaryScreen().availableGeometry()
+                    self._pip.move(scr.width() - 380, scr.height() - 300)
+                except Exception:
+                    pass
+            if self._pip.isVisible():
+                self._pip.hide()
+                return False
+            self._pip.show()
+            self._pip.raise_()
+            return True
+        except Exception:
+            return False
+
+    def _pip_on_log(self, text: str) -> None:
+        try:
+            if self._pip is not None and self._pip.isVisible():
+                self._pip.push_line(text)
+        except Exception:
+            pass
+
+    def _pip_on_state(self, state: str) -> None:
+        try:
+            if self._pip is not None and self._pip.isVisible():
+                self._pip.set_dot(state)
         except Exception:
             pass
 
@@ -6192,10 +6898,10 @@ class MainWindow(QMainWindow):
         threading.Thread(target=_fetch_or_cycle, daemon=True).start()
 
     def _quick_test_voice(self):
-        self._log.append_log("SYS: Quick testing local voice (Piper Hindi)...")
+        self._log.append_log("SYS: Quick testing Edge voice...")
         def _run():
             from core.tts import test_tts_voice
-            ok, msg = test_tts_voice("piper_hindi")
+            ok, msg = test_tts_voice("edgetts")
             self._log.append_log(f"VOICE: {msg}")
         threading.Thread(target=_run, daemon=True).start()
 
@@ -6255,6 +6961,12 @@ class MainWindow(QMainWindow):
         self._drawer_btn.setFont(QFont("Courier New", 11))
         self._drawer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._drawer_btn.setToolTip("Settings & Controls")
+        try:  # ADDITIVE real gear icon (⚙ hatao, tooltip same)
+            from ui_icons import set_btn_icon, strip_emoji
+            if set_btn_icon(self._drawer_btn, "gear", 16):
+                self._drawer_btn.setText(strip_emoji(self._drawer_btn.text()))
+        except Exception:
+            pass
         self._drawer_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {C.TEXT_DIM};
@@ -6501,7 +7213,7 @@ class MainWindow(QMainWindow):
         btn_voice.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
         btn_voice.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_voice.setStyleSheet(_Q_BTN_STYLE)
-        btn_voice.setToolTip("Quick Voice Test (Piper Offline Hindi)")
+        btn_voice.setToolTip("Quick Voice Test (Edge Neural)")
         btn_voice.clicked.connect(self._quick_test_voice)
         q_row.addWidget(btn_voice)
 
@@ -6536,6 +7248,21 @@ class MainWindow(QMainWindow):
         btn_studio.setToolTip("Open HUD Customization Studio")
         btn_studio.clicked.connect(self._open_customize)
         q_row.addWidget(btn_studio)
+
+        # ADDITIVE PiP mini window (always-on-top companion)
+        btn_pip = QPushButton("🪟 PIP")
+        btn_pip.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        btn_pip.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_pip.setStyleSheet(_Q_BTN_STYLE)
+        btn_pip.setToolTip("Mini always-on-top window (browser ke upar)")
+        btn_pip.clicked.connect(lambda: self.toggle_pip())
+        q_row.addWidget(btn_pip)
+        try:
+            from ui_icons import set_btn_icon, strip_emoji
+            if set_btn_icon(btn_pip, "pin", 15):
+                btn_pip.setText(strip_emoji(btn_pip.text()))
+        except Exception:
+            pass
 
         lay.addLayout(q_row)
 
@@ -6771,6 +7498,35 @@ class MainWindow(QMainWindow):
         """)
         send.clicked.connect(self._send)
         row.addWidget(send)
+        try:  # ADDITIVE real send icon (double-glyph fix: text strip, icon verified)
+            from ui_icons import set_btn_icon, strip_emoji
+            if set_btn_icon(send, "send", 16):
+                send.setText(strip_emoji(send.text()))
+        except Exception:
+            pass
+
+        # ADDITIVE thumbs feedback (research: quick consistent feedback).
+        for _emoji, _vote in (("👍", "up"), ("👎", "down")):
+            _tb = QPushButton(_emoji)
+            _tb.setFixedSize(30, 30)
+            _tb.setFont(QFont("Courier New", 11))
+            _tb.setCursor(Qt.CursorShape.PointingHandCursor)
+            _tb.setToolTip(f"Rate last reply {_vote}")
+            _tb.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {C.TEXT_DIM};
+                    border: 1px solid {C.BORDER}; border-radius: 3px;
+                }}
+                QPushButton:hover {{ color: {C.PRI}; border-color: {C.PRI_DIM}; }}
+            """)
+            _tb.clicked.connect(lambda _=False, _v=_vote: self._thumb(_v))
+            try:  # ADDITIVE real thumb icons (emoji hatao, icon verified)
+                from ui_icons import set_btn_icon, strip_emoji
+                if set_btn_icon(_tb, "thumb_up" if _vote == "up" else "thumb_down", 15):
+                    _tb.setText(strip_emoji(_tb.text()))
+            except Exception:
+                pass
+            row.addWidget(_tb)
         return row
 
     def _build_content_panel(self) -> QWidget:
@@ -6861,6 +7617,35 @@ class MainWindow(QMainWindow):
         """)
         lay.addWidget(self._content_display)
 
+        # ADDITIVE goal CTA chips (research: goal-based buttons). Existing hooks reuse.
+        cta = QHBoxLayout(); cta.setSpacing(6)
+        for _label, _cmd, _glyph in (("↩ Undo", "undo karo", "refresh"),
+                                     ("⏰ Remind me", "10 minute me yaad dilao", "bell"),
+                                     ("📋 Copy", None, "folder")):
+            _b = QPushButton(_label)
+            _b.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            _b.setCursor(Qt.CursorShape.PointingHandCursor)
+            _b.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {C.TEXT_DIM};
+                    border: 1px solid {C.BORDER}; border-radius: 3px; padding: 3px 8px;
+                }}
+                QPushButton:hover {{ color: {C.PRI}; border-color: {C.PRI_DIM}; }}
+            """)
+            if _cmd is None:
+                _b.clicked.connect(self._cta_copy_content)
+            else:
+                _b.clicked.connect(lambda _=False, _c=_cmd: self._cta_run(_c))
+            try:  # ADDITIVE real CTA icons (emoji hatao, words same)
+                from ui_icons import set_btn_icon, strip_emoji
+                if set_btn_icon(_b, _glyph, 14):
+                    _b.setText(strip_emoji(_b.text()))
+            except Exception:
+                pass
+            cta.addWidget(_b)
+        cta.addStretch()
+        lay.addLayout(cta)
+
         return w
 
     def _show_content(self, title: str, text: str):
@@ -6868,7 +7653,15 @@ class MainWindow(QMainWindow):
         import time as _time
         self._content_title_lbl.setText(title.upper()[:48])
         self._content_ts_lbl.setText(_time.strftime("%H:%M:%S"))
-        self._content_display.setPlainText(text)
+        text_str = str(text or "")
+        if any(tag in text_str for tag in ("<table", "<div", "<html", "<span", "<b", "<p")):
+            self._content_display.setHtml(text_str)
+        else:
+            self._content_display.setPlainText(text_str)
+        try:  # ADDITIVE: thumbs/CTA context (fail-safe)
+            self._last_ai_text = f"{title}: {(text or '')[:200]}"
+        except Exception:
+            pass
         self._content_display.moveCursor(
             self._content_display.textCursor().MoveOperation.Start
         )
@@ -6877,6 +7670,70 @@ class MainWindow(QMainWindow):
         if first_show:
             total = self._center_split.height()
             self._center_split.setSizes([max(total - 220, 120), 220])
+
+    # ── ADDITIVE Phase-B slots (toast / CTA / thumbs / onboarding) ──────────
+    # Sab fail-safe: koi bhi exception app flow nahi rokta.
+
+    def _show_toast(self, text: str, kind: str = "info") -> None:
+        """Slot — self-dismissing toast banner (main thread)."""
+        try:
+            self._toasts.toast(text, kind)
+        except Exception:
+            pass
+
+    def toast(self, text: str, kind: str = "info") -> None:
+        """Thread-safe toast from anywhere (actions/main)."""
+        try:
+            self._toast_sig.emit(text, kind)
+        except Exception:
+            pass
+
+    def _cta_run(self, cmd: str) -> None:
+        """CTA chip → existing text-command pipeline (nayi wiring nahi)."""
+        try:
+            if callable(getattr(self, "on_text_command", None)):
+                self.on_text_command(cmd)
+        except Exception:
+            pass
+
+    def _cta_copy_content(self) -> None:
+        """Copy button → content text clipboard me."""
+        try:
+            txt = self._content_display.toPlainText() if hasattr(self, "_content_display") else ""
+            if txt:
+                QApplication.clipboard().setText(txt)
+                self._show_toast("Copied to clipboard", "ok")
+        except Exception:
+            pass
+
+    def _thumb(self, vote: str) -> None:
+        """Thumbs → feedback store + toast. Hermes future me seekhega."""
+        try:
+            from memory.feedback import log_feedback
+            ctx = getattr(self, "_last_ai_text", "")
+            log_feedback(vote, ctx)
+            self._show_toast("Thanks for feedback!" if vote == "up" else "Noted — sudhar karenge.", "ok")
+        except Exception:
+            pass
+
+    def _maybe_onboard(self) -> None:
+        """First-run 30s coach: 3 suggested prompts, sirf ek baar."""
+        try:
+            from memory.config_manager import get_onboarded, save_onboarded
+            if get_onboarded():
+                return
+            try:
+                self._log.append_log("SYS: Naya ho? Try karo — 'notepad kholo' · 'mausam batao' · 'routine banao movie: brave, spotify'")
+            except Exception:
+                pass
+            try:
+                if hasattr(self, "_input"):
+                    self._input.setPlaceholderText("Try: notepad kholo · mausam batao · 10 minute me yaad dilao…")
+            except Exception:
+                pass
+            save_onboarded(True)
+        except Exception:
+            pass
 
     def _build_footer(self) -> QWidget:
         w = QWidget()
@@ -7299,14 +8156,17 @@ class MainWindow(QMainWindow):
                 retheme_all_widgets(old, current_palette())
                 color_changed = old["PRI"] != C.PRI
 
-        # Voice change → persist and, if it actually changed, rebuild the Live
-        # session so the new voice takes effect (it's fixed at connect time).
+        # Voice or Persona change → persist and rebuild the Live session
+        # so the new persona prompt / voice takes effect immediately.
         voice_changed = False
         if voice:
             from memory.config_manager import get_voice, save_voice
             if voice != get_voice():
                 save_voice(voice)
                 voice_changed = True
+
+        from memory.config_manager import get_persona_mode
+        persona_changed = (get_persona_mode().strip().lower() != (persona_mode or "").strip().lower())
 
         try:
             data = _read_full_config()
@@ -7349,7 +8209,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log.append_log(f"ERR: Config save failed — {e}")
 
-        if voice_changed and self.on_voice_change:
+        if (voice_changed or persona_changed) and self.on_voice_change:
             self.on_voice_change()
 
     def _centre_overlay(self, ov) -> None:
@@ -7713,6 +8573,20 @@ class JarvisUI:
 
     def write_log(self, text: str):
         self._win._log_sig.emit(text)
+
+    def toast(self, text: str, kind: str = "info") -> None:
+        """ADDITIVE thread-safe toast banner (actions/main se). Fail-safe."""
+        try:
+            self._win._toast_sig.emit(text, kind)
+        except Exception:
+            pass
+
+    def toggle_pip(self) -> bool:
+        """ADDITIVE mini PiP window toggle. Returns visible state."""
+        try:
+            return bool(self._win.toggle_pip())
+        except Exception:
+            return False
 
     def stream_log_chunk(self, speaker: str, chunk: str, is_final: bool = False):
         """Thread-safe: stream spoken tokens live to the HUD sidebar while speech occurs."""

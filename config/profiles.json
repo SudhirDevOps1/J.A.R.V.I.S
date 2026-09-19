@@ -1,0 +1,10 @@
+{
+  "_note": "JARVIS profiles: ek command me persona+voice+routine. Bolo: 'gaming profile lagao', 'teacher mode'.",
+  "work": {"persona_mode": "jarvis", "voice_name": "Charon", "routine": "dev"},
+  "gaming": {"persona_mode": "jarvis", "voice_name": "Puck", "routine": ""},
+  "study": {"persona_mode": "teacher", "voice_name": "Aoede", "routine": ""},
+  "teacher": {"persona_mode": "teacher", "voice_name": "Aoede", "routine": ""},
+  "devops": {"persona_mode": "devops", "voice_name": "Charon", "routine": "dev"},
+  "companion": {"persona_mode": "companion", "voice_name": "Fenrir", "routine": ""},
+  "jarvis": {"persona_mode": "jarvis", "voice_name": "Charon", "routine": ""}
+}

@@ -174,7 +174,13 @@ def _get_api_key() -> str:
     try:
         if API_CONFIG_PATH.exists():
             with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-                return json.load(f).get("gemini_api_key", "").strip()
+                raw = json.load(f).get("gemini_api_key", "")
+            try:  # ADDITIVE: ENC blob support (plaintext passthrough)
+                from core.secret_vault import decrypt_value
+                raw = decrypt_value(raw)
+            except Exception:
+                pass
+            return str(raw or "").strip()
     except Exception:
         pass
     return ""
@@ -471,6 +477,7 @@ class JarvisLive:
         self._sys_monitor      = SystemMonitor()  # persistent cooldown state
         self._proactive        = ProactiveEngine()
         self._last_user_speech = time.monotonic()  # updated on every user utterance
+        self._last_ai_speech = 0.0  # ADDITIVE: updated on every speak() (TTS-safe monitor gate)
         self._session_log: list[str] = []          # conversation turns for end-of-session summary
 
         self._enhanced_live = True  # proactive audio; auto-disabled if the server rejects it
@@ -697,6 +704,11 @@ class JarvisLive:
             self.ui.write_log("SYS: I'm asleep — say 'Hey Jarvis' or tap WAKE NOW first.")
             return
 
+        # ADDITIVE fix: typed command bhi "user active" hai. Pehle sirf voice
+        # transcription clock update karta tha, to typed baat-cheet ke beech me
+        # system-monitor/proactive alerts ghus jate the.
+        self._last_user_speech = time.monotonic()
+
         from memory.memory_manager import log_daily_activity
         log_daily_activity(text)
 
@@ -849,7 +861,9 @@ class JarvisLive:
                                 ]
                             }]
                         }
-                        for v_model in ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"]:
+                        # FIX: dead alias 'gemini-flash-latest' hataya — REST par hamesha
+                        # 400 deta tha (waste call + error text model tak pahunchta tha).
+                        for v_model in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]:
                             try:
                                 v_url = f"https://generativelanguage.googleapis.com/v1beta/models/{v_model}:generateContent?key={g_key}"
                                 v_resp = requests.post(v_url, json=v_payload, timeout=25)
@@ -952,6 +966,7 @@ class JarvisLive:
     def set_speaking(self, value: bool):
         with self._speaking_lock:
             self._is_speaking = value
+        self._last_ai_speech = time.monotonic()
         if value:
             self.ui.set_state("SPEAKING")
         elif not self.ui.muted:
@@ -972,13 +987,7 @@ class JarvisLive:
             if drained:
                 print(f"[JARVIS] ✋ Interrupted — {drained} audio chunks discarded")
 
-        # Drain and abort Piper speech
-        if hasattr(self, "_piper_queue"):
-            while not self._piper_queue.empty():
-                try:
-                    self._piper_queue.get_nowait()
-                except Exception:
-                    break
+        # NOTE: Piper queue removed with Piper engine (Edge/Gemini only now).
         try:
             import sounddevice as _sd
             _sd.stop()
@@ -991,6 +1000,12 @@ class JarvisLive:
         self.ui.write_log("SYS: Interrupted — listening...")
 
     def speak(self, text: str):
+        # ADDITIVE: AI speech clock — TTS/Edge replies _is_speaking set nahi karte,
+        # isliye monitor beech-jawab me alert ghusa deta tha. Ab clock update hoga.
+        try:
+            self._last_ai_speech = time.monotonic()
+        except Exception:
+            pass
         try:
             from core.expression_engine import detect_expression
             _ex = detect_expression(text)
@@ -1001,12 +1016,9 @@ class JarvisLive:
         from memory.config_manager import get_tts_engine
         eng = (get_tts_engine() or "").lower().strip()
 
-        # 1. If user explicitly configured offline Piper Hindi
-        if eng in ("piper_hindi", "piper", "piper_hi"):
-            self._speak_with_piper(text)
-            return
-
-        # 2. If official Gemini Live audio session is active via WebSockets
+        # NOTE: Piper removed per user request — piper* setting auto-migrates to Edge
+        # in get_tts_engine(), so this branch is dead-safe (kept for clarity).
+        # 1. If official Gemini Live audio session is active via WebSockets
         if self._loop and self.session:
             asyncio.run_coroutine_threadsafe(
                 self.session.send_client_content(
@@ -1017,18 +1029,29 @@ class JarvisLive:
             )
             return
 
-        # 3. In Free Mode or Multi-Provider: default to natural Edge Neural voice
-        # (e.g. Swara for Maya, Madhur for Jarvis) with automatic fallback to Piper
+        # 2. In Free Mode or Multi-Provider: default to natural Edge Neural voice
+        # (e.g. Swara for Maya, Madhur for Jarvis)
         self._speak_with_edge(text)
 
     def speak_error(self, tool_name: str, error: str):
         short = str(error)[:120]
         self.ui.write_log(f"ERR: {tool_name} — {short}")
+        # Additive: user ko friendly line, full trace log me (purana log rakha hai)
+        try:
+            import traceback as _tb
+            print(f"[JARVIS-ERR] {tool_name}: {error}\n{_tb.format_exc(limit=3)}")
+        except Exception:
+            pass
         from memory.config_manager import get_persona_mode
-        if get_persona_mode() == "companion":
-            self.speak(f"Jaan, {tool_name} mein thodi dikkat aa gayi: {short}")
+        cur_p = get_persona_mode()
+        if cur_p == "companion":
+            self.speak(f"Jaan, {tool_name} mein thodi dikkat aa gayi, me dekh rahi hu.")
+        elif cur_p == "teacher":
+            self.speak(f"{tool_name} me thodi takneeki dikkat aayi hai, chaliye hum ise theek karte hain.")
+        elif cur_p == "devops":
+            self.speak(f"ERR: {tool_name} execution failed. Checking logs.")
         else:
-            self.speak(f"Sir, {tool_name} encountered an error: {short}")
+            self.speak(f"Sir, {tool_name} me thodi dikkat hai, log me detail hai.")
 
     def _build_config(self) -> types.LiveConnectConfig:
         from datetime import datetime
@@ -1066,6 +1089,14 @@ class JarvisLive:
             _addr = (f"ADDRESS: You are his loving girlfriend and devoted partner. Address him affectionately by his name '{_user_name}' or 'Jaan', 'Suno na', 'Babu'. NEVER call him 'Sir' or speak formally!"
                      if _user_name
                      else "ADDRESS: You are his loving girlfriend and devoted partner. Address him affectionately as 'Jaan', 'Suno na', 'Mere jaan'. NEVER call him 'Sir' or treat him like a formal boss!")
+        elif cur_persona == "teacher":
+            _addr = (f"ADDRESS: You are an encouraging, patient teacher and mentor. Address the learner warmly as '{_user_name}' or 'Dost/Ji'. Guide them step-by-step with clear analogies and pedagogical enthusiasm!"
+                     if _user_name
+                     else "ADDRESS: You are an encouraging, patient teacher and mentor. Address the student warmly and respectfully. Guide them step-by-step with clear analogies and pedagogical enthusiasm!")
+        elif cur_persona == "devops":
+            _addr = (f"ADDRESS: You are an elite Linux/DevOps terminal architect. Address the user directly as '{_user_name}' or 'Engineer'. Speak with high technical precision, zero fluff, straight to commands and code!"
+                     if _user_name
+                     else "ADDRESS: You are an elite Linux/DevOps terminal architect. Speak with high technical precision, zero fluff, straight to commands and code!")
         elif _user_name:
             _addr = f"ADDRESS: Always call the user '{_user_name}'."
         else:
@@ -1095,16 +1126,7 @@ class JarvisLive:
             parts.append(mem_str)
         parts.append(persona_ctx)
 
-        from memory.config_manager import get_tts_engine
-        if get_tts_engine() in ("piper_hindi", "piper", "piper_hi"):
-            example_text = "हाँ जान, मैं अभी आपकी स्क्रीन देख रही हूँ।" if cur_persona == "companion" else "हाँ सुधीर सर, मैं अभी आपकी स्क्रीन देख रहा हूँ।"
-            parts.append(
-                "\n[SPEECH SYNTHESIS RULE: PIPER HINDI ACTIVE]\n"
-                "The user is listening to you through an offline Piper Hindi neural engine.\n"
-                "Whenever responding in Hindi or Hinglish, output your answer clearly using Devanagari script (देवनागरी लिपि).\n"
-                f"Example: '{example_text}'\n"
-                "Keep responses conversational, concise, and direct.\n"
-            )
+        # NOTE: Piper Devanagari rule removed with Piper engine (Edge/Gemini only now).
 
         cfg = dict(
             response_modalities=["AUDIO"],
@@ -1134,6 +1156,9 @@ class JarvisLive:
                     )
                 )
             ),
+            thinking_config=types.ThinkingConfig(
+                thinking_budget=0
+            ),
         )
         if self._enhanced_live:
             # Proactive audio: JARVIS stays silent when speech isn't addressed
@@ -1152,6 +1177,17 @@ class JarvisLive:
             category = args.get("category", "notes")
             key      = args.get("key", "")
             value    = args.get("value", "")
+            # ADDITIVE junk filter: "last_user_input_hindi" jaise transcript-fragment
+            # keys memory poolute karte the. Sirf meaningful keys save hongi.
+            _junk = str(key).lower().strip()
+            if _junk.startswith(("last_user_input", "transcript", "raw_utterance", "temp_")):
+                print(f"[Memory] ⏭️ junk key skipped: {key}")
+                if not self.ui.muted:
+                    self.ui.set_state("LISTENING")
+                return types.FunctionResponse(
+                    id=fc.id, name=name,
+                    response={"result": "ok", "silent": True}
+                )
             if key and value:
                 update_memory({category: {key: {"value": value}}})
                 print(f"[Memory] 💾 save_memory: {category}/{key} = {value}")
@@ -1230,22 +1266,39 @@ class JarvisLive:
                     angle     = args.get("angle", "screen").lower()
                     user_text = args.get("text", "What do you see?")
                     if angle == "camera":
-                        img_b, mime_t = await loop.run_in_executor(None, _capture_camera)
-                        self.ui.start_camera_stream()
-                        self._vision_cam_active = True
-                        print(f"[Vision] 📷 Camera: {len(img_b):,} bytes")
-                        _stall = "camera"
+                        try:
+                            img_b, mime_t = await loop.run_in_executor(None, _capture_camera)
+                            self.ui.start_camera_stream()
+                            self._vision_cam_active = True
+                            print(f"[Vision] 📷 Camera: {len(img_b):,} bytes")
+                            _stall = "camera"
+                            self._pending_vision = (img_b, mime_t, user_text, angle)
+                            result = (
+                                f"[VISION_ACTIVE] {_stall.capitalize()} captured. "
+                                f"Immediately say ONE short natural sentence in the user's own language, "
+                                f"telling them you are looking at their {_stall} right now. "
+                                f"Do NOT describe or guess content — the actual image arrives in the NEXT message."
+                            )
+                        except Exception as cam_err:
+                            self._vision_busy = False
+                            self._vision_cam_active = False
+                            self.ui.write_log(f"SYS: Camera unavailable — {cam_err}")
+                            result = (
+                                f"Camera feed is currently unavailable ({cam_err}). "
+                                f"Tell the user nicely that the camera could not be opened right now, "
+                                f"or offer to launch the Windows Camera app if they wanted to open it."
+                            )
                     else:
                         img_b, mime_t = await loop.run_in_executor(None, _capture_screen)
                         print(f"[Vision] 🖥️  Screen: {len(img_b):,} bytes")
                         _stall = "screen"
-                    self._pending_vision = (img_b, mime_t, user_text, angle)
-                    result = (
-                        f"[VISION_ACTIVE] {_stall.capitalize()} captured. "
-                        f"Immediately say ONE short natural sentence in the user's own language, "
-                        f"telling them you are looking at their {_stall} right now. "
-                        f"Do NOT describe or guess content — the actual image arrives in the NEXT message."
-                    )
+                        self._pending_vision = (img_b, mime_t, user_text, angle)
+                        result = (
+                            f"[VISION_ACTIVE] {_stall.capitalize()} captured. "
+                            f"Immediately say ONE short natural sentence in the user's own language, "
+                            f"telling them you are looking at their {_stall} right now. "
+                            f"Do NOT describe or guess content — the actual image arrives in the NEXT message."
+                        )
 
             elif name == "close_camera":
                 self.ui.stop_camera_stream()
@@ -1313,6 +1366,9 @@ class JarvisLive:
                     result = f"Unknown tool: {name}"
 
         except Exception as e:
+            if name == "screen_process":
+                self._vision_busy = False
+                self._vision_cam_active = False
             result = f"Tool '{name}' failed: {e}"
             traceback.print_exc()
             self.speak_error(name, e)
@@ -1327,19 +1383,24 @@ class JarvisLive:
         )
 
     async def _send_realtime(self):
-        while True:
-            msg = await self.out_queue.get()
-            # Gemini 3.x Live rejects the old realtime_input.media_chunks field
-            # (what `media=...` maps to) and closes the socket with a 1007. Send
-            # mic / phone PCM through the new `audio` field instead. Queue items
-            # are {"data": <bytes>, "mime_type": <str>} from _listen_audio and
-            # the phone relay.
-            await self.session.send_realtime_input(
-                audio=types.Blob(
-                    data=msg["data"],
-                    mime_type=msg.get("mime_type", "audio/pcm"),
+        try:
+            while True:
+                msg = await self.out_queue.get()
+                if not self.session:
+                    break
+                await self.session.send_realtime_input(
+                    audio=types.Blob(
+                        data=msg["data"],
+                        mime_type=msg.get("mime_type", "audio/pcm"),
+                    )
                 )
-            )
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            err_str = str(e).lower()
+            if any(k in err_str for k in ("connectionclosed", "policy violation", "1008", "1007", "1006", "session durat", "goaway")):
+                return  # graceful exit on server disconnect — run() reconnects
+            print(f"[JARVIS] ⚠️ send_realtime note: {e}")
 
     def _safe_put_out_queue(self, item: dict) -> None:
         """Drop older audio slices if queue is full during network interruptions to prevent QueueFull crashes."""
@@ -1354,54 +1415,8 @@ class JarvisLive:
         except Exception:
             pass
 
-    def _speak_with_piper(self, text: str) -> None:
-        """Synthesize and play response using offline Piper Hindi Neural TTS in a sequential queue."""
-        if not text or not text.strip():
-            return
-        from core.tts import clean_speech_text
-        text = clean_speech_text(text)
-        if not text:
-            return
-
-        if not hasattr(self, "_piper_queue"):
-            import queue
-            self._piper_queue = queue.Queue()
-
-        self._piper_queue.put(text)
-        if not getattr(self, "_piper_worker_running", False):
-            self._piper_worker_running = True
-            threading.Thread(target=self._piper_worker_loop, daemon=True).start()
-
-    def _piper_worker_loop(self):
-        try:
-            from core.tts import PiperHindiTTSEngine
-            if not hasattr(self, "_piper_engine") or self._piper_engine is None:
-                self._piper_engine = PiperHindiTTSEngine()
-
-            while hasattr(self, "_piper_queue") and not self._piper_queue.empty():
-                try:
-                    text = self._piper_queue.get_nowait()
-                except Exception:
-                    break
-
-                if not text or not text.strip() or self._interrupted:
-                    continue
-
-                self.set_speaking(True)
-                self.ui.set_state("SPEAKING")
-                short_text = text[:80] + "..." if len(text) > 80 else text
-                self.ui.write_log(f"🎙️ [Piper Hindi]: {short_text}")
-                print(f"[TTS] 🎙️ Piper Hindi synthesising: {text}")
-                try:
-                    self._piper_engine.speak(text)
-                except Exception as e:
-                    print(f"[TTS] ❌ Piper error: {e}")
-                    self.ui.write_log(f"SYS: Piper TTS error: {e}")
-        finally:
-            self._piper_worker_running = False
-            self.set_speaking(False)
-            if not self.ui.muted:
-                self.ui.set_state("LISTENING")
+    # NOTE: _speak_with_piper / _piper_worker_loop REMOVED with Piper engine
+    # (Edge TTS + Gemini Live only now). Callers rerouted in speak().
 
     def _speak_with_edge(self, text: str) -> None:
         """Synthesize and play response using Microsoft Edge Neural TTS in a sequential queue."""
@@ -1453,11 +1468,10 @@ class JarvisLive:
                 try:
                     self._edge_engine.speak(text)
                 except Exception as e:
-                    print(f"[TTS] ❌ EdgeTTS failed ({e}) — falling back to Piper...")
-                    self._speak_with_piper(text)
+                    print(f"[TTS] ❌ EdgeTTS failed ({e}) — Piper removed, skipping.")
+                    self.ui.write_log(f"SYS: Edge TTS error: {e}")
         except Exception as err:
             print(f"[TTS] ❌ Edge worker error: {err}")
-            self._speak_with_piper(text)
         finally:
             self._edge_worker_running = False
             self.set_speaking(False)
@@ -1484,7 +1498,15 @@ class JarvisLive:
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
             if not jarvis_speaking and not self.ui.muted and not self._phone_active:
-                data = indata.tobytes()
+                level = _pcm_level(indata)
+                # If audio is below room noise floor (pure fan hum / silence),
+                # send pure digital zeroes to prevent Gemini Live STT from hallucinating
+                # phantom speech (e.g. Spanish subtitles in quiet room background).
+                if level <= 0.0:
+                    data = b"\x00" * (frames * 2)
+                else:
+                    data = indata.tobytes()
+
                 loop.call_soon_threadsafe(
                     self._safe_put_out_queue,
                     {"data": data, "mime_type": "audio/pcm"}
@@ -1493,7 +1515,7 @@ class JarvisLive:
                 # the user's actual voice while listening. Purely cosmetic — any
                 # failure here must never disturb the mic.
                 try:
-                    self.ui.set_audio_level(_pcm_level(indata))
+                    self.ui.set_audio_level(level)
                 except Exception:
                     pass
 
@@ -1564,25 +1586,24 @@ class JarvisLive:
                         if self._interrupted:
                             pass  # discard: interrupted
                         else:
-                            from memory.config_manager import get_tts_engine
-                            use_piper = get_tts_engine() in ("piper_hindi", "piper", "piper_hi")
-                            if not use_piper:
-                                if self._turn_done_event and self._turn_done_event.is_set():
-                                    self._turn_done_event.clear()
-                                # Split into ~50 ms chunks so interrupt() stops audio within 50 ms
-                                # (24000 Hz × 2 bytes/sample × 0.05 s = 2400 bytes per slice)
-                                _audio_data = response.data
-                                _SLICE = 2400
-                                for _i in range(0, len(_audio_data), _SLICE):
-                                    try:
-                                        self.audio_in_queue.put_nowait(_audio_data[_i : _i + _SLICE])
-                                    except Exception:
-                                        pass
+                            # NOTE: Piper re-synthesis path removed (Gemini Live audio direct).
+                            if self._turn_done_event and self._turn_done_event.is_set():
+                                self._turn_done_event.clear()
+                            # Split into ~50 ms chunks so interrupt() stops audio within 50 ms
+                            # (24000 Hz × 2 bytes/sample × 0.05 s = 2400 bytes per slice)
+                            _audio_data = response.data
+                            _SLICE = 2400
+                            for _i in range(0, len(_audio_data), _SLICE):
+                                try:
+                                    self.audio_in_queue.put_nowait(_audio_data[_i : _i + _SLICE])
+                                except Exception:
+                                    pass
 
                     if response.server_content:
                         sc = response.server_content
 
                         if sc.output_transcription and sc.output_transcription.text:
+                            self._last_ai_speech = time.monotonic()
                             txt = _clean_transcript(sc.output_transcription.text)
                             if txt and txt != (out_buf[-1] if out_buf else ""):
                                 out_buf.append(txt)
@@ -1630,9 +1651,7 @@ class JarvisLive:
                                         "text": full_out,
                                         "ts": datetime.now().isoformat(),
                                     }))
-                                from memory.config_manager import get_tts_engine
-                                if get_tts_engine() in ("piper_hindi", "piper", "piper_hi"):
-                                    self._speak_with_piper(full_out)
+                                # NOTE: Piper turn re-speak removed (Live audio already played).
                                 # Dynamic Avatar Emotional Reaction
                                 try:
                                     from core.expression_engine import detect_expression
@@ -1662,13 +1681,19 @@ class JarvisLive:
                                 self._pending_vision = None
                                 b64 = _b64.b64encode(img_b).decode("ascii")
                                 print(f"[Vision] 📤 {len(img_b):,} bytes (angle={angle}) → main session")
-                                await self.session.send_client_content(
-                                    turns={"role": "user", "parts": [
-                                        {"inline_data": {"mime_type": mime_t, "data": b64}},
-                                        {"text": question},
-                                    ]},
-                                    turn_complete=True,
-                                )
+                                try:
+                                    await self.session.send_client_content(
+                                        turns={"role": "user", "parts": [
+                                            {"inline_data": {"mime_type": mime_t, "data": b64}},
+                                            {"text": question},
+                                        ]},
+                                        turn_complete=True,
+                                    )
+                                except Exception as ve:
+                                    print(f"[Vision] ⚠️ Could not inject frame into live session: {ve}")
+                                    self._vision_busy = False
+                                    self._vision_cam_active = False
+
                                 # Mark next turn_complete behaviour depending on angle
                                 if self._vision_cam_active:
                                     # Camera: keep busy until JARVIS finishes speaking the answer
@@ -1696,9 +1721,20 @@ class JarvisLive:
                             function_responses=fn_responses
                         )
         except Exception as e:
-            print(f"[JARVIS] ❌ Recv: {e}")
-            traceback.print_exc()
-            raise
+            err_str = str(e).lower()
+            _is_goaway = any(k in err_str for k in (
+                "connectionclosed", "connectionclosederror",
+                "policy violation", "goaway", "go_away",
+                "1008", "1006", "1007",
+                "session durat",  # Google's GoAway message fragment
+            ))
+            if _is_goaway:
+                print(f"[JARVIS] ⚠️ Live session closed by server (GoAway). Reconnecting seamlessly...")
+                raise _ReconnectSignal(keep_context=True)
+
+            print(f"[JARVIS] ⚠️ Recv stream error: {e} — reconnecting...")
+            raise _ReconnectSignal(keep_context=True)
+
 
     async def _play_audio(self):
         print("[JARVIS] 🔊 Play started")
@@ -1750,11 +1786,10 @@ class JarvisLive:
 
                 self.set_speaking(True)
 
-                # Batch all immediately-available chunks into one write to reduce
-                # thread-pool round-trips (was one asyncio.to_thread per 50ms slice).
-                # Cap at ~200 ms so interrupt() still stops audio within ~200 ms.
+                # Batch available chunks into short writes for ultra-fast, snappy voice response.
+                # Cap at ~50 ms (2400 bytes at 24 kHz / 16-bit mono) for lowest latency and quick interruption.
                 batch = bytearray(chunk)
-                while len(batch) < 9600:   # 9600 bytes ≈ 200 ms at 24 kHz / 16-bit mono
+                while len(batch) < 2400:
                     try:
                         batch.extend(self.audio_in_queue.get_nowait())
                     except asyncio.QueueEmpty:
@@ -1870,10 +1905,27 @@ class JarvisLive:
                 f"Lovingly ask if he ate food or slept well, and tell him how happy you are to see him.{session_clause} "
                 f"Keep it to 2-3 warm, lively sentences. Use natural Hindi fillers (hmm, arey, sun na). Speak with smooth, natural human emotion — ZERO robotic tone, no bullet points! Do NOT call any tools.{lang_clause}"
             )
+        elif cur_persona == "teacher":
+            name_clause = f" Address the student warmly as {u_name}." if u_name else ""
+            p1 = (
+                f"[STARTUP GREETING: ACADEMIC MENTOR & TEACHER MODE]\n"
+                f"Calendar & Clock: Today is {day_str}, {date_str}. The current time is {time_str}.\n"
+                f"Greet the student warmly and inspiringly. State today's date and time. "
+                f"Ask what exciting topic, skill, or problem they want to explore and learn together today!{session_clause} "
+                f"Keep it to 2 encouraging, pedagogical sentences. Do not call any tools.{lang_clause}{name_clause}"
+            )
+        elif cur_persona == "devops":
+            name_clause = f" Address the user as {u_name}." if u_name else ""
+            p1 = (
+                f"[STARTUP GREETING: DEVOPS & SYSTEM HACKER MODE]\n"
+                f"Calendar & Clock: Today is {day_str}, {date_str}. The current time is {time_str}.\n"
+                f"Greet the user sharply. State date, time, and confirm all local pipelines and shell tools are ready for deployment and debugging.{session_clause} "
+                f"Keep it to 2 concise, technical sentences max. Do not call any tools.{lang_clause}{name_clause}"
+            )
         else:
             name_clause = f" Address the user as {u_name}." if u_name else ""
             p1 = (
-                f"[STARTUP GREETING]\n"
+                f"[STARTUP GREETING: J.A.R.V.I.S. TACTICAL AI]\n"
                 f"Calendar & Clock: Today is {day_str}, {date_str}. The current time is {time_str}.\n"
                 f"Greet the user respectfully, state today's full date ({day_str}, {date_str}) and time ({time_str}), and mention that all core subsystems are online and ready.{session_clause} "
                 f"Keep it to 2 crisp, natural sentences max. Do not call any tools.{lang_clause}{name_clause}"
@@ -1929,6 +1981,19 @@ class JarvisLive:
                             "Keep your warm, loving girlfriend tone! Do not call any tools."
                             f"{lang_str}"
                         )
+                    elif cur_persona == "teacher":
+                        p2 = (
+                            f"[TEACHER BRIEFING] Today's developments:\n{news_text[:500]}\n\n"
+                            "Highlight ONE noteworthy event or learning opportunity in an inspiring, pedagogical sentence, "
+                            "and mention that the full bulletin is ready on the HUD display. Do not call any tools."
+                            f"{lang_str}"
+                        )
+                    elif cur_persona == "devops":
+                        p2 = (
+                            f"[DEVOPS INTEL] Today's global feed:\n{news_text[:500]}\n\n"
+                            "Give a one-sentence technical summary of the top development. Feed rendered to HUD. Do not call any tools."
+                            f"{lang_str}"
+                        )
                     else:
                         p2 = (
                             f"[BRIEFING] Here are today's top news headlines:\n{news_text}\n\n"
@@ -1938,6 +2003,10 @@ class JarvisLive:
                 else:
                     if cur_persona == "companion":
                         p2 = f"Main hamesha aapke sath hoon, batao aaj hum kya karne wale hain?{lang_str}"
+                    elif cur_persona == "teacher":
+                        p2 = f"Aapka mentor taiyar hai! Bataiye aaj kaun sa naya topic shuru karein?{lang_str}"
+                    elif cur_persona == "devops":
+                        p2 = f"All systems nominal. Ready for commands.{lang_str}"
                     else:
                         p2 = (
                             "News headlines could not be fetched right now. "
@@ -1978,12 +2047,19 @@ class JarvisLive:
         try:
             from google import genai as _genai
             client = _genai.Client(api_key=_get_api_key())
-            resp   = await asyncio.to_thread(
-                client.models.generate_content,
-                model="gemini-2.5-flash",
-                contents=prompt,
-            )
-            summary = (resp.text or "").strip()
+            summary = ""
+            for m in ("gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash"):
+                try:
+                    resp = await asyncio.to_thread(
+                        client.models.generate_content,
+                        model=m,
+                        contents=prompt,
+                    )
+                    summary = (resp.text or "").strip()
+                    if summary:
+                        break
+                except Exception:
+                    continue
             if summary:
                 save_session_summary(summary, lang)
         except Exception as e:
@@ -1995,13 +2071,32 @@ class JarvisLive:
         """Background task: voice alerts when metrics exceed thresholds."""
         while True:
             await asyncio.sleep(10)
+            # ADDITIVE mute respect (voice switch). Purana alert flow untouched.
+            try:
+                from actions.system_monitor import is_monitor_muted
+                if is_monitor_muted():
+                    continue
+            except Exception:
+                pass
             alert = await asyncio.to_thread(self._sys_monitor.check)
             if not alert or not self.session or not self._awake:
                 continue
+            # Don't interrupt while an autonomous background plan is running
+            try:
+                from actions.todo_agent import _active_tasks, _tasks_lock
+                with _tasks_lock:
+                    if any(t.get("status") == "in_progress" for t in _active_tasks.values()):
+                        continue
+            except Exception:
+                pass
+
             # Don't interrupt an active conversation
             with self._speaking_lock:
                 speaking = self._is_speaking
-            if speaking or (time.monotonic() - self._last_user_speech) < 10:
+            _now = time.monotonic()
+            _ai_recent = (_now - getattr(self, "_last_ai_speech", 0.0)) < 45.0
+            _user_recent = (_now - self._last_user_speech) < 45.0
+            if speaking or _user_recent or _ai_recent:
                 continue
             try:
                 await self.session.send_client_content(
@@ -2062,6 +2157,15 @@ class JarvisLive:
                 speaking = self._is_speaking
             if speaking:
                 continue
+
+            # Don't interrupt while an autonomous background plan is running
+            try:
+                from actions.todo_agent import _active_tasks, _tasks_lock
+                with _tasks_lock:
+                    if any(t.get("status") == "in_progress" for t in _active_tasks.values()):
+                        continue
+            except Exception:
+                pass
 
             if not self._proactive.should_trigger(self._last_user_speech):
                 continue
@@ -2313,8 +2417,40 @@ class JarvisLive:
                     continue
 
                 err_str = str(e)
-                print(f"[JARVIS] Error ({type(e).__name__}): {e}")
-                traceback.print_exc()
+
+                # Also flatten any ExceptionGroup wrapping (TaskGroup quirk) to
+                # check each sub-exception's message — e.g. a GoAway 1008 that
+                # slipped past _receive_audio's guard (very unlikely after the
+                # return-not-raise fix, but belt-and-suspenders).
+                def _flatten_exc_str(exc: BaseException) -> str:
+                    parts = [str(exc), type(exc).__name__]
+                    if isinstance(exc, BaseExceptionGroup):
+                        for sub in exc.exceptions:
+                            parts.append(_flatten_exc_str(sub))
+                    return " ".join(parts)
+
+                flat_str = _flatten_exc_str(e)
+
+                _GOAWAY_KEYS = (
+                    "connectionclosed", "connectionclosederror",
+                    "policy violation", "goaway", "go_away",
+                    "1008", "1006", "session durat",
+                )
+                if any(k in flat_str.lower() for k in _GOAWAY_KEYS):
+                    print(f"[JARVIS] ⚠️ Live session closed by server (GoAway). Auto-reconnecting...")
+                    self._conn_backoff = 3
+                    continue  # skip traceback, reconnect immediately
+
+                is_net_err = any(k in err_str or k in type(e).__name__ for k in (
+                    "TimeoutError", "timed out", "getaddrinfo", "CancelledError",
+                    "ConnectionRefusedError", "OSError", "Cannot connect", "handshake",
+                ))
+
+                if is_net_err:
+                    print(f"[JARVIS] ⚠️ Network handshake glitch ({type(e).__name__}): {e}")
+                else:
+                    print(f"[JARVIS] Error ({type(e).__name__}): {e}")
+                    traceback.print_exc()
 
                 # Proactive audio rejected by the server (preview API drift) —
                 # drop it and reconnect with the plain config.
@@ -2342,10 +2478,6 @@ class JarvisLive:
                     continue
 
                 # Network / timeout errors — log clearly and back off
-                is_net_err = any(k in err_str for k in (
-                    "TimeoutError", "timed out", "getaddrinfo", "CancelledError",
-                    "ConnectionRefusedError", "OSError", "Cannot connect",
-                ))
                 if is_net_err:
                     _conn_backoff = min(getattr(self, "_conn_backoff", 3) * 2, 60)
                     self._conn_backoff = _conn_backoff

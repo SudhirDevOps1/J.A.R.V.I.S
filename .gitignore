@@ -33,9 +33,16 @@ memory/journals/
 memory/obsidian_vault/
 memory/*.db
 memory/*.sqlite*
+memory/*.jsonl
+memory/contacts.json
+memory/corrections.json
+memory/feedback.json
+memory/learned_intents.json
 memory/tinydb_store.json
 config/weather_cache.json
 config/installed_apps.json
+config/*.sqlite*
+config/*.db
 
 # ── Large Neural Models & Voice Weights ────────────────────────────────────────
 *.onnx
@@ -85,6 +92,8 @@ desktop.ini
 *.log
 *.tmp
 *.bak
+*.bak-*
+config/*.bak-*
 logs/
 downloads/
 screenshots/

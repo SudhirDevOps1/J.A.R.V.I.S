@@ -37,6 +37,14 @@ def _get_gemini_api_key() -> str:
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     if key:
         return key
+    try:
+        from memory.config_manager import load_api_keys
+        keys = load_api_keys()
+        k = (keys.get("gemini_api_key") or keys.get("gemini") or "").strip()
+        if k:
+            return k
+    except Exception:
+        pass
     cfg_path = Path(__file__).resolve().parent.parent / "config" / "api_keys.json"
     if cfg_path.exists():
         try:
@@ -96,57 +104,84 @@ def troubleshoot_screen(
 
     b64_img = base64.b64encode(img_bytes).decode("utf-8")
 
-    # Call Gemini 2.5 Flash with multimodal payload
+    # Call Gemini Flash with multimodal payload (working endpoints first)
+    models_to_try = [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+    ]
+    last_err = ""
+
+    asst_name = "Friday"
     try:
-        import urllib.request
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-        
-        system_instruction = (
-            "You are J.A.R.V.I.S., a top-tier visual code & system troubleshooter. "
-            "Examine this screenshot carefully. "
-            "Identify: 1) Active IDE / Terminal / Browser errors, tracebacks, red underlines, or compiler logs. "
-            "2) The exact file, line number, or syntax bug if visible. "
-            "3) Give a clear, concise Hinglish explanation and immediate fix. "
-            "Be direct, confident, and developer-friendly."
-        )
+        from memory.config_manager import load_api_keys
+        asst_name = (load_api_keys().get("assistant_name") or "Friday").strip()
+    except Exception:
+        pass
 
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": f"{system_instruction}\n\nUser question: {user_query}"},
-                        {
-                            "inline_data": {
-                                "mime_type": mime_type,
-                                "data": b64_img
-                            }
+    system_instruction = (
+        f"You are {asst_name}, a friendly, ultra-sharp AI assistant and visual troubleshooter. "
+        "Examine this screenshot carefully and respond directly in fluent, natural Hinglish (conversational Hindi-English mix). "
+        "DO NOT use robotic numbered section headers (e.g. do NOT write '**1. Screen Description:**' or '**2. Errors:**'). "
+        "Instead, speak directly and naturally: "
+        "- In 1-2 quick sentences, mention what is open on the screen (e.g. VS Code, terminal, browser). "
+        "- If an error, exception, syntax bug, or crash is visible, explain the exact root cause and give the concise fix or command. "
+        "- If no error is visible, confirm everything looks clean and ask what specific part they would like help with. "
+        "Keep the tone warm, concise, and helpful."
+    )
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": f"{system_instruction}\n\nUser question: {user_query}"},
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": b64_img
                         }
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 600,
+                    }
+                ]
             }
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 600,
         }
+    }
 
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST"
-        )
+    import urllib.request
+    req_data = json.dumps(payload).encode("utf-8")
 
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-            reply = "".join(p.get("text", "") for p in parts).strip()
-            if reply:
-                return reply
-            return "Screen par koi obvious error nahi dikha sir, sab clean lag raha hai."
+    for model_name in models_to_try:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            req = urllib.request.Request(
+                url,
+                data=req_data,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                reply = "".join(p.get("text", "") for p in parts).strip()
+                if reply:
+                    return reply
+                return "Screen par koi obvious issue nahi dikha sir, sab theek lag raha hai."
+        except Exception as e:
+            _msg = str(e)
+            last_err = _msg
+            if "401" in _msg or "403" in _msg or "API key" in _msg:
+                return "Gemini API key invalid hai — config/api_keys.json me key check karein."
+            continue
 
-    except Exception as e:
-        return f"Gemini screen analysis error: {e}"
+    if "timed out" in last_err.lower() or "timeout" in last_err.lower():
+        return "Screen analysis timeout — internet slow hai, thodi der baad retry karein."
+    if "429" in last_err or "quota" in last_err.lower() or "too many requests" in last_err.lower():
+        return "Screen capture ho gaya hai. Abhi API rate limit chal rahi hai, thodi der baad dobara 'screen dekho' bolein."
+    return f"Screen analysis note: {last_err[:120]}"
 
 
 TOOL = {

@@ -1,0 +1,123 @@
+[
+  {
+    "goal": "User wants to enter Agent Mode",
+    "steps": [
+      {
+        "text": "Step 1: break 'User wants to enter Agent Mode' into parts",
+        "done": true
+      },
+      {
+        "text": "Step 2: execute via tools one by one",
+        "done": true
+      },
+      {
+        "text": "Step 3: confirm + journal",
+        "done": true
+      }
+    ],
+    "status": "completed",
+    "at": "07:10 PM"
+  },
+  {
+    "goal": "trip plan karo",
+    "steps": [
+      {
+        "text": "flight_finder: search flights",
+        "done": true
+      },
+      {
+        "text": "web_search: hotels research",
+        "done": true
+      },
+      {
+        "text": "reminder: pack checklist",
+        "done": true
+      },
+      {
+        "text": "send_message: share plan on Telegram",
+        "done": true
+      }
+    ],
+    "status": "completed",
+    "at": "11:31 AM"
+  },
+  {
+    "goal": "trip plan karo",
+    "steps": [
+      {
+        "text": "flight_finder: search flights",
+        "done": true
+      },
+      {
+        "text": "web_search: hotels research",
+        "done": true
+      },
+      {
+        "text": "reminder: pack checklist",
+        "done": true
+      },
+      {
+        "text": "send_message: share plan on Telegram",
+        "done": true
+      }
+    ],
+    "status": "cancelled",
+    "at": "11:32 AM"
+  },
+  {
+    "goal": "Goa trip plan karo",
+    "steps": [
+      {
+        "text": "travel_transit: find transit routes, trains and flights",
+        "done": false
+      },
+      {
+        "text": "web_search: hotels, attractions and weather research",
+        "done": false
+      },
+      {
+        "text": "reminder: pack travel essentials checklist",
+        "done": false
+      },
+      {
+        "text": "send_message: share trip itinerary draft",
+        "done": false
+      }
+    ],
+    "status": "in_progress",
+    "at": "12:10 PM"
+  },
+  {
+    "goal": "delhi trip plan karo",
+    "steps": [
+      {
+        "text": "travel_transit: find transit routes, trains and flights",
+        "done": true,
+        "result": "Delhi se Delhi ka road distance 0.0 km hai (driving: ~0.0 hrs). Flight se yeh sirf 1h 00m ka safar hai. Fastest train Delhi - Delhi Vande Bharat Express (2h 30m) hai. Maine Train, Flight, Bus aur Map route ka poora comparison card screen par render kar diya hai."
+      },
+      {
+        "text": "web_search: hotels, attractions and weather research",
+        "done": true,
+        "result": "Search result for 'hotels, attractions and weather research Delhi': Information retrieved from available sources."
+      },
+      {
+        "text": "reminder: pack travel essentials checklist",
+        "done": true,
+        "result": "Reminder set for September 19 at 03:17 PM."
+      },
+      {
+        "text": "send_message: share trip itinerary draft",
+        "done": true,
+        "result": "Message sent to Saved Messages via Telegram."
+      }
+    ],
+    "status": "completed",
+    "at": "12:17 PM",
+    "results": [
+      "Step 1 (travel_transit: find transit routes, trains and flights): Delhi se Delhi ka road distance 0.0 km hai (driving: ~0.0 hrs). Flight se yeh sirf 1h 00m ka safar hai. Fastest train Delhi - Delhi Vande Bharat Express (2h 30m) hai. Maine Train, Flight, Bus aur Map route ka poora comparison card screen par render kar diya hai.",
+      "Step 2 (web_search: hotels, attractions and weather research): Search result for 'hotels, attractions and weather research Delhi': Information retrieved from available sources.",
+      "Step 3 (reminder: pack travel essentials checklist): Reminder set for September 19 at 03:17 PM.",
+      "Step 4 (send_message: share trip itinerary draft): Message sent to Saved Messages via Telegram."
+    ]
+  }
+]
