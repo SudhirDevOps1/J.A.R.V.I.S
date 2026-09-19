@@ -51,9 +51,18 @@ def _get_user_location() -> str:
 # "launch kro" / "brave kholo na" jaise inputs se action verbs nikalo taaki app
 # naam me verb leak na ho. Purane inline regex untouched — yah extra guard hai.
 _ACTION_VERBS = (
-    r"kro|karo|kar|kar\s*do|do|de|dena|kholo|khol|chalao|chala\s*do|chala|chalo"
-    r"|band\s*karo|band|dikhao|dikha|batao|bata|sunao|suna|lagao|laga\s*do|laga"
-    r"|chal|jao|ja|aao|aa|lo|lena|karke|krke|abhi|zara|na|naa|re|ji"
+    r"kro|karo|kar|kar\s*do|kar\s*dena|karna|karke|krke"
+    r"|kholo|khol|kholna|khol\s*do|open\s*karo"
+    r"|chalao|chala\s*do|chala|chalo|chal|chalna|chalu\s*karo|chalu\s*kar\s*do|chalu"
+    r"|band\s*karo|band\s*kar\s*do|band|roko|rok|rokna|hatao|hata|hata\s*do"
+    r"|dikhao|dikha\s*do|dikha|dikhana|dekho|dekh|dekhna|dekh\s*lo|dekh\s*kar"
+    r"|batao|bata\s*do|bata|batana|bolo|bol|bolna|kaho|kahna|samjhao|samjha\s*do|samjhana"
+    r"|sunao|suna\s*do|suna|sunana|sunao\s*na|suno|sun|sunna"
+    r"|likho|likh\s*do|likh|likhna|banao|bana\s*do|bana|banana|bana\s*dena"
+    r"|lagao|laga\s*do|laga|lagana|dhoondho|dhoondh|dhoondhna|khojo|khoj|khojna"
+    r"|check\s*karo|check|bhejo|bhej\s*do|bhej|bhejna|send\s*kro|send\s*karo"
+    r"|jao|ja|jana|aao|aa|aana|lo|lena|de|dena|do"
+    r"|abhi|zara|zaraa|thoda|thodi|na|naa|re|ji|yaar|bhai"
 )
 
 
@@ -124,13 +133,13 @@ class NeedleToolRouter:
         # Strips leading/trailing/embedded fillers so patterns match cleanly.
         # E.g. "yaar bhai bas downloads dikhao na zara" → "downloads dikhao"
         _FILLERS = (
-            r"\b(yaar|yar|bhai|bro|dost|sir|sir ji|jaan|janeman)\b",
-            r"\b(please|plz|pls|kripya|meherbani)\b",
-            r"\b(bas|sirf|only|just|thoda|thodi|ek baar)\b",
-            r"\b(zara|zaraa|zara sa|thoda sa)\b",
-            r"\b(na|naa|re|ji|haan|hmm|ok|okay)\b",
-            r"^(ek kaam karo|sun|suno|dekho|bol|bata)[,\s]+",
-            r"[,\s]+(na|naa|please|plz|re|ji|yaar|bhai)$",
+            r"\b(yaar|yar|bhai|bro|dost|sir|sir ji|jaan|janeman|hero|babu)\b",
+            r"\b(please|plz|pls|kripya|meherbani|request hai)\b",
+            r"\b(bas|sirf|only|just|thoda|thodi|thoda sa|ek baar)\b",
+            r"\b(zara|zaraa|zara sa|jaldi se|turant|fatafat)\b",
+            r"\b(na|naa|re|ji|haan|hmm|ok|okay|theek hai|achha|accha|sahi hai)\b",
+            r"^(ek kaam karo|sun|suno|dekho|bol|bata|suno na|dekho na|ek baat batao|meri baat suno)[,\s]+",
+            r"[,\s]+(na|naa|please|plz|re|ji|yaar|bhai|babu|jaan)$",
         )
         for _fp in _FILLERS:
             clean = re.sub(_fp, " ", clean).strip()
@@ -1020,11 +1029,21 @@ class NeedleToolRouter:
                     if conf >= 0.30:
                         _HINDI_STOP_WORDS = {
                             "ho", "hai", "hain", "kya", "kaun", "mera", "meri", "mere", "tum", "aap",
-                            "kaise", "nahi", "tha", "the", "thi", "hoga", "karo", "kar", "batao", "bolo",
-                            "kyu", "kyun", "kab", "kaha", "kahan", "zara", "bhai", "yaar",
-                            "dekhna", "dekh", "dekho", "sunna", "suno", "bolna", "bolo", "chalna", "chalo",
-                            "karna", "karo", "kuch", "kuchh", "baat", "cheez", "abhi", "raha", "rahe", "rahi",
-                            "band", "chalu", "shuru", "kholna", "rokna"
+                            "kaise", "nahi", "tha", "the", "thi", "hoga", "hogi", "honge", "hona",
+                            "karo", "kar", "karna", "karke", "karenge", "kare", "karoge", "karu",
+                            "batao", "bata", "batana", "bolo", "bol", "bolna", "kaho", "kahna", "samjhao",
+                            "kyu", "kyun", "kab", "kaha", "kahan", "zara", "bhai", "yaar", "hero", "babu", "jaan",
+                            # Dekhna family
+                            "dekhna", "dekh", "dekho", "dikhna", "dikhao", "dikhana", "dekhoge", "dekhe", "dekhu",
+                            # Sunna family
+                            "sunna", "sun", "suno", "sunao", "sunana", "sunoge", "sune", "sunu",
+                            # Chalna family
+                            "chalna", "chal", "chalo", "chalao", "chalana", "chalu", "chaloge", "chale",
+                            # Likhna & Bhejna family
+                            "likhna", "likh", "likho", "likhe", "bhejna", "bhej", "bhejo", "bheje", "send",
+                            # Action & State particles
+                            "rokna", "rok", "roko", "band", "shuru", "kholna", "khol", "kholo", "hatao", "hata",
+                            "kuch", "kuchh", "baat", "cheez", "kaam", "abhi", "raha", "rahe", "rahi"
                         }
                         for r in res.get("results", []):
                             if isinstance(r, str) and r.startswith("{"):
@@ -1056,18 +1075,20 @@ class NeedleToolRouter:
                 if intent_name == "troubleshoot_screen":
                     if not any(w in clean for w in ("camera", "webcam", "hand", "hath", "haath", "chehra", "face", "pakda", "samne")):
                         return _dispatch("troubleshoot_screen", {"query": clean})
+                elif intent_name == "take_screenshot":
+                    return _dispatch("computer_settings", {"action": "screenshot"})
                 elif intent_name == "tinydb_memory":
                     # Guard: must have explicit memory/reminder keywords — prevents
                     # generic questions from being stored as tasks.
-                    _mem_keywords = ("yaad", "remember", "reminder", "mat bhulo", "note karo")
+                    _mem_keywords = ("yaad", "remember", "reminder", "mat bhulo", "mat bhulna", "note karo", "note kar")
                     if any(w in clean for w in _mem_keywords):
-                        t_text = re.sub(r"^(yaad\s*rakhna|yaad\s*rakho|remember\s*that|ki)\s*", "", clean).strip()
+                        t_text = re.sub(r"^(yaad\s*rakhna|yaad\s*rakho|remember\s*that|ki|note\s*karo|note\s*kar\s*lo)\s*", "", clean).strip()
                         return _dispatch("tinydb_memory", {"action": "add", "task": t_text or clean})
                 elif intent_name == "tinydb_list":
                     # Guard: must have task/reminder listing keywords — prevents
                     # file-inspection queries like "desktop pr kya hain" from
                     # triggering the task list.
-                    _list_keywords = ("task", "tasks", "kaam", "reminder", "reminders", "todo", "pending")
+                    _list_keywords = ("task", "tasks", "kaam", "reminder", "reminders", "todo", "pending", "list")
                     if any(w in clean for w in _list_keywords):
                         return _dispatch("tinydb_memory", {"action": "list"})
                 elif intent_name == "bm25_search":
@@ -1083,6 +1104,27 @@ class NeedleToolRouter:
                         return _dispatch("bm25_search", {"query": q_text or clean})
                 elif intent_name == "find_files":
                     return _dispatch("file_controller", {"action": "find", "name": clean, "path": "home"})
+                elif intent_name == "disk_usage":
+                    target_drive = "C:"
+                    if "d drive" in clean or "drive d" in clean:
+                        target_drive = "D:"
+                    elif "e drive" in clean or "drive e" in clean:
+                        target_drive = "E:"
+                    return _dispatch("file_controller", {"action": "disk_usage", "path": target_drive})
+                elif intent_name == "list_apps":
+                    return _dispatch("open_app", {"action": "list_running", "app_name": "list"})
+                elif intent_name == "system_status":
+                    return _dispatch("system_status", {})
+                elif intent_name == "volume_up":
+                    return _dispatch("computer_settings", {"action": "volume_up"})
+                elif intent_name == "volume_down":
+                    return _dispatch("computer_settings", {"action": "volume_down"})
+                elif intent_name == "volume_mute":
+                    return _dispatch("computer_settings", {"action": "mute"})
+                elif intent_name == "media_pause":
+                    return _dispatch("computer_settings", {"action": "pause_video"})
+                elif intent_name == "media_next":
+                    return _dispatch("computer_settings", {"action": "next_tab"})
         except Exception:
             pass
 
@@ -1135,15 +1177,15 @@ class LFMChatEngine:
         clean = text.strip().lower()
 
         # Semantic Mapping 1: Application launch & control
-        # E.g. "yaar chrome khol do zara", "gana baja do", "spotify chala do"
+        # E.g. "yaar chrome khol do zara", "gana baja do", "spotify chala do", "gaana sunao"
         if re.search(r"\b(gaana|gana|song|music|audio|track|naghma|dhun|qawwali|ghazal)\b", clean) and \
                 any(w in clean for w in ("baja", "bajao", "baja do", "chala", "chalao", "chala do",
-                                          "play", "start", "lagao", "laga do", "sun", "suno")):
+                                          "play", "start", "lagao", "laga do", "sun", "suno", "sunao", "suna do", "sunna")):
             # Extract song query by removing action/filler words
             song_q = re.sub(
                 r"\b(gaana|gana|song|music|audio|track|naghma|dhun|qawwali|ghazal"
                 r"|baja\s*do|baja|bajao|play|chala\s*do|chala|chalao"
-                r"|lagao|laga\s*do|laga|start|sun|suno"
+                r"|lagao|laga\s*do|laga|start|sun|suno|sunao|suna\s*do|sunna"
                 r"|zara|yaar|bhai|sir|please|koi|ek|mujhe|mera|meri|acha|accha"
                 r"|kro|kar|karo|do|de)\b",
                 "", clean
@@ -1153,10 +1195,10 @@ class LFMChatEngine:
             song_query = song_q or "popular hindi songs"
             return f"play song {song_query}", "play_youtube"
 
-        m_app = re.search(r"\b(yaar|bhai|sir|zara|kripya|please)?\s*([a-zA-Z0-9_\-\.]+)\s+(khol\s*do|chala\s*do|start\s*kar\s*do|open\s*kar\s*do|on\s*kar\s*do)\b", clean)
+        m_app = re.search(r"\b(yaar|bhai|sir|zara|kripya|please)?\s*([a-zA-Z0-9_\-\.]+)\s+(khol\s*do|chala\s*do|start\s*kar\s*do|open\s*kar\s*do|on\s*kar\s*do|chalu\s*karo|chalao|kholo)\b", clean)
         if m_app:
             app_name = m_app.group(2)
-            if app_name not in ("mujhe", "ise", "isko", "use", "usko"):
+            if app_name not in ("mujhe", "ise", "isko", "use", "usko", "dekhna", "sunna", "bolna", "chalna", "karna", "baat", "kaam", "kuch", "sab"):
                 return f"open {app_name}", "open_app"
 
         # Semantic Mapping 2: Storage & Drive health
@@ -1172,24 +1214,27 @@ class LFMChatEngine:
         # Semantic Mapping 3: Volume & Audio control
         # E.g. "awaaz thoda kam kar de", "sound badhao", "chup ho jao"
         if any(w in clean for w in ("awaaz", "volume", "sound", "dhwani")):
-            if any(w in clean for w in ("badhao", "tez", "badha", "up", "uccha")):
+            if any(w in clean for w in ("badhao", "tez", "badha", "up", "uccha", "badha do")):
                 return "volume up", "volume_up"
-            if any(w in clean for w in ("kam", "dheemi", "ghatao", "down", "low")):
+            if any(w in clean for w in ("kam", "dheemi", "ghatao", "down", "low", "kam karo")):
                 return "volume down", "volume_down"
-            if any(w in clean for w in ("mute", "band", "chup")):
+            if any(w in clean for w in ("mute", "band", "chup", "shant")):
                 return "volume mute", "volume_mute"
 
-        # Semantic Mapping 4: Screen capture / photo / inspection
-        # E.g. "screen ka photo le lo", "tasveer kheecho", "screen dekho", "screen par kya hai"
+        # Semantic Mapping 4: Screen & Camera visual inspection (Dekhna)
+        # E.g. "screen ka photo le lo", "tasveer kheecho", "screen dekho", "camera se dekho"
         if any(w in clean for w in ("photo", "tasveer", "snap", "pic", "picture")) and any(w in clean for w in ("screen", "display")):
             return "take screenshot", "take_screenshot"
-        if any(w in clean for w in ("screen", "display", "creen")) and any(w in clean for w in ("dekho", "dekh", "check", "kya hai", "kya dikh", "kya chal")):
+        if any(w in clean for w in ("camera se dekho", "webcam se dekho", "haath me kya hai", "hath me kya hai", "chehra dekho", "samne kya hai")):
+            return "camera se dekho", "camera_vision"
+        if any(w in clean for w in ("screen", "display", "creen", "monitor")) and any(w in clean for w in ("dekho", "dekh", "check", "kya hai", "kya dikh", "kya chal", "nazar")):
             if not any(w in clean for w in ("camera", "webcam", "hand", "hath", "haath", "chehra", "face", "pakda", "samne")):
                 return "screen dekho", "troubleshoot_screen"
 
-        # Semantic Mapping 5: Running Apps
-        # E.g. "kaun se apps chal rahe hain", "kya khula hai"
-        if any(w in clean for w in ("kaun se", "konsa", "kya")) and any(w in clean for w in ("app", "program", "software")) and any(w in clean for w in ("chal", "khula", "open", "running")):
+        # Semantic Mapping 5: Running Apps & Process Status (Chalna)
+        # E.g. "kaun se apps chal rahe hain", "kya khula hai", "computer me kya chal raha hai"
+        if (any(w in clean for w in ("kaun se", "konsa", "kya")) and any(w in clean for w in ("app", "program", "software", "processes", "process")) and any(w in clean for w in ("chal", "khula", "open", "running"))) or \
+           clean in ("kya chal raha hai", "computer me kya chal raha hai", "pc me kya chal raha hai", "running apps batao", "running apps dikhao"):
             return "running apps", "list_apps"
 
         # Semantic Mapping 6: Web Search
@@ -1341,6 +1386,18 @@ class LFMChatEngine:
         if any(w in clean for w in ("click karo", "mouse click", "left click", "yahan click")):
             return "click karo", "click"
 
+        # Semantic Mapping 23: Travel & Transit Navigation (Chalna / Yatra)
+        # E.g. "delhi kaise jaye", "patna jane ka rasta", "mumbai ki train", "route check karo"
+        if any(w in clean for w in ("kaise jaye", "kaise jayein", "jane ka rasta", "jane ka route", "ki train", "ki flight", "ki bus", "rasta batao", "route batao")):
+            m_route = re.search(r"([a-zA-Z\u0900-\u097F]+)\s*(?:se\s*([a-zA-Z\u0900-\u097F]+))?\s*(?:kaise\s*jaye|kaise\s*jayein|jane\s*ka\s*rasta|jane\s*ka\s*route|ki\s*train|ki\s*flight|ki\s*bus|rasta\s*batao|route\s*batao)", clean)
+            if m_route:
+                first_city = m_route.group(1).strip()
+                second_city = (m_route.group(2) or "").strip()
+                dest = second_city if second_city else first_city
+                orig = first_city if second_city else "Delhi"
+                if dest not in ("kaise", "kahan", "yahan", "wahan", "batao", "jane"):
+                    return f"travel from {orig} to {dest}", "travel_transit"
+
         return text, "general"
 
     def generate(self, prompt: str, system_prompt: str = "") -> Optional[str]:
@@ -1388,6 +1445,20 @@ class LFMChatEngine:
         if any(w in clean for w in ("hello", "hii", "hey", "suno jarvis", "sun jarvis")):
             return "Hello sir! Main sun raha hoon, bataiye kya hukum hai?"
 
+        # Audibility & Mic Check (Sunna)
+        if any(w in clean for w in ("awaaz aa rahi", "awaaz aa rhi", "sun rahe ho", "sun rahi ho", "sun sakte ho", "sun sakti ho", "sun pa rahe ho", "can you hear me", "am i audible", "meri baat suno", "suno na")):
+            return "Haan, main aapko bilkul saaf aur spasht sun raha hoon! Kahiye, kya sewa karoon?"
+
+        # Conversational continuation & flow (Bolna)
+        if clean in ("aur batao", "aur sunao", "kuch bolo", "kuch bolo na", "aage bolo", "chup kyu ho gaye", "aur kya haal chaal", "aur bataiye", "kuch naya batao"):
+            return "Main bilkul badhiya hoon! Aap bataiye, aaj hum kya naya execute ya discuss karein?"
+
+        # Language directives & preferences (Bolna)
+        if any(w in clean for w in ("hindi me bolo", "hindi me baat", "shuddh hindi")):
+            return "Bilkul! Ab se main aapse sahaj aur shuddh Hindi me baat karunga."
+        if any(w in clean for w in ("english me bolo", "speak in english", "talk in english")):
+            return "Certainly! I will converse with you in English from now on."
+
         # Capabilities & Help
         if any(w in clean for w in ("tum kya kar sakte ho", "capabilities", "kya features hain", "help me", "kya kar sakte")):
             return ("Main J.A.R.V.I.S. hoon! Main aapke system par apps khol/band kar sakta hoon, YouTube par gaane chala sakta hoon, "
@@ -1415,14 +1486,16 @@ class LFMChatEngine:
             return "Alvida sir! Apna khayal rakhiyega. Jab bhi zaroorat ho, bas aawaz dijiyega."
 
         # Offline & Connection Status
-        if any(w in clean for w in ("offline ho kya", "internet nahi hai", "is internet working", "net chal raha")):
-            return "Haan sir, abhi hum offline edge mode me chal rahe hain. Needle 2 aur LFM2.5 ke sahare saare local OS actions kaam kar rahe hain."
+        if any(w in clean for w in ("offline ho kya", "internet nahi hai", "is internet working", "net chal raha", "internet chal raha", "wifi chal raha", "net connect hai")):
+            return "Internet connection active hai aur saare network services operational hain. Needle 2 aur LFM2.5 ke sahare saare local OS actions kaam kar rahe hain."
 
-        # Humor & Fun
-        if any(w in clean for w in ("joke", "chutkula", "hasao", "kuch hasao")):
+        # Humor & Fun (Sunna)
+        if any(w in clean for w in ("joke", "chutkula", "hasao", "kuch hasao", "chutkula sunao")):
             return "Ek programmer ne apni biwi se kaha: 'Market ja raha hoon, agar tamatar mile toh 10 le aana.' Wo 10 dukan le aaya kyunki wahan tamatar the! :D"
-        if any(w in clean for w in ("shayari", "kavita")):
+        if any(w in clean for w in ("shayari", "kavita", "shayari sunao", "kavita sunao")):
             return "Hukm aapka, taamil meri hogi, \nHar mushkil ab aasan banegi, \nJab tak J.A.R.V.I.S. hai aapke sath, \nHar command instant execute hogi!"
+        if any(w in clean for w in ("kahani", "kissa", "story sunao", "kahani sunao")):
+            return "Ek baar ki baat hai, ek developer ne bina bug ke code likha... aur tabhi uski neend toot gayi! :D Kahiye sir, koi aur kissa sunau?"
 
         # Math / Quick calculation evaluation offline
         math_m = re.search(r"(\d+)\s*([\+\-\*\/])\s*(\d+)", clean)

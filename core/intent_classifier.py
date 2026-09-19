@@ -18,9 +18,9 @@ except ImportError:
     _SKLEARN_AVAILABLE = False
 
 
-# Seed training dataset for core J.A.R.V.I.S. voice reflex categories
+# Seed training dataset for core J.A.R.V.I.S. voice reflex categories (Dekhna, Sunna, Bolna, Chalna, Karna)
 _TRAINING_DATA = [
-    # Troubleshoot screen / Code debugger
+    # 1. Dekhna (देखना) — Troubleshoot screen, code debugger, visual inspection
     ("check karo is code mein kya error hai", "troubleshoot_screen"),
     ("screen par error dekho", "troubleshoot_screen"),
     ("debug my code on screen", "troubleshoot_screen"),
@@ -28,39 +28,93 @@ _TRAINING_DATA = [
     ("is screen me kya problem dikh rahi hai", "troubleshoot_screen"),
     ("code me error dhoondho", "troubleshoot_screen"),
     ("syntax error check karo screen par", "troubleshoot_screen"),
+    ("screen par kya chal raha hai dekho", "troubleshoot_screen"),
+    ("dekho screen par kya likha hai", "troubleshoot_screen"),
+    ("ek baar screen dekho", "troubleshoot_screen"),
+    ("display par dekho kya dikh raha hai", "troubleshoot_screen"),
+    ("terminal ka error dekho", "troubleshoot_screen"),
+    ("screen dekh kar samjhao", "troubleshoot_screen"),
 
-    # TinyDB Memory & Reminders
+    # 1. Dekhna (देखना) — Screenshot & Visual capture
+    ("screen ka photo lo", "take_screenshot"),
+    ("screenshot le lo", "take_screenshot"),
+    ("screen capture karo", "take_screenshot"),
+    ("display ki photo kheecho", "take_screenshot"),
+    ("tasveer kheecho screen ki", "take_screenshot"),
+    ("take a screenshot", "take_screenshot"),
+
+    # 2. Sunna (सुनना) — Volume & Audio controls
+    ("volume badhao thoda", "volume_up"),
+    ("awaaz tez karo", "volume_up"),
+    ("sound badha do", "volume_up"),
+    ("thoda tez bolo", "volume_up"),
+    ("awaaz sunai nahi de rahi", "volume_up"),
+    ("awaaz kam karo", "volume_down"),
+    ("sound dheemi karo", "volume_down"),
+    ("thoda dheere bolo", "volume_down"),
+    ("volume down kar do", "volume_down"),
+    ("awaaz band karo", "volume_mute"),
+    ("mute kar do sound", "volume_mute"),
+    ("chup ho jao", "volume_mute"),
+    ("shant raho", "volume_mute"),
+    ("gaana pause karo", "media_pause"),
+    ("video roko thodi der", "media_pause"),
+    ("gaana band karo", "media_pause"),
+    ("next song play karo", "media_next"),
+    ("agla gaana chalao", "media_next"),
+    ("song badlo", "media_next"),
+
+    # 3. Chalna (चलना) — Running apps & process status
+    ("kya chal raha hai", "list_apps"),
+    ("kaun se apps chal rahe hain", "list_apps"),
+    ("computer me kya chal raha hai", "list_apps"),
+    ("running apps dikhao", "list_apps"),
+    ("pc me kya khula hai", "list_apps"),
+    ("background me kya chal raha hai", "list_apps"),
+    ("active programs dikhao", "list_apps"),
+
+    # 3. Chalna / Dekhna — System hardware metrics
+    ("battery kitni bachi hai", "system_status"),
+    ("ram kitni use ho rahi hai", "system_status"),
+    ("system status report do", "system_status"),
+    ("cpu usage kitna chal raha hai", "system_status"),
+    ("computer kitna garam hai", "system_status"),
+    ("pc ki performance kaisi hai", "system_status"),
+
+    # 4. Karna (करना) — TinyDB Memory & Reminders
     ("yaad rakhna kal mujhe Java revise karna hai", "tinydb_memory"),
     ("yaad rakhna shaam ko meeting hai", "tinydb_memory"),
     ("remember that I have an exam tomorrow", "tinydb_memory"),
+    ("yeh baat yaad rakhna", "tinydb_memory"),
+    ("note kar lo kal subah nikalna hai", "tinydb_memory"),
+    ("mat bhoolna kal class hai", "tinydb_memory"),
     ("mere pending tasks kya hain", "tinydb_list"),
     ("reminders dikhao mujhe", "tinydb_list"),
     ("aaj ke pending kaam dikhao", "tinydb_list"),
+    ("kaam ki list dikhao", "tinydb_list"),
+    ("kya kaam bacha hai mera", "tinydb_list"),
+    ("tasks ki list batao", "tinydb_list"),
 
-    # BM25 Notes Search
+    # 4. Karna / Dekhna — BM25 Notes Search
     ("notes mein search karo polymorphism example", "bm25_search"),
     ("kahan likha tha docker multi threading", "bm25_search"),
     ("search my notes for python decorators", "bm25_search"),
     ("notes dhoondho java stream api", "bm25_search"),
     ("purane notes me search karo", "bm25_search"),
+    ("notes me khojo docker commands", "bm25_search"),
+    ("kahan likha tha notes me", "bm25_search"),
 
-    # File controller
+    # 4. Karna / Dekhna — File & Storage Controller
     ("downloads me zip files dhoondho", "find_files"),
     ("search file invoice pdf", "find_files"),
     ("desktop par photos dhoondho", "find_files"),
+    ("documents me file khojo", "find_files"),
+    ("meri file kahan hai dhoondho", "find_files"),
     ("storage check karo c drive ki", "disk_usage"),
     ("kitna space bacha hai computer me", "disk_usage"),
-
-    # Volume & Media
-    ("volume badhao thoda", "volume_up"),
-    ("awaaz kam karo", "volume_down"),
-    ("gaana pause karo", "media_pause"),
-    ("next song play karo", "media_next"),
-
-    # System Status
-    ("battery kitni bachi hai", "battery_status"),
-    ("ram kitni use ho rahi hai", "ram_status"),
-    ("system status report do", "system_status"),
+    ("c drive me kitni jagah khali hai", "disk_usage"),
+    ("disk storage status batao", "disk_usage"),
+    ("hard drive kitni bhari hai", "disk_usage"),
 ]
 
 

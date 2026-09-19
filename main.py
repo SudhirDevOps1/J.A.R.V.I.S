@@ -227,7 +227,10 @@ TOOL_DECLARATIONS = [
         "description": (
             "Captures the screen or webcam image and lets you analyze it. "
             "MUST be called when user asks what is on screen, what you see, "
-            "look at camera, analyze my screen, etc. "
+            "look at camera, analyze my screen, or in Hindi: 'screen dekho', 'screen par kya hai', "
+            "'error dekho', 'camera se dekho', 'mere haath me kya hai dekho', etc. "
+            "Use angle='screen' to view display, open apps, and code. "
+            "Use angle='camera' to view webcam, room, physical surroundings, face, or objects in hand. "
             "You have NO visual ability without this tool. "
             "After the image is captured it is sent directly to you — describe what you see and answer the user's question. "
             "When using camera: the live view stays open until user says close it or calls close_camera."
@@ -246,7 +249,7 @@ TOOL_DECLARATIONS = [
         "description": (
             "Closes the live camera view shown on screen. "
             "Call when the user says (in ANY language): close camera, stop camera, "
-            "turn off camera, that's creepy, etc."
+            "turn off camera, camera band karo, camera hatao, camera off karo, that's creepy, etc."
         ),
         "parameters": {"type": "OBJECT", "properties": {}, "required": []}
     },
