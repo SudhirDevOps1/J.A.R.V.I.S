@@ -2,7 +2,53 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
-## [v1.3.0 - 2026-09-19 15:52] — Autonomous Visual Computer-Use, Zero-Trust Privacy Shield & Real-Time Screen Streaming
+## [v1.3.0 - 2026-09-19 19:15] — Autonomous Visual Computer-Use, Live Countdown Watch, EdgeTTS Speech Fix, PiP Dragging & Neural Desktop Interface
+
+### 🕒 Live Countdown Timer & HUD Telemetry Cards (`core/timer_manager.py`, `ui.py`, `actions/reminder.py`)
+1. **Live Header Watch Countdown Badge**:
+   - Added real-time countdown badge `self._header_timer_badge` (`⏳ MM:SS`) directly alongside the HUD header clock and date.
+   - Activates automatically on any scheduled reminder, alarm, or relative timer (e.g. *"5 min ka alarm"*, *"10 minute ka timer"*), updating every second.
+2. **Left Telemetry Panel (`◈ TIMERS & TASKS`)**:
+   - Added dedicated HUD card alongside Weather, CPU, and RAM.
+   - Shows active countdown (`⏰ ALARM 04:35 · 5 min alarm`) with a dual-color cyber gradient progress bar (`#ffaa00` to `#00e5ff`) indicating completion percentage.
+   - Synchronizes with TinyDB to show active pending tasks (`📋 Tasks: • Task 1...`).
+3. **Timer Completion Acoustic Chime & Voice Alert**:
+   - When any timer reaches 0:00, `_tick_clock()` plays a dual-tone acoustic chime (`winsound.Beep`), logs `⏰ [TIMER ALARM]` to the transcript, and speaks aloud via EdgeTTS: *"Alert sir! [task/reminder] ka time ho gaya hai."*
+
+### 🎙️ Local Model & Reflex EdgeTTS Silence Fix (`main.py`, `core/tts.py`)
+1. **Unconditional `_interrupted` Reset**:
+   - Resolved bug where `interrupt()` left `self._interrupted = True` and was only cleared when Gemini Cloud finished a live audio turn.
+   - `speak()` and `_speak_with_edge()` now reset `self._interrupted = False` when new speech is queued, ensuring Tier 1 (reflex) and Tier 2 (offline LFM2.5) replies are spoken aloud immediately.
+   - `interrupt()` safely drains `self._edge_queue` so canceled utterances never poison subsequent speech turns.
+2. **Native Windows SAPI5 Offline Speech Fallback**:
+   - Added automatic fallback to Windows native SAPI5 speech engine (`win32com.client.Dispatch("SAPI.SpVoice")` / `pyttsx3`) if EdgeTTS network drops, guaranteeing speech alerts even in 100% offline environments.
+
+### 🖱️ PiP Companion Mode Draggable Header Bar (`ui.py`)
+1. **Dedicated Draggable Header (`_header_bar`)**:
+   - Wrapped top header in a styled `QFrame` with `SizeAllCursor` and visual drag grip handle (`✥`).
+   - Implemented event filtering so clicking and dragging anywhere on the header bar smoothly repositions the window across screens and multi-monitor setups without locking up.
+2. **PiP Mini Countdown Badge**:
+   - Added live mini countdown badge (`⏳ MM:SS`) in the PiP header for continuous task tracking while coding or browsing.
+
+### 👁️ VSCodium & IDE Code Vision Focus (`actions/screen_troubleshooter.py`)
+1. **Temporary PiP Overlay Hide During Capture**:
+   - If floating PiP is active over the code editor, `troubleshoot_screen()` temporarily hides `_pip` during capture, allowing 60ms for desktop repaint, and restores it immediately.
+2. **Active Foreground Window Detection**:
+   - Detects active foreground application title via `pygetwindow.getActiveWindowTitle()` (e.g. `VSCodium`, `Code`, `Terminal`) and feeds it directly into Gemini Vision prompt.
+   - System prompt explicitly instructs vision to prioritize code syntax, compiler tracebacks, and developer workspace errors over floating assistant widgets.
+
+### 🚀 Production-Grade Automated Setup & Batch Launcher (`start_jarvis.bat`, `run.bat`)
+1. **Zero-Touch Double-Click Deployment**:
+   - Completely rewritten using label-based execution (`goto :label`) eliminating Windows CMD parenthesis parsing crashes.
+   - Automatically auto-discovers Python across 5 tiers (Virtual environments, PATH, `%LOCALAPPDATA%`, `C:\Program Files`, and Windows `py` launcher).
+   - Silent self-installation via `winget` or direct TLS 1.2 download from `python.org` if Python is missing.
+   - Automatic `.venv` bootstrapping and self-healing missing dependency installation for all 31 core packages.
+2. **Total Privacy & Credential Security**:
+   - Hardcoded user paths (`C:\Users\DELL\...`) eliminated; dynamic relative path resolution used across the entire codebase.
+   - Zero credentials, tokens, or personal cache files tracked in git; all sensitive items safely protected in `.gitignore`.
+
+### 📖 Master User Guide (`USER_GUIDE.md`)
+1. Comprehensive 350+ line documentation covering all 4 control interfaces (Voice, Text, Shortcuts, Mobile QR Remote), 5 Hindi verb families (देखना, सुनना, बोलना, चलना, करना), and 12 feature categories (46 actions + 10 plugins).
 
 ### 🛡️ Ironclad Web & WebSocket Stream Privacy Engine (`core/privacy_guard.py`, `dashboard/server.py`)
 1. **Default-OFF Stream Authorization Gate**:
