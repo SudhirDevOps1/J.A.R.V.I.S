@@ -84,11 +84,15 @@ def _dispatch_step_to_tool(step: str, goal: str, player=None, speak_fn=None) -> 
         tool_name = "reminder"
     elif tool_name in ("telegram", "telegram_tool", "message"):
         tool_name = "send_message"
+    elif tool_name in ("visual", "visual_agent", "ui", "operate", "screen_operate", "click", "gui"):
+        tool_name = "visual_agent"
 
     reg = _get_registry()
     params: dict = {}
 
-    if tool_name == "travel_transit":
+    if tool_name == "visual_agent":
+        params = {"goal": arg_candidate or step or goal, "max_steps": 4}
+    elif tool_name == "travel_transit":
         params = {"destination": dest, "origin": "Delhi", "mode": "all"}
     elif tool_name == "flight_finder":
         params = {"origin": "Delhi", "destination": dest, "date": "tomorrow"}

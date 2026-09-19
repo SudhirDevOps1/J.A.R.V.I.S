@@ -335,16 +335,29 @@ def _screen_find(description: str) -> tuple[int, int] | None:
             f"If the element is not visible, reply: NOT_FOUND"
         )
 
-        response = client.models.generate_content(
-            model="gemini-flash-lite-latest",
-            contents=[
-                gtypes.Part.from_bytes(data=image_bytes, mime_type="image/png"),
-                prompt,
-            ],
-        )
+        models_to_try = [
+            "gemini-2.0-flash",
+            "gemini-2.5-flash",
+            "gemini-flash-lite-latest",
+            "gemini-flash-latest",
+        ]
+        text = ""
+        for m in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=m,
+                    contents=[
+                        gtypes.Part.from_bytes(data=image_bytes, mime_type="image/png"),
+                        prompt,
+                    ],
+                )
+                if response and response.text:
+                    text = response.text.strip()
+                    break
+            except Exception:
+                continue
 
-        text = (response.text or "").strip()
-        if "NOT_FOUND" in text.upper():
+        if not text or "NOT_FOUND" in text.upper():
             return None
 
         match = re.search(r"(\d+)\s*,\s*(\d+)", text)
@@ -480,6 +493,17 @@ def computer_control(
                 return f"Clicked '{desc}' at {coords}"
             return f"Element not found on screen: '{desc}'"
 
+        if action in ("visual_solve_error", "heal_error", "dismiss_popup"):
+            from actions.visual_agent import _capture_screen_frame, _detect_and_solve_error
+            img_b, _ = _capture_screen_frame()
+            res = _detect_and_solve_error(img_b, player=player)
+            return res or "No blocking error dialog or modal popup detected on screen."
+
+        if action == "visual_verify":
+            desc = params.get("description", "")
+            coords = _screen_find(desc)
+            return f"Verified: '{desc}' is visible on screen at {coords}." if coords else f"Verification failed: '{desc}' not visible on screen."
+
         if action == "wait":
             secs = float(params.get("seconds", 1.0))
             secs = min(secs, 30.0)
@@ -534,7 +558,7 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | screen_find | screen_click | random_data | user_data"
+                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | screen_find | screen_click | visual_solve_error | visual_verify | random_data | user_data"
             },
             "text": {
                 "type": "STRING",

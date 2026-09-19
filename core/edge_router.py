@@ -240,8 +240,12 @@ class NeedleToolRouter:
         if re.search(r"\b(sniff api|api sniff|reverse engineer|network sniff|api dhoondho|api nikaalo)\b", clean):
             url_m = re.search(r"https?://[^\s]+|[a-zA-Z0-9_\-\.]+\.[a-zA-Z]{2,}", clean)
             target_url = url_m.group(0) if url_m else "https://quotes.toscrape.com"
-            goal_text = re.sub(r"\b(sniff\s*api|api\s*sniff|reverse\s*engineer|network\s*sniff|api\s*dhoondho|api\s*nikaalo|karo|do|please|zara)\b", "", clean).strip()
-            return _dispatch("api_sniffer", {"url": target_url, "goal": goal_text})
+            return _dispatch("api_sniffer", {"url": target_url, "goal": clean})
+
+        # -- Visual Self-Healing & Screen Error Dismissal --------------------
+        # "screen par error solve karo" / "popup band karo" / "error hatao" / "dialog close karo" / "solve error"
+        if re.search(r"\b(screen\s*par\s*error|error\s*(?:solve|hatao|dismiss|theek\s*karo)|popup\s*(?:band|close|hatao)|dialog\s*close|dismiss\s*popup|heal\s*error|solve\s*error)\b", clean):
+            return _dispatch("visual_agent", {"action": "heal_errors"})
 
         # -- Visual Screen Inspector & Code Troubleshooter -------------------
         # "mera screen dekho" / "screen dekho" / "screen par kya dikh raha hai" / "kya likha hain ye screen pr" / "troubleshoot screen"

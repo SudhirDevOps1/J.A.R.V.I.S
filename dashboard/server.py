@@ -21,7 +21,7 @@ from pathlib import Path
 _DEPS_OK = False
 try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-    from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+    from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response, StreamingResponse
     import uvicorn
     _DEPS_OK = True
 except ImportError:
@@ -663,6 +663,76 @@ class DashboardServer:
                 asyncio.create_task(self.broadcast(
                     {"type": "sys", "text": "Phone microphone stopped."}
                 ))
+
+        # ── Real-Time Screen Stream: WebSocket & MJPEG (additive) ─────────────
+
+        @app.websocket("/ws/screen-stream")
+        async def screen_stream_ws(websocket: WebSocket, token: str = "", fps: int = 5):
+            """Stream real-time compressed screen frames over WebSocket to clients."""
+            tok = token.strip()
+            if tok and tok not in self._tokens:
+                await websocket.close(code=4001)
+                return
+            await websocket.accept()
+            fps = max(1, min(15, fps or 5))
+            interval = 1.0 / fps
+            try:
+                from actions.screen_processor import _capture_screen
+                while True:
+                    t_start = asyncio.get_event_loop().time()
+                    try:
+                        img_bytes, _ = await asyncio.to_thread(_capture_screen)
+                        await websocket.send_bytes(img_bytes)
+                    except Exception as e:
+                        try:
+                            await websocket.send_json({"error": str(e)})
+                        except Exception:
+                            pass
+                        await asyncio.sleep(1.0)
+                        continue
+                    elapsed = asyncio.get_event_loop().time() - t_start
+                    delay = max(0.01, interval - elapsed)
+                    await asyncio.sleep(delay)
+            except WebSocketDisconnect:
+                pass
+            except Exception:
+                pass
+
+        @app.get("/api/screen-frame")
+        async def screen_frame_ep(req: Request):
+            """Return current single screen snapshot as image/jpeg."""
+            try:
+                from actions.screen_processor import _capture_screen
+                img_bytes, mime = await asyncio.to_thread(_capture_screen)
+                return Response(content=img_bytes, media_type=mime)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+
+        @app.get("/api/screen-stream.mjpg")
+        async def screen_stream_mjpg(req: Request, fps: int = 5):
+            """Motion-JPEG stream compatible with standard <img> tag in any browser."""
+            from actions.screen_processor import _capture_screen
+            fps = max(1, min(15, fps or 5))
+            interval = 1.0 / fps
+
+            async def _frame_generator():
+                while True:
+                    t0 = asyncio.get_event_loop().time()
+                    try:
+                        img_bytes, _ = await asyncio.to_thread(_capture_screen)
+                        yield (
+                            b"--frame\r\n"
+                            b"Content-Type: image/jpeg\r\n\r\n" + img_bytes + b"\r\n"
+                        )
+                    except Exception:
+                        await asyncio.sleep(0.5)
+                    dt = asyncio.get_event_loop().time() - t0
+                    await asyncio.sleep(max(0.01, interval - dt))
+
+            return StreamingResponse(
+                _frame_generator(),
+                media_type="multipart/x-mixed-replace; boundary=frame"
+            )
 
         # ── File sharing ──────────────────────────────────────────────────────
 
