@@ -298,7 +298,7 @@ def check_omniroute(verbose=True):
 
 def check_python_packages(verbose=True):
     """Verifies and auto-installs missing Python packages from requirements.txt."""
-    import importlib
+    import importlib.util
     import subprocess
     
     core_packages = [
