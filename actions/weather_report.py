@@ -102,13 +102,13 @@ def weather_action(
 
     if w_data.get("success"):
         msg = (
-            f"Sir, in {resolved_city} it's currently {temp} with {desc}. "
+            f"In {resolved_city} it's currently {temp} with {desc}. "
             f"Feels like {feels}, humidity is {humidity}, and wind is {wind}."
         )
         if open_browser:
-            msg += " Showing satellite forecast in browser, sir."
+            msg += " Showing satellite forecast in browser."
     else:
-        msg = f"Showing the weather for {resolved_city}, {when}, sir."
+        msg = f"Showing the weather for {resolved_city}, {when}."
         if open_browser:
             msg += " Opening browser."
 

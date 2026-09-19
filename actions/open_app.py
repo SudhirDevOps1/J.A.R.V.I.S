@@ -365,6 +365,9 @@ def _is_app_installed(name_or_bin: str) -> bool:
     """Check whether a binary or app name is directly reachable on the system."""
     if not name_or_bin:
         return False
+    # Windows system URI protocols are always available (e.g. microsoft.windows.camera:, ms-settings:)
+    if _SYSTEM == "Windows" and (name_or_bin.endswith(":") or name_or_bin.startswith("ms-") or name_or_bin.startswith("microsoft.")):
+        return True
     if shutil.which(name_or_bin) or shutil.which(name_or_bin.split(".")[0]):
         return True
     installed = _scan_installed_apps()
@@ -383,37 +386,45 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
     1. Category fallback first (e.g. Chrome not found -> open Brave or Edge)
     2. Direct match in installed applications
     3. Exact alias or system path check
-    4. Substring & fuzzy string matching
-    Self-healing: If an app is not found, automatically triggers an on-demand rescan once.
-    Returns (launch_target, note_if_fallback)
+    4. Fuzzy matching across all scanned desktop and UWP applications
+    5. On-demand dynamic system rescan (self-healing for newly installed apps)
     """
-    key = requested.lower().strip()
+    if not requested:
+        return requested, None
+
+    key = requested.strip().lower()
+
+    # Stage 0: Direct protocol / URI schemes
+    if _SYSTEM == "Windows" and (key.endswith(":") or key.startswith("ms-") or key.startswith("microsoft.")):
+        return requested, None
+
     installed = _scan_installed_apps()
 
-    # ADDITIVE Stage 0: Hindi colloquial names (purane 4 stages untouched)
+    # ADDITIVE Stage 0: Hindi colloquial names
     if key in _HINDI_APP_NAMES:
         key = _HINDI_APP_NAMES[key]
 
-    # Stage 1: Category fallback first (handles "browser", "editor", or missing specific app like "chrome" -> "brave")
-    if key in _CATEGORY_FALLBACKS:
-        for candidate in _CATEGORY_FALLBACKS[key]:
-            if candidate == key:
-                if candidate in installed:
-                    return installed[candidate], None
-                cand_bin = _APP_ALIASES.get(candidate, {}).get(_SYSTEM, candidate)
-                if _is_app_installed(cand_bin):
-                    real_target = installed.get(candidate, installed.get(cand_bin.lower(), cand_bin))
-                    return real_target, None
-                continue
-            cand_target = _APP_ALIASES.get(candidate, {}).get(_SYSTEM, candidate)
-            if _is_app_installed(cand_target):
-                real_target = installed.get(candidate, installed.get(cand_target.lower(), cand_target))
-                note = f"'{requested}' install nahi mila, toh maine aapka alternate ({candidate.capitalize()}) open kar diya"
-                return real_target, note
-            for app_name, app_id in installed.items():
-                if candidate in app_name:
-                    note = f"'{requested}' install nahi mila, toh maine aapka alternate ({app_name.title()}) open kar diya"
-                    return app_id, note
+    # Stage 1: Category fallback mapping
+    for category, candidates in _CATEGORY_FALLBACKS.items():
+        if key == category or any(c in key for c in candidates):
+            for candidate in candidates:
+                if candidate == key:
+                    if candidate in installed:
+                        return installed[candidate], None
+                    cand_bin = _APP_ALIASES.get(candidate, {}).get(_SYSTEM, candidate)
+                    if _is_app_installed(cand_bin):
+                        real_target = installed.get(candidate, installed.get(cand_bin.lower(), cand_bin))
+                        return real_target, None
+                    continue
+                cand_target = _APP_ALIASES.get(candidate, {}).get(_SYSTEM, candidate)
+                if _is_app_installed(cand_target):
+                    real_target = installed.get(candidate, installed.get(cand_target.lower(), cand_target))
+                    note = f"'{requested}' install nahi mila, toh maine aapka alternate ({candidate.capitalize()}) open kar diya"
+                    return real_target, note
+                for app_name, app_id in installed.items():
+                    if candidate in app_name:
+                        note = f"'{requested}' install nahi mila, toh maine aapka alternate ({app_name.title()}) open kar diya"
+                        return app_id, note
 
     # Stage 2: Direct match in installed applications
     if key in installed:
@@ -422,6 +433,8 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
     # Stage 3: Exact alias on system
     if key in _APP_ALIASES:
         target = _APP_ALIASES[key].get(_SYSTEM, requested)
+        if _SYSTEM == "Windows" and (target.endswith(":") or target.startswith("ms-") or target.startswith("microsoft.")):
+            return target, None
         if _is_app_installed(target):
             real_launch_target = installed.get(key, installed.get(target.lower(), target))
             return real_launch_target, None

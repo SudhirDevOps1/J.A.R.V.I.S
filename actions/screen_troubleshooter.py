@@ -189,6 +189,8 @@ def troubleshoot_screen(
         return "Screen analysis timeout — internet slow hai, thodi der baad retry karein."
     if "429" in last_err or "quota" in last_err.lower() or "too many requests" in last_err.lower():
         return "Screen capture ho gaya hai. Abhi API rate limit chal rahi hai, thodi der baad dobara 'screen dekho' bolein."
+    if "503" in last_err or "service unavailable" in last_err.lower() or "overloaded" in last_err.lower():
+        return "Screen capture ho gaya hai, par vision servers abhi temporarily busy hain (503 Service Unavailable). Thodi der baad dobara 'screen dekho' bolein."
     return f"Screen analysis note: {last_err[:120]}"
 
 

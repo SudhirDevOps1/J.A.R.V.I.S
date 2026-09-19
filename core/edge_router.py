@@ -635,25 +635,52 @@ class NeedleToolRouter:
         m_ws_en = re.search(r"\b(search|google|bing|find|lookup)\s+(?:for\s+)?(.+)", clean)
         m_ws_hi = re.search(r"(.+?)\s+(?:dhundo|search\s*karo|google\s*karo|khojo|batao|dekho)\b", clean)
         m_ws_kya = re.search(r"\b(kya hai|kaun hai|kahan hai|kab hai)\s+(.+)", clean)
-        # Screen / camera / Obsidian queries MUST NEVER go to web search
-        _is_vision_query = any(w in clean for w in ("screen", "creen", "display", "camera", "webcam", "screenshot"))
+
+        # Screen / camera / physical hand / Obsidian queries MUST NEVER go to web search
+        _is_vision_query = any(w in clean for w in ("screen", "creen", "display", "camera", "webcam", "screenshot", "hand", "hath", "haath", "chehra", "face", "pakda", "samne"))
         _is_obsidian_query = "obsidian" in clean or "second brain" in clean
 
-        if not _is_vision_query and not _is_obsidian_query and m_ws_en and "click" not in clean:
+        # Conversational continuation & personal presence MUST NEVER go to web search
+        _is_conversational = (
+            clean in (
+                "aur", "aur batao", "aur kya", "aur sunao", "aur kuch", "aur kuchh",
+                "aage", "aage batao", "aage bolo", "phir", "fir", "phir kya", "fir kya",
+                "kuch aur", "kuchh aur", "bolo", "batao", "suno", "sunao",
+                "main kya kr raha hu", "main kya kar raha hoon", "main kya kar raha hu", "kya kar raha hu"
+            )
+            or bool(re.match(r"^(aur|aage|phir|fir)\s*(batao|bolo|sunao|kaho|hai|kya)?$", clean))
+            or clean.startswith("aur ")
+            or clean.startswith("aage ")
+            or clean.startswith("phir ")
+            or clean.startswith("fir ")
+            or clean.startswith("main kya ")
+        )
+
+        _EXCLUDE_SEARCH_WORDS = (
+            "fact", "facts", "tum", "tu", "yeh", "ye", "wo", "woh",
+            "mujhe", "tumhe", "batao", "kuch", "kuchh", "ek", "koi", "kya",
+            "aur", "aage", "fir", "phir", "bolo", "suno", "kaise ho",
+            "main kya kr raha hu", "main kya kar raha hoon", "kya chal raha hai",
+            "kya kar raha hu", "kya ho raha hai"
+        )
+
+        if not _is_vision_query and not _is_obsidian_query and not _is_conversational and m_ws_en and "click" not in clean:
             q = m_ws_en.group(2).strip()
             if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting")):
                 return _dispatch("web_search", {"query": q})
-        elif not _is_vision_query and not _is_obsidian_query and m_ws_hi and "click" not in clean:
+        elif not _is_vision_query and not _is_obsidian_query and not _is_conversational and m_ws_hi and "click" not in clean:
             q = m_ws_hi.group(1).strip()
             q = re.sub(r"\b(yaar|bhai|sir|please|zara|jaldi|mujhe|abhi)\b", "", q).strip()
-            if q.lower().strip() in ("fact", "facts", "tum", "tu", "yeh", "ye", "wo", "woh",
-                                     "mujhe", "tumhe", "batao", "kuch", "ek", "koi", "kya"):
+            if (q.lower().strip() in _EXCLUDE_SEARCH_WORDS
+                    or q.lower().strip().startswith("aur ")
+                    or q.lower().strip() == "aur"):
                 pass  # fall through to LLM conversation
             elif q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting", "mausam", "weather", "train", "flight", "bus", "route")):
                 return _dispatch("web_search", {"query": q})
-        elif not _is_vision_query and not _is_obsidian_query and m_ws_kya and "click" not in clean:
+        elif not _is_vision_query and not _is_obsidian_query and not _is_conversational and m_ws_kya and "click" not in clean:
             q = f"{m_ws_kya.group(2)} {m_ws_kya.group(1)}".strip()
-            return _dispatch("web_search", {"query": q})
+            if not any(w in q.lower() for w in ("main", "hum", "mera", "meri", "kya kr", "kya kar")):
+                return _dispatch("web_search", {"query": q})
 
         # -- Reminder / Alarm -------------------------------------------------
         # "5 minute baad yaad dilana" / "kal subah 8 baje reminder"
@@ -994,7 +1021,10 @@ class NeedleToolRouter:
                         _HINDI_STOP_WORDS = {
                             "ho", "hai", "hain", "kya", "kaun", "mera", "meri", "mere", "tum", "aap",
                             "kaise", "nahi", "tha", "the", "thi", "hoga", "karo", "kar", "batao", "bolo",
-                            "kyu", "kyun", "kab", "kaha", "kahan", "zara", "bhai", "yaar"
+                            "kyu", "kyun", "kab", "kaha", "kahan", "zara", "bhai", "yaar",
+                            "dekhna", "dekh", "dekho", "sunna", "suno", "bolna", "bolo", "chalna", "chalo",
+                            "karna", "karo", "kuch", "kuchh", "baat", "cheez", "abhi", "raha", "rahe", "rahi",
+                            "band", "chalu", "shuru", "kholna", "rokna"
                         }
                         for r in res.get("results", []):
                             if isinstance(r, str) and r.startswith("{"):
@@ -1003,8 +1033,12 @@ class NeedleToolRouter:
                                     tool_name = parsed.get("tool")
                                     tool_args = parsed.get("args", {})
                                     app_nm = str(tool_args.get("name", "")).lower().strip()
-                                    if app_nm in _HINDI_STOP_WORDS:
+                                    if app_nm in _HINDI_STOP_WORDS or any(w in app_nm.split() for w in _HINDI_STOP_WORDS):
                                         continue
+                                    if tool_name == "open_app":
+                                        from actions.open_app import _is_app_installed, _APP_ALIASES
+                                        if app_nm not in _APP_ALIASES and not _is_app_installed(app_nm):
+                                            continue
                                     if tool_name:
                                         return (tool_name, tool_args)
                                 except Exception:
@@ -1020,7 +1054,8 @@ class NeedleToolRouter:
             if pred:
                 intent_name, conf = pred
                 if intent_name == "troubleshoot_screen":
-                    return _dispatch("troubleshoot_screen", {"query": clean})
+                    if not any(w in clean for w in ("camera", "webcam", "hand", "hath", "haath", "chehra", "face", "pakda", "samne")):
+                        return _dispatch("troubleshoot_screen", {"query": clean})
                 elif intent_name == "tinydb_memory":
                     # Guard: must have explicit memory/reminder keywords — prevents
                     # generic questions from being stored as tasks.
@@ -1149,7 +1184,8 @@ class LFMChatEngine:
         if any(w in clean for w in ("photo", "tasveer", "snap", "pic", "picture")) and any(w in clean for w in ("screen", "display")):
             return "take screenshot", "take_screenshot"
         if any(w in clean for w in ("screen", "display", "creen")) and any(w in clean for w in ("dekho", "dekh", "check", "kya hai", "kya dikh", "kya chal")):
-            return "screen dekho", "troubleshoot_screen"
+            if not any(w in clean for w in ("camera", "webcam", "hand", "hath", "haath", "chehra", "face", "pakda", "samne")):
+                return "screen dekho", "troubleshoot_screen"
 
         # Semantic Mapping 5: Running Apps
         # E.g. "kaun se apps chal rahe hain", "kya khula hai"
@@ -1158,13 +1194,14 @@ class LFMChatEngine:
 
         # Semantic Mapping 6: Web Search
         # "google karo X" / "X ke baare mein batao" / "X dhundo" / "X kya hai"
+        _conv_tokens = ("aur", "kuch", "kuchh", "aage", "phir", "fir", "bolo", "batao", "suno", "main kya kr raha hu", "main kya kar raha hu")
         if any(w in clean for w in ("google karo", "search karo", "dhundo", "khojo", "net par dekho")):
             q = re.sub(r"\b(google\s*karo|search\s*karo|dhundo|khojo|net\s*par\s*dekho|zara|yaar|bhai|sir|please)\b", "", clean).strip()
-            if q:
+            if q and q.lower() not in _conv_tokens and not q.lower().startswith("aur "):
                 return f"search {q}", "web_search"
         if re.search(r"\bke\s+baare\s+mein\s+(batao|bolo|samjhao|likho)\b", clean):
             q = re.sub(r"\bke\s+baare\s+mein\s+(batao|bolo|samjhao|likho)\b", "", clean).strip()
-            if q:
+            if q and q.lower() not in _conv_tokens and not q.lower().startswith("aur "):
                 return f"search {q}", "web_search"
 
         # Semantic Mapping 7: Weather
