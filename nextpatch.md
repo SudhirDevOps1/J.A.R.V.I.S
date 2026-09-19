@@ -10,7 +10,7 @@
 ## 🎯 Executive Overview
 
 J.A.R.V.I.S. ships with:
-- **46 bundled actions** in `actions/` (including privacy shield controller, visual agent, multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
+- **50 bundled actions** in `actions/` (including Windows UIA controller, private local screen memory timeline, safe opt-in local LLM bridge, autonomous DevOps sentinel, privacy shield controller, visual agent, multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
 - **10 built-in plugins** in `plugins/` (Spotify, Pomodoro, Stock Quotes, Notion, Gmail, Calendar, Drive, GitHub, Slack, Smart Home)
 - **Tri-Tier Edge AI Router** (`core/edge_router.py`) — Needle 2 Reflex (<15ms, 28MB) → LFM 2.5 offline → Gemini Live Cloud
 - **Synchronized Assistant Persona Modes** — Teacher & Guru, DevOps Beast, Companion & GF, and J.A.R.V.I.S Tactical AI
@@ -29,7 +29,7 @@ This document outlines the **architectural blueprint, dependency requirements, a
 
 ---
 
-## 📋 Feature Breakdown — Phases 1–15
+## 📋 Feature Breakdown — Phases 1–21
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -69,6 +69,18 @@ This document outlines the **architectural blueprint, dependency requirements, a
 ├────────────────────────────────────────────────────────────────────────┤
 │ 17. 👁️ AUTONOMOUS VISUAL COMPUTER-USE & SCREEN STREAM (COMPLETED)      │
 │ Real-time WebSocket/MJPEG stream + self-healing visual agent           │
+├────────────────────────────────────────────────────────────────────────┤
+│ 18. 🖥️ WINDOWS UI AUTOMATION (UIA) SEMANTIC CONTROLLER (COMPLETED)     │
+│ Direct accessible element interaction (click, type, menu) without pixel│
+├────────────────────────────────────────────────────────────────────────┤
+│ 19. 🧠 100% PRIVATE LOCAL SCREEN MEMORY & FTS5 TIMELINE (COMPLETED)    │
+│ On-device SQLite FTS5 timeline recall with automatic privacy shield    │
+├────────────────────────────────────────────────────────────────────────┤
+│ 20. ⚡ SAFE OPT-IN LOCAL LLM BRIDGE: DEEPSEEK-R1 / OLLAMA (COMPLETED)  │
+│ Zero-freeze guarantee, default disabled, 1.5s timeout fast-fail        │
+├────────────────────────────────────────────────────────────────────────┤
+│ 21. 🛡️ AUTONOMOUS DEVOPS TERMINAL SENTINEL (COMPLETED)                 │
+│ Background build watcher, error log parsing, HUD & voice alerts        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 

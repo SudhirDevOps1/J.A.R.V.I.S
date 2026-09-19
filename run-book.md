@@ -93,6 +93,10 @@ mummy ko kya pasand hai (knowledge graph) / graph stats dikhao
 agar battery 20 se kam to brightness 30 (workflow) / rules dikhao
 cmd se check karo disk space (run_command) / github issues dikhao owner/repo
 drive me photo dhoondo / bedroom light jalao (smart home + token)
+screen timeline dekho / pehle main kya kar raha tha (Private Local FTS5 Timeline)
+window elements dikhao / notepad me save button click karo (Windows UIA Controller)
+watch command pytest / terminal error analyze karo (Autonomous DevOps Sentinel)
+local llm status / local llm chalu karo / local llm band karo (Safe Local LLM Bridge)
 ```
 
 ### ⚡ Headless Smart Services (Bina Browser Popups Ke)
@@ -144,12 +148,13 @@ Bina token **guided message** aayega (crash nahi). Token lagao:
 ## 5. Architecture (1-minute me samjho)
 
 ```
-Mic/Text → edge_router (Needle2 regex, ~1ms) → action_registry (39 tools)
+Mic/Text → edge_router (Needle2 regex, ~1ms) → action_registry (50 tools)
                                                 → plugin_registry (10 plugins)
                                                 → Gemini Live (cloud brain)
-Memory: long_term.json + journals/ + TinyDB + contacts.json + knowledge_graph.json + llm_cache.db + music_library.json
-Safety: confirm.py (HUD gate, FIFO queue) + undo.py + audit.jsonl
-UI: PyQt6 HUD (ui.py) + PiP Window + vector icons (ui_icons.py) + toasts/CTA/onboarding/thumbs | Phone: dashboard/server.py (:8000)
+                                                → Local LLM Bridge (opt-in Ollama)
+Memory: long_term.json + journals/ + TinyDB + screen_timeline.db + contacts.json + knowledge_graph.json + llm_cache.db + music_library.json
+Safety: confirm.py (HUD gate, FIFO queue) + undo.py + audit.jsonl + privacy_guard.py
+UI: PyQt6 HUD (ui.py) + PiP Window (draggable header) + vector icons (ui_icons.py) + toasts/CTA/onboarding/thumbs | Phone: dashboard/server.py (:8000)
 ```
 
 Naya skill = `actions/` ya `plugins/` me **1 file** (TOOL/PLUGIN dict + run()) — core edit nahi chahiye.
@@ -160,7 +165,7 @@ Naya skill = `actions/` ya `plugins/` me **1 file** (TOOL/PLUGIN dict + run()) �
 
 1. **Bina token wale integrations** guided message denge (Gmail/Drive/Slack/GitHub/Notion/Spotify/Telegram-bot).
 2. **Headless Flight search** search-grounding / best-effort heuristic par chalta hai — exact real-time ticketing API nahi hai.
-3. **LFM offline chat** weights file hai par inference template hai — asli offline LLM ke liye Ollama chahiye.
+3. **Local LLM Bridge** (DeepSeek-R1 / Qwen2.5 / Ollama) default disabled rehta hai taaki kisi bhi system par freeze ya hang na ho. Capable hardware users ise `local llm chalu karo` bolkar safely enable kar sakte hain.
 4. **ToDo worker** steps simulate karta hai (persist real hai, execution nahi).
 5. **Meeting assistant, tray icon, command-palette UI, cross-device sync, VAD bandwidth-saver, token-cost meter, sentry/face-ID, gesture control** — abhi nahi hain (roadmap).
 6. **WhatsApp Web send** best-effort GUI hai — browser me verify karo.

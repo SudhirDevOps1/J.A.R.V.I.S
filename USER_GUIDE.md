@@ -82,6 +82,7 @@ J.A.R.V.I.S. **Hindi (हिंदी), Hinglish (हिंग्लिश), aur
 | *"Code me error dekho"* | Inspects code window for errors |
 | *"Camera se dekho mere haath me kya hai"* | Opens camera and inspects physical object |
 | *"Screen ka photo lo"* / *"Screenshot le lo"* | Captures screenshot to `screenshots/` |
+| *"Screen timeline dekho"* / *"Pehle main kya kar raha tha"* | Recalls past screen activity & tasks from local SQLite FTS5 |
 | *"What's on my screen right now?"* | Full screen OCR & context analysis |
 
 ### 2. सुनना (Sunna) — Auditory Playback
@@ -105,6 +106,8 @@ J.A.R.V.I.S. **Hindi (हिंदी), Hinglish (हिंग्लिश), aur
 | Command (Hindi / Hinglish / English) | Action Executed |
 | :--- | :--- |
 | *"Chrome chalao"* / *"Brave open karo"* | Launches application instantly |
+| *"Window elements dikhao"* | Inspects interactive UIA buttons and controls |
+| *"Watch command pytest"* | Starts background DevOps Sentinel monitoring |
 | *"Computer me kya chal raha hai?"* | Lists all active background processes |
 | *"Internet chal raha hai ya nahi?"* | Checks real-time network latency & ping |
 | *"Delhi kaise jaye?"* / *"Patna ki train"* | Opens travel transit route comparison |
@@ -113,6 +116,8 @@ J.A.R.V.I.S. **Hindi (हिंदी), Hinglish (हिंग्लिश), aur
 | Command (Hindi / Hinglish / English) | Action Executed |
 | :--- | :--- |
 | *"Yaad rakhna kal 10 baje meeting hai"* | Stores note into local TinyDB memory |
+| *"Terminal error analyze karo"* | Diagnoses traceback and suggests fix |
+| *"Local LLM status"* / *"Local LLM chalu karo"* | Checks or toggles safe local LLM bridge |
 | *"Storage check karo"* / *"Space kitna bacha hai?"* | Checks C: and D: drive storage |
 | *"Obsidian me daily note add karo"* | Appends markdown entry to Obsidian vault |
 | *"Trip plan karo Goa ke liye"* | Activates multi-step Autonomous Agent |
@@ -161,6 +166,11 @@ Host PC ke 300+ apps ko bina rukaawat launch aur manage karein:
 - **Running Task Inspection**:
   - *"Kaun se apps chal rahe hain?"*
   - *"Background tasks dikhao"*
+- **Windows UIAutomation (UIA) Semantic Desktop Control**:
+  - *"Window elements dikhao"* — Active window ke sabhi buttons aur interactive elements list karta hai.
+  - *"UIA click"* / *"Click button Save"* — Accessible element name se direct click karta hai bina pixel guessing ke.
+  - *"Notepad me save button click karo"* — Target app me direct button invoke karta hai.
+  - *"File->Save menu select karo"* — Application menus trigger karta hai.
 
 ---
 
@@ -251,6 +261,10 @@ J.A.R.V.I.S. sirf ek sawaal ka jawab nahi deta, balki complex goals ko autonomou
   - *"Abhi kya samay ho raha hai?"*
   - *"5 min ka alarm lagao"* / *"10 minute ka timer lagao"* (Relative duration auto-calculates without asking for date)
   - *"Subah 6 baje ka alarm lagao"* / *"Kal shaam 6:30 baje reminder"*
+- **100% Private Local Screen Memory & Timeline Recall**:
+  - *"Screen timeline dekho"* / *"Pehle main kya kar raha tha"* — Pichhle ghanton me active windows, code files, aur apps ki timeline local SQLite FTS5 se search karta hai.
+  - *"Timeline me search karo [Keyword]"* — Past screen activity recall karta hai.
+  - *Privacy Guarantee*: 100% on-device (`memory/screen_timeline.db`), banking, passwords, aur incognito windows auto-blacklist hoti hain.
 
 ---
 
@@ -276,6 +290,15 @@ Software engineers ke liye powerful automated actions:
   - *"Web network traffic sniff karo"* — Browser ke internal XHR/Fetch API endpoints analyze karta hai.
 - **Dev Agent & Swarm**:
   - Multi-agent swarm spawn karke project structure audit aur unit testing chala sakta hai.
+- **Autonomous DevOps Terminal Sentinel**:
+  - *"Watch command pytest"* / *"Watch command npm run build"* — Long-running builds ya tests ko non-blocking background thread me monitor karta hai.
+  - *"Terminal error analyze karo"* / *"Terminal crash check karo"* — Error logs ko analyze karke missing packages, port conflicts, ya syntax errors ka direct solution batata hai.
+  - *Real-Time Voice & HUD Alerts*: Crash ya failure hote hi acoustic chime aur spoken alert deta hai.
+- **Safe, Opt-in Local LLM Bridge (DeepSeek-R1 / Qwen2.5 / Ollama)**:
+  - *"Local LLM status"* — Check karta hai ki local bridge enabled hai ya disabled aur Ollama online hai ya offline.
+  - *"Local LLM chalu karo"* — Safe local execution enable karta hai (1.5s fast-fail timeout ke sath).
+  - *"Local LLM band karo"* — Bridge disable karke 100% cloud streaming mode par switch karta hai.
+  - *Zero System Freeze Guarantee*: Default disabled rehta hai taaki kisi bhi machine par CPU/RAM hang na ho.
 
 ---
 
@@ -332,7 +355,10 @@ graph TD
    - Volume, apps kholna, screenshot lena, time dekhna — zero API call, zero network, instant execution.
 2. **Tier 2 — LFM2.5-230M Neural Ear (146MB GGUF, On-Device)**:
    - Hindi colloquial speech normalization aur internet band hone par local offline conversational responses.
-3. **Tier 3 — Gemini Live & Cloud LLMs**:
+3. **Tier 2.5 — Safe Opt-in Local LLM Bridge (DeepSeek-R1 / Qwen2.5 / Ollama)**:
+   - Capable hardware users ke liye opt-in local reasoning bridge.
+   - *Default Disabled*: System hanging/freezing se bachane ke liye default band rehta hai. Jab user enable karta hai, tabhi 1.5s timeout ke sath probe hota hai; offline hone par bina kisi delay ke Tier 3 (Gemini Cloud/Live) execute karta hai.
+4. **Tier 3 — Gemini Live & Cloud LLMs**:
    - Complex reasoning, deep research, coding aur multi-modal vision tasks.
 
 ---

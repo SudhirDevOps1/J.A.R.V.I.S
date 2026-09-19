@@ -71,7 +71,8 @@ Adding a new skill is one file dropped into `actions/` or `plugins/` — no core
 | Feature | What It Does |
 |---------|-------------|
 | **Stark Arc Reactor HUD** | 4 avatar modes: `reactor`, `celestial`, `orb`, `matrix` — ambient idling hum, rotating coils, vibrating core glow, real-time voice amplitude |
-| **PiP Always-On-Top Mini Companion** | Draggable frameless HUD companion with ⚡ EDGE reflex badge, live chat history, screen troubleshoot eye, and expandable panel (`pip_mode.py`) |
+| **PiP Always-On-Top Mini Companion** | Draggable frameless companion with dedicated header drag handle (`✥`), mini countdown badge (`⏳ MM:SS`), ⚡ EDGE reflex badge, live chat history, screen troubleshoot eye, and expandable panel (`pip_mode.py`) |
+| **Live Countdown Watch & Telemetry** | Real-time countdown badge (`⏳ MM:SS`) in HUD header watch + dedicated `◈ TIMERS & TASKS` card with dual-color cyber progress bar and completion voice alert (`timer_manager.py`) |
 | **Cyber-HUD Content Display** | Dynamic split panel below the Arc Reactor supporting rich HTML/Markdown telemetry cards, price comparison tables, and weather cards |
 | **Live Theming & Vibe Presets** | Instant hue recoloring + 4 presets: GF Soulmate, Stark Tactical, DevOps Beast, Mentor & Guru |
 | **Emotional Expression Badges** | Zero-token sentiment maps tone to HUD color pulses: `💖 LOVE`, `😤 JEALOUS`, `✨ EXCITED`, `🌸 CARING`, `⚡ TACTICAL` |
@@ -137,6 +138,10 @@ Adding a new skill is one file dropped into `actions/` or `plugins/` — no core
 | **Deep Research** | Multi-query fan-out with merged sources + citations |
 | **Page Capture** | Full-page website screenshot/PDF to `~/Downloads/JARVIS Captures` |
 | **Screen OCR + Clipboard History** | OCR any screen region; last-20 clipboard search |
+| **Windows UIAutomation (UIA) Controller** | Semantic desktop control: click buttons, fill text boxes, and select menus by accessible name without pixel guessing (`actions/uia_controller.py`) |
+| **100% Private Local Screen Memory & Timeline Recall** | On-device SQLite FTS5 timeline memory of active windows, apps, and tasks with automatic privacy blacklisting (`actions/screen_timeline.py`) |
+| **Safe, Opt-in Local LLM Bridge** | Zero-freeze Ollama bridge (DeepSeek-R1 / Qwen2.5) with 1.5s fast-fail timeout, keeping Gemini Live & Cloud as primary (`core/local_llm_bridge.py` & `actions/local_llm_toggle.py`) |
+| **Autonomous DevOps Terminal Sentinel** | Non-blocking background watcher for builds/tests (`pytest`, `npm`, `docker`), auto-diagnosing root causes with HUD and voice alerts (`actions/devops_sentinel.py`) |
 | **Plugin Manager** | Lists all 10 plugins by voice — "plugin dikhao" |
 
 ### 🧩 Plugins (10 Built-In)

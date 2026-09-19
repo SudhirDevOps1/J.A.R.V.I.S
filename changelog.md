@@ -4,6 +4,25 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 
 ## [v1.3.0 - 2026-09-19 19:15] — Autonomous Visual Computer-Use, Live Countdown Watch, EdgeTTS Speech Fix, PiP Dragging & Neural Desktop Interface
 
+### 🧠 Next-Gen Autonomous Desktop Engine (`actions/`, `core/`)
+1. **Windows UIAutomation (UIA) Semantic Desktop Controller (`actions/uia_controller.py`)**:
+   - Direct semantic interaction with buttons, edit fields, checkboxes, and menus in any desktop window without fragile coordinate guessing or DPI scaling issues.
+   - Discovered as official action `uia_controller` with actions: `click`, `list_elements`, `set_text`, `menu_select`.
+2. **100% Private Local Screen Memory & Timeline Recall (`actions/screen_timeline.py`)**:
+   - On-device timeline recorder and SQLite FTS5 search engine that remembers what applications, windows, and tasks the user was working on.
+   - Automatic privacy blacklisting (banking, passwords, netbanking, OTP, incognito) guarantees zero sensitive data is recorded.
+   - 100% on-device (`memory/screen_timeline.db`) and protected from git.
+3. **Safe, Opt-in Local LLM Engine Bridge (`core/local_llm_bridge.py` & `actions/local_llm_toggle.py`)**:
+   - **Zero-Freeze Protection**: Strictly opt-in (defaults to `false` in `config/api_keys.json`), preventing PC freeze or high CPU/RAM usage.
+   - Fast-fail 1.5s timeout: Probes Ollama (`localhost:11434`); if offline or slow, instantly falls back to Gemini Live WebSocket & Gemini Cloud with zero delay.
+   - Action `local_llm_control` supports voice toggling: *"local llm status"*, *"local llm chalu karo"*, *"local llm band karo"*.
+4. **Autonomous DevOps Terminal Sentinel (`actions/devops_sentinel.py`)**:
+   - Non-blocking background thread monitor for developer commands (`pytest`, `npm run build`, `docker-compose`, etc.).
+   - Parses stderr/stdout in real-time, diagnoses root causes (`ModuleNotFoundError`, `EADDRINUSE`, permissions), and provides actionable fixes.
+   - Alerts via HUD log and voice alert on build failure or completion.
+5. **Universal Edge Router Dispatches (`core/edge_router.py` & `core/intent_classifier.py`)**:
+   - Added instant `<10ms` natural language regex dispatches and Naive Bayes training patterns for all next-gen features.
+
 ### 🕒 Live Countdown Timer & HUD Telemetry Cards (`core/timer_manager.py`, `ui.py`, `actions/reminder.py`)
 1. **Live Header Watch Countdown Badge**:
    - Added real-time countdown badge `self._header_timer_badge` (`⏳ MM:SS`) directly alongside the HUD header clock and date.
