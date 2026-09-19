@@ -10,16 +10,25 @@ def check_directories():
     """Ensure all critical operational directories exist."""
     dirs = [
         os.path.join(PROJECT_ROOT, 'config'),
+        os.path.join(PROJECT_ROOT, 'config', 'generated_sniffers'),
+        os.path.join(PROJECT_ROOT, 'config', 'swarm_outputs'),
         os.path.join(PROJECT_ROOT, 'logs'),
+        os.path.join(PROJECT_ROOT, 'cache'),
+        os.path.join(PROJECT_ROOT, 'downloads'),
+        os.path.join(PROJECT_ROOT, 'screenshots'),
+        os.path.join(PROJECT_ROOT, 'scratch'),
         os.path.join(PROJECT_ROOT, 'memory', 'journals'),
+        os.path.join(PROJECT_ROOT, 'memory', 'obsidian_vault'),
         os.path.join(PROJECT_ROOT, 'core', 'assets', 'sfx'),
+        os.path.join(PROJECT_ROOT, 'core', 'assets', 'avatar'),
         os.path.join(PROJECT_ROOT, 'core', 'models', 'piper'),
+        os.path.join(PROJECT_ROOT, 'models', 'lfm'),
     ]
     for d in dirs:
         os.makedirs(d, exist_ok=True)
 
 def check_config_init(verbose=True):
-    """Ensure config/api_keys.json exists; create from template if missing on first run."""
+    """Ensure config/api_keys.json and local state stores exist; create safe templates if missing on first run."""
     cfg_file = os.path.join(PROJECT_ROOT, 'config', 'api_keys.json')
     tpl_file = os.path.join(PROJECT_ROOT, 'config', 'api_keys.example.json')
     if not os.path.exists(cfg_file):
@@ -47,6 +56,21 @@ def check_config_init(verbose=True):
     else:
         if verbose:
             print('  [OK] Configuration: api_keys.json Active (Protected from Git)')
+
+    # Ensure local runtime state stores exist with clean initial structures
+    state_templates = [
+        ('config/music_library.json', '[]\n'),
+        ('config/todos.json', '[]\n'),
+        ('config/agent_plans.json', '[]\n'),
+        ('config/workflows.json', '[]\n'),
+        ('memory/tinydb_store.json', '{}\n'),
+    ]
+    for rel_path, default_content in state_templates:
+        full_path = os.path.join(PROJECT_ROOT, rel_path.replace('/', os.sep))
+        if not os.path.exists(full_path):
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(default_content)
 
 def check_icon(verbose=True):
     """Ensure custom Stark Arc Reactor ICO and PNG icons exist."""
@@ -92,6 +116,49 @@ def check_piper_hindi(verbose=True):
     if verbose:
         print('  [--] Piper Hindi TTS: Removed (Edge + Gemini Live only)')
     return
+
+def check_lfm_model(verbose=True):
+    """Verify local Liquid Foundation Model (LFM2.5-230M) GGUF exists; download if missing."""
+    lfm_dir = os.path.join(PROJECT_ROOT, 'models', 'lfm')
+    os.makedirs(lfm_dir, exist_ok=True)
+    lfm_path = os.path.join(lfm_dir, 'LFM2.5-230M-Q4_K_M.gguf')
+    
+    if os.path.exists(lfm_path) and os.path.getsize(lfm_path) > 50 * 1024 * 1024:
+        if verbose:
+            size_mb = os.path.getsize(lfm_path) / (1024 * 1024)
+            print(f'  [OK] LFM2.5-230M Semantic Neural Model: Ready ({size_mb:.1f} MB GGUF Cached)')
+        return
+
+    if verbose:
+        print('  [*] LFM2.5-230M GGUF model missing. Auto-downloading (~146 MB, one-time setup)...')
+    url = 'https://huggingface.co/oamazonasgabriel/lfm2.5-230m/resolve/main/LFM2.5-230M-Q4_K_M.gguf'
+    temp = lfm_path + '.tmp'
+    try:
+        import requests
+        curr = os.path.getsize(temp) if os.path.exists(temp) else 0
+        headers = {'Range': f'bytes={curr}-'} if curr > 0 else {}
+        with requests.get(url, headers=headers, stream=True, timeout=60) as r:
+            if r.status_code in (200, 206):
+                mode = 'ab' if curr > 0 and r.status_code == 206 else 'wb'
+                total = int(r.headers.get('content-length', 0)) + curr
+                downloaded = curr
+                with open(temp, mode) as f:
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+        if os.path.exists(temp) and os.path.getsize(temp) > 50 * 1024 * 1024:
+            if os.path.exists(lfm_path):
+                os.remove(lfm_path)
+            os.rename(temp, lfm_path)
+            if verbose:
+                print('  [OK] LFM2.5-230M Semantic Neural Model: Downloaded successfully')
+        else:
+            if verbose:
+                print('  [--] LFM2.5 download deferred (Ollama/Cloud fallback active)')
+    except Exception as e:
+        if verbose:
+            print(f'  [!] LFM2.5 model setup note: {e}')
     base = os.path.join(PROJECT_ROOT, 'core', 'models', 'piper')
     os.makedirs(base, exist_ok=True)
     m_path = os.path.join(base, 'hi_IN-pratham-medium.onnx')
@@ -350,6 +417,7 @@ def run_preflight(verbose=True):
     check_icon(verbose=verbose)
     check_sfx(verbose=verbose)
     check_piper_hindi(verbose=verbose)
+    check_lfm_model(verbose=verbose)
     check_wakeword(verbose=verbose)
     check_desktop_shortcut(verbose=verbose)
     check_browser_engine(verbose=verbose)
