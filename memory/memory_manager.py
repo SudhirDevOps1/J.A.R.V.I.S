@@ -17,6 +17,34 @@ MEMORY_PATH      = BASE_DIR / "memory" / "long_term.json"
 _lock            = Lock()
 MAX_VALUE_LENGTH = 380
 
+# ── Prompt-block cache ───────────────────────────────────────────────────────
+# format_memory_for_prompt() is a pure function of its `memory` argument, but
+# it sorts every entry on every call — and it is called on every session
+# connect AND every typed multi-LLM query. The cache below memoises the
+# result keyed by a SHA-256 of the input, so repeated calls with unchanged
+# memory are O(hash) instead of O(n log n). Every writer funnels through
+# save_memory() / pop_last_session() / save_session_summary(), and each of
+# those calls invalidate_prompt_cache() — stale reads are impossible unless a
+# writer bypasses all three (none do).
+_prompt_cache: dict[str, str] = {}
+_prompt_cache_lock = Lock()
+_PROMPT_CACHE_MAX = 8
+
+
+def _prompt_cache_key(memory: dict) -> str:
+    try:
+        import hashlib
+        raw = json.dumps(memory, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    except Exception:
+        return ""
+
+
+def invalidate_prompt_cache() -> None:
+    """Drop all cached prompt blocks. Called by every memory writer."""
+    with _prompt_cache_lock:
+        _prompt_cache.clear()
+
 # ── Why there are two very different numbers here ────────────────────────────
 #
 # There used to be one: MEMORY_MAX_CHARS = 2200, applied to the whole store. It
@@ -125,6 +153,7 @@ def save_memory(memory: dict) -> None:
             json.dumps(memory, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+    invalidate_prompt_cache()
 
 
 def _truncate_value(val: str) -> str:
@@ -222,6 +251,14 @@ def format_memory_for_prompt(memory: dict | None) -> str:
     if not memory:
         return ""
 
+    # Memoised: identical memory → identical block, no re-sort.
+    _ckey = _prompt_cache_key(memory)
+    if _ckey:
+        with _prompt_cache_lock:
+            _hit = _prompt_cache.get(_ckey)
+        if _hit is not None:
+            return _hit
+
     core_lines: list[str] = []
 
     # 1. Identity - always, in full
@@ -304,6 +341,14 @@ def format_memory_for_prompt(memory: dict | None) -> str:
     if not core_lines and not indexed:
         return ""
 
+    def _cache_store(result: str) -> str:
+        if _ckey:
+            with _prompt_cache_lock:
+                if len(_prompt_cache) >= _PROMPT_CACHE_MAX:
+                    _prompt_cache.clear()
+                _prompt_cache[_ckey] = result
+        return result
+
     out = [
         "[WHAT YOU KNOW ABOUT THIS PERSON — use naturally, never recite like a list]",
         *core_lines,
@@ -327,7 +372,7 @@ def format_memory_for_prompt(memory: dict | None) -> str:
                        + (f" (+{len(indexed) - len(names)} more)"
                           if len(indexed) > len(names) else ""))
 
-    return "\n".join(out) + "\n"
+    return _cache_store("\n".join(out) + "\n")
 
 
 # ── Recall ────────────────────────────────────────────────────────────────────
@@ -457,6 +502,7 @@ def save_session_summary(summary: str, language: str = "") -> None:
             json.dumps(memory, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+    invalidate_prompt_cache()
     print(f"[Memory] 📝 Session saved ({entry['date']}): {summary[:60]}…")
 
 
@@ -503,6 +549,7 @@ def pop_last_session() -> dict | None:
                     json.dumps(memory, indent=2, ensure_ascii=False),
                     encoding="utf-8",
                 )
+            invalidate_prompt_cache()
             return last
         except Exception as e:
             print(f"[Memory] ⚠️ pop_last_session error: {e}")

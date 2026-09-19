@@ -186,6 +186,57 @@ def _get_api_key() -> str:
     return ""
 
 
+# ── Shared REST fallback model lists ─────────────────────────────────────────
+# These used to be hardcoded inline in two places each; a dead alias
+# ('gemini-flash-latest') in one of them once 400'd on REST and the error text
+# leaked into model chatter. Single source of truth now.
+# NOTE: 'gemini-flash-latest' is deliberately absent — it always 400s on REST.
+_VISION_REST_MODELS = ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite")
+_GEMINI_TEXT_MODELS = ("gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash")
+
+
+def _rest_vision_answer(img_b: bytes, mime_t: str, prompt_text: str, timeout: int = 25) -> str | None:
+    """Answer a vision question via the Gemini REST API with model fallback.
+
+    Used by the typed-command vision path, which must work with NO live
+    session (free-proxy mode). The screen_process tool path instead injects the
+    frame into the live session — the two transports stay separate by design
+    and share only this fallback list + response parsing. Never raises.
+    """
+    import base64
+    g_key = _get_api_key()
+    if not g_key:
+        return None
+    try:
+        import requests
+    except Exception:
+        return None
+    b64 = base64.b64encode(img_b).decode("ascii")
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt_text},
+                {"inline_data": {"mime_type": mime_t, "data": b64}},
+            ]
+        }]
+    }
+    for v_model in _VISION_REST_MODELS:
+        try:
+            v_url = f"https://generativelanguage.googleapis.com/v1beta/models/{v_model}:generateContent?key={g_key}"
+            v_resp = requests.post(v_url, json=payload, timeout=timeout)
+            if v_resp.status_code == 200:
+                cands = v_resp.json().get("candidates", [])
+                if cands and "content" in cands[0]:
+                    parts = cands[0]["content"].get("parts", [])
+                    if parts and "text" in parts[0]:
+                        ans = parts[0]["text"].strip()
+                        if ans:
+                            return ans
+        except Exception as _ve:
+            print(f"[Vision] {v_model} attempt: {_ve}")
+    return None
+
+
 def _load_system_prompt() -> str:
     try:
         return PROMPT_PATH.read_text(encoding="utf-8")
@@ -413,7 +464,13 @@ def _is_reconnect_signal(exc: BaseException) -> bool:
     if isinstance(exc, _ReconnectSignal):
         return True
     if isinstance(exc, BaseExceptionGroup):
-        return any(_is_reconnect_signal(sub) for sub in exc.exceptions)
+        # Use subgroup to find all _ReconnectSignal instances at any depth
+        try:
+            subgroup = exc.subgroup(_ReconnectSignal)
+            return subgroup is not None
+        except ValueError:
+            # No _ReconnectSignal in this group
+            return False
     return False
 
 
@@ -424,9 +481,22 @@ def _keep_context_of(exc: BaseException) -> bool:
     if isinstance(exc, _ReconnectSignal):
         return getattr(exc, "keep_context", True)
     if isinstance(exc, BaseExceptionGroup):
-        for sub in exc.exceptions:
-            if _is_reconnect_signal(sub):
-                return _keep_context_of(sub)
+        # subgroup() filters at any depth, but the result tree can STILL be
+        # nested (groups inside groups) — so walk it breadth-first for the
+        # first actual signal instead of checking only direct children.
+        try:
+            subgroup = exc.subgroup(_ReconnectSignal)
+        except ValueError:
+            return True
+        if subgroup is None:
+            return True
+        stack = list(subgroup.exceptions)
+        while stack:
+            sub = stack.pop(0)
+            if isinstance(sub, _ReconnectSignal):
+                return getattr(sub, "keep_context", True)
+            if isinstance(sub, BaseExceptionGroup):
+                stack.extend(sub.exceptions)
     return True
 
 
@@ -444,6 +514,7 @@ class JarvisLive:
         self._loop                     = None
         self._is_speaking         = False
         self._speaking_lock       = threading.Lock()
+        self._edge_queue_lock     = threading.Lock()  # guards _edge_queue access
         self._phone_active        = False   # True while phone mic is streaming; pauses PC mic
         self._pending_vision       = None    # (img_bytes, mime_type, question, angle) to inject after tool response
         self._vision_cam_active    = False   # True if camera was opened for vision → auto-close after response
@@ -851,43 +922,17 @@ class JarvisLive:
                         img_b, mime_t = _capture_camera()
                         target_label = "कैमरा"
 
-                    from memory.config_manager import load_api_keys
-                    c_keys = load_api_keys()
-                    g_key = (c_keys.get("gemini_api_key") or "").strip()
-
-                    # If an official Google Gemini API key exists (e.g. Free AI Studio tier)
-                    if g_key:
-                        import base64
-                        import requests
-                        b64 = base64.b64encode(img_b).decode("ascii")
-                        v_payload = {
-                            "contents": [{
-                                "parts": [
-                                    {"text": f"You are {self._asst_name}. Look at this captured {target_label} and answer the user directly in 1-2 natural sentences in conversational Hindi/Devanagari: {text}"},
-                                    {"inline_data": {"mime_type": mime_t, "data": b64}}
-                                ]
-                            }]
-                        }
-                        # FIX: dead alias 'gemini-flash-latest' hataya — REST par hamesha
-                        # 400 deta tha (waste call + error text model tak pahunchta tha).
-                        for v_model in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]:
-                            try:
-                                v_url = f"https://generativelanguage.googleapis.com/v1beta/models/{v_model}:generateContent?key={g_key}"
-                                v_resp = requests.post(v_url, json=v_payload, timeout=25)
-                                if v_resp.status_code == 200:
-                                    v_data = v_resp.json()
-                                    cands = v_data.get("candidates", [])
-                                    if cands and "content" in cands[0]:
-                                        parts = cands[0]["content"].get("parts", [])
-                                        if parts and "text" in parts[0]:
-                                            ans = parts[0]["text"].strip()
-                                            if ans:
-                                                self.ui.write_log(f"{self._asst_name}: {ans}")
-                                                self.speak(ans)
-                                                self.ui.set_state("LISTENING")
-                                                return
-                            except Exception as _ve:
-                                print(f"[Vision] {v_model} attempt: {_ve}")
+                    # If an official Google Gemini API key exists (e.g. Free AI Studio tier),
+                    # answer via the shared REST fallback (works with no live session).
+                    ans = _rest_vision_answer(
+                        img_b, mime_t,
+                        f"You are {self._asst_name}. Look at this captured {target_label} and answer the user directly in 1-2 natural sentences in conversational Hindi/Devanagari: {text}",
+                    )
+                    if ans:
+                        self.ui.write_log(f"{self._asst_name}: {ans}")
+                        self.speak(ans)
+                        self.ui.set_state("LISTENING")
+                        return
                     # Free Mode / Anonymous Proxy fallback:
                     self.ui.write_log(f"SYS: {target_label} कैप्चर सक्रिय है। HUD पर लाइव स्ट्रीम चालू है।")
                     self.speak(f"{target_label} मैंने देख लिया है और HUD पर लाइव स्ट्रीम चालू कर दी है।")
@@ -995,11 +1040,12 @@ class JarvisLive:
 
         # NOTE: Piper queue removed with Piper engine (Edge/Gemini only now).
         if hasattr(self, "_edge_queue") and self._edge_queue:
-            while not self._edge_queue.empty():
-                try:
-                    self._edge_queue.get_nowait()
-                except Exception:
-                    break
+            with self._edge_queue_lock:
+                while not self._edge_queue.empty():
+                    try:
+                        self._edge_queue.get_nowait()
+                    except Exception:
+                        break
         try:
             import sounddevice as _sd
             _sd.stop()
@@ -1432,14 +1478,14 @@ class JarvisLive:
             return
 
         self._interrupted = False
-        if not hasattr(self, "_edge_queue"):
-            import queue
-            self._edge_queue = queue.Queue()
-
-        self._edge_queue.put(text)
-        if not getattr(self, "_edge_worker_running", False):
-            self._edge_worker_running = True
-            threading.Thread(target=self._edge_worker_loop, daemon=True).start()
+        with self._edge_queue_lock:
+            if not hasattr(self, "_edge_queue"):
+                import queue
+                self._edge_queue = queue.Queue()
+            self._edge_queue.put(text)
+            if not getattr(self, "_edge_worker_running", False):
+                self._edge_worker_running = True
+                threading.Thread(target=self._edge_worker_loop, daemon=True).start()
 
     def _edge_worker_loop(self):
         try:
@@ -1455,11 +1501,14 @@ class JarvisLive:
                     or getattr(self._edge_engine, "rate", "") != r):
                 self._edge_engine = EdgeTTSEngine(voice=v, pitch=p, rate=r)
 
-            while hasattr(self, "_edge_queue") and not self._edge_queue.empty():
-                try:
-                    text = self._edge_queue.get_nowait()
-                except Exception:
-                    break
+            while True:
+                with self._edge_queue_lock:
+                    if not hasattr(self, "_edge_queue") or self._edge_queue.empty():
+                        break
+                    try:
+                        text = self._edge_queue.get_nowait()
+                    except Exception:
+                        break
 
                 if not text or not text.strip() or self._interrupted:
                     continue
@@ -1683,7 +1732,6 @@ class JarvisLive:
                             if self._pending_vision and self.session:
                                 import base64 as _b64
                                 img_b, mime_t, question, angle = self._pending_vision
-                                self._pending_vision = None
                                 b64 = _b64.b64encode(img_b).decode("ascii")
                                 print(f"[Vision] 📤 {len(img_b):,} bytes (angle={angle}) → main session")
                                 try:
@@ -1695,18 +1743,30 @@ class JarvisLive:
                                         turn_complete=True,
                                     )
                                 except Exception as ve:
+                                    # Send failed — drop the stale frame (it must never
+                                    # leak into a later/reconnected session) and
+                                    # release everything, INCLUDING the camera
+                                    # stream which would otherwise stay open forever.
                                     print(f"[Vision] ⚠️ Could not inject frame into live session: {ve}")
-                                    self._vision_busy = False
-                                    self._vision_cam_active = False
-
-                                # Mark next turn_complete behaviour depending on angle
-                                if self._vision_cam_active:
-                                    # Camera: keep busy until JARVIS finishes speaking the answer
+                                    self._pending_vision       = None
+                                    self._vision_busy          = False
                                     self._vision_cam_active    = False
-                                    self._vision_close_pending = True
+                                    self._vision_close_pending = False
+                                    try:
+                                        self.ui.stop_camera_stream()
+                                    except Exception:
+                                        pass
                                 else:
-                                    # Screen-only: no camera to close; release busy flag now
-                                    self._vision_busy = False
+                                    # Clear only after a successful send.
+                                    self._pending_vision = None
+                                    # Mark next turn_complete behaviour depending on angle
+                                    if self._vision_cam_active:
+                                        # Camera: keep busy until JARVIS finishes speaking the answer
+                                        self._vision_cam_active    = False
+                                        self._vision_close_pending = True
+                                    else:
+                                        # Screen-only: no camera to close; release busy flag now
+                                        self._vision_busy = False
                             elif self._vision_close_pending:
                                 # This turn_complete IS the vision answer — close camera + release busy flag
                                 self._vision_close_pending = False
@@ -2053,7 +2113,7 @@ class JarvisLive:
             from google import genai as _genai
             client = _genai.Client(api_key=_get_api_key())
             summary = ""
-            for m in ("gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash"):
+            for m in _GEMINI_TEXT_MODELS:
                 try:
                     resp = await asyncio.to_thread(
                         client.models.generate_content,
@@ -2508,6 +2568,36 @@ class JarvisLive:
             print(f"[JARVIS] Reconnecting in {delay}s...")
             await asyncio.sleep(delay)
 
+    def shutdown(self) -> None:
+        """Clean shutdown of all background threads and resources."""
+        print("[JARVIS] Shutting down...")
+        # Stop wake word detector
+        if self._wake_detector is not None:
+            try:
+                self._wake_detector.stop()
+            except Exception:
+                pass
+        # Stop Edge TTS engine
+        if hasattr(self, "_edge_engine") and self._edge_engine is not None:
+            try:
+                self._edge_engine.shutdown()
+            except Exception:
+                pass
+        # Stop system metrics
+        try:
+            from ui import _metrics
+            _metrics.stop()
+        except Exception:
+            pass
+        # Stop dashboard
+        if self._dashboard is not None:
+            try:
+                self._dashboard.shutdown()
+            except Exception:
+                pass
+        print("[JARVIS] Shutdown complete.")
+
+
 def main():
     ui = JarvisUI("face.png")
 
@@ -2517,9 +2607,13 @@ def main():
     except Exception as _hke:
         print(f"[Main] Hotkey note: {_hke}")
 
+    jarvis_instance: JarvisLive | None = None
+
     def runner():
+        nonlocal jarvis_instance
         ui.wait_for_api_key()
         jarvis = JarvisLive(ui)
+        jarvis_instance = jarvis
         try:
             asyncio.run(jarvis.run())
         except (KeyboardInterrupt, SystemExit, asyncio.CancelledError):
@@ -2544,6 +2638,12 @@ def main():
             stop_proxy()
         except Exception:
             pass
+        # Clean shutdown of JarvisLive
+        try:
+            if jarvis_instance:
+                jarvis_instance.shutdown()
+        except Exception as e:
+            print(f"[Main] Jarvis shutdown error: {e}")
         sys.exit(0)
 
 if __name__ == "__main__":

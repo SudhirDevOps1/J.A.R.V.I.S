@@ -113,8 +113,24 @@ _TRAINING_DATA = [
     ("storage check karo c drive ki", "disk_usage"),
     ("kitna space bacha hai computer me", "disk_usage"),
     ("c drive me kitni jagah khali hai", "disk_usage"),
-    ("disk storage status batao", "disk_usage"),
     ("hard drive kitni bhari hai", "disk_usage"),
+
+    # 5. Next-Gen Desktop Autonomous Actions (Screen Timeline, DevOps Sentinel, Local LLM, UIA)
+    ("screen timeline dekho", "screen_timeline"),
+    ("pehle main kya kar raha tha", "screen_timeline"),
+    ("pichhli activity dikhao", "screen_timeline"),
+    ("recall screen history", "screen_timeline"),
+    ("screen history search karo", "screen_timeline"),
+    ("watch command pytest", "devops_sentinel"),
+    ("terminal monitor karo", "devops_sentinel"),
+    ("terminal error diagnose karo", "devops_sentinel"),
+    ("build error analyze karo", "devops_sentinel"),
+    ("local llm status", "local_llm_control"),
+    ("local model enable karo", "local_llm_control"),
+    ("deepseek local chalu karo", "local_llm_control"),
+    ("local llm band karo", "local_llm_control"),
+    ("window elements dikhao", "uia_controller"),
+    ("click button save in notepad", "uia_controller"),
 ]
 
 

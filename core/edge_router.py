@@ -393,6 +393,38 @@ class NeedleToolRouter:
             q_text = re.sub(r"\b(notes?\s*(?:me|mein|par)?\s*search\s*karo|search\s*notes?|kahan\s*likha\s*tha|notes?\s*dhoondho|karo|do|please|zara)\b", "", clean).strip()
             return _dispatch("bm25_search", {"query": q_text or clean})
 
+        # -- Next-Gen: 100% Private Local Screen Memory & Timeline Recall (<5ms) --
+        # "screen timeline dekho" / "pehle main kya kar raha tha" / "recall screen history"
+        if re.search(r"\b(screen\s*timeline|timeline\s*(?:dekho|dikhao|check)|pehle\s*main\s*kya\s*kar\s*raha\s*tha|pichhli\s*activity\s*(?:dikhao|batao)|recall\s*(?:screen|activity|history)|screen\s*history)\b", clean):
+            q_hist = re.sub(r"\b(screen\s*timeline|timeline\s*(?:dekho|dikhao|check)|pehle\s*main\s*kya\s*kar\s*raha\s*tha|pichhli\s*activity\s*(?:dikhao|batao)|recall\s*(?:screen|activity|history)|screen\s*history|dekho|dikhao|batao|karo|do)\b", "", clean).strip()
+            return _dispatch("screen_timeline", {"action": "recall", "query": q_hist})
+
+        # -- Next-Gen: Safe, Opt-in Local LLM Bridge (DeepSeek-R1 / Ollama) ----
+        # "local llm status" / "local llm chalu karo" / "local model enable karo" / "local llm band karo"
+        if re.search(r"\b(local\s*llm|local\s*model|deepseek\s*local|ollama\s*(?:status|bridge))\b", clean):
+            if any(w in clean for w in ("chalu", "on", "start", "enable", "activate")):
+                return _dispatch("local_llm_control", {"action": "enable"})
+            elif any(w in clean for w in ("band", "off", "stop", "disable", "deactivate")):
+                return _dispatch("local_llm_control", {"action": "disable"})
+            return _dispatch("local_llm_control", {"action": "status"})
+
+        # -- Next-Gen: Autonomous DevOps Terminal Sentinel -------------------
+        # "watch command pytest" / "terminal monitor karo" / "terminal error analyze karo"
+        if re.search(r"\b(devops\s*sentinel|terminal\s*sentinel|watch\s*command|command\s*monitor|terminal\s*monitor)\b", clean):
+            cmd_m = re.sub(r"\b(devops\s*sentinel|terminal\s*sentinel|watch\s*command|command\s*monitor|terminal\s*monitor|karo|chalao|start)\b", "", clean).strip()
+            if cmd_m:
+                return _dispatch("devops_sentinel", {"action": "watch", "command": cmd_m})
+            return _dispatch("devops_sentinel", {"action": "status"})
+
+        if re.search(r"\b(terminal\s*error\s*(?:analyze|check|diagnose|batao)|terminal\s*crash\s*(?:analyze|batao))\b", clean):
+            return _dispatch("devops_sentinel", {"action": "analyze"})
+
+        # -- Next-Gen: Windows UIAutomation (UIA) Semantic Desktop Controller -
+        # "window me button click karo" / "click button save in notepad" / "window elements dikhao"
+        if re.search(r"\b(uia\s*click|semantic\s*click|window\s*elements\s*(?:dikhao|list)|click\s+button\s+([a-zA-Z0-9_\-]+))\b", clean):
+            return _dispatch("uia_controller", {"action": "inspect" if "dikhao" in clean or "list" in clean else "click"})
+
+
         # -- 0 MB Native Windows Pop-up Alert (ctypes) ------------------------
         if re.search(r"\b(alert\s*dikhao|show\s*alert|show\s*popup|popup\s*dikhao)\b", clean):
             msg = re.sub(r"\b(alert\s*dikhao|show\s*alert|show\s*popup|popup\s*dikhao)\b", "", clean).strip()
@@ -1173,6 +1205,14 @@ class NeedleToolRouter:
                     return _dispatch("computer_settings", {"action": "pause_video"})
                 elif intent_name == "media_next":
                     return _dispatch("computer_settings", {"action": "next_tab"})
+                elif intent_name == "screen_timeline":
+                    return _dispatch("screen_timeline", {"action": "recall", "query": clean})
+                elif intent_name == "devops_sentinel":
+                    return _dispatch("devops_sentinel", {"action": "watch", "command": clean})
+                elif intent_name == "local_llm_control":
+                    return _dispatch("local_llm_control", {"action": "status"})
+                elif intent_name == "uia_controller":
+                    return _dispatch("uia_controller", {"action": "inspect"})
         except Exception:
             pass
 

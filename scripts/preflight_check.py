@@ -21,7 +21,7 @@ def check_directories():
         os.path.join(PROJECT_ROOT, 'memory', 'obsidian_vault'),
         os.path.join(PROJECT_ROOT, 'core', 'assets', 'sfx'),
         os.path.join(PROJECT_ROOT, 'core', 'assets', 'avatar'),
-        os.path.join(PROJECT_ROOT, 'core', 'models', 'piper'),
+        # NOTE: core/models/piper removed with the Piper engine (Edge + Gemini Live only).
         os.path.join(PROJECT_ROOT, 'models', 'lfm'),
     ]
     for d in dirs:
@@ -110,13 +110,6 @@ def check_sfx(verbose=True):
         if verbose:
             print(f'  [!] SFX generation note: {e}')
 
-def check_piper_hindi(verbose=True):
-    # REMOVED per user request (Edge TTS + Gemini Live only) — no download, no check.
-    # Stale model files (if any) are left untouched on disk; engine never loads them.
-    if verbose:
-        print('  [--] Piper Hindi TTS: Removed (Edge + Gemini Live only)')
-    return
-
 def check_lfm_model(verbose=True):
     """Verify local Liquid Foundation Model (LFM2.5-230M) GGUF exists; download if missing."""
     lfm_dir = os.path.join(PROJECT_ROOT, 'models', 'lfm')
@@ -159,49 +152,8 @@ def check_lfm_model(verbose=True):
     except Exception as e:
         if verbose:
             print(f'  [!] LFM2.5 model setup note: {e}')
-    base = os.path.join(PROJECT_ROOT, 'core', 'models', 'piper')
-    os.makedirs(base, exist_ok=True)
-    m_path = os.path.join(base, 'hi_IN-pratham-medium.onnx')
-    j_path = os.path.join(base, 'hi_IN-pratham-medium.onnx.json')
-    if os.path.exists(m_path) and os.path.getsize(m_path) > 60000000 and os.path.exists(j_path):
-        if verbose:
-            print('  [OK] Piper Hindi TTS Model: Ready (Cached locally)')
-        return
-
-    if verbose:
-        print('  [*] Downloading Piper Hindi Model (~60 MB, one-time only)...')
-    import requests
-    urls = {
-        j_path: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx.json',
-        m_path: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/hi/hi_IN/pratham/medium/hi_IN-pratham-medium.onnx'
-    }
-    for target, url in urls.items():
-        if os.path.exists(target) and os.path.getsize(target) > 4000:
-            continue
-        fname = os.path.basename(target)
-        temp = target + '.tmp'
-        for attempt in range(1, 4):
-            try:
-                curr = os.path.getsize(temp) if os.path.exists(temp) else 0
-                headers = {'Range': f'bytes={curr}-'} if curr > 0 else {}
-                with requests.get(url, headers=headers, stream=True, timeout=30) as r:
-                    if r.status_code in (200, 206):
-                        mode = 'ab' if curr > 0 and r.status_code == 206 else 'wb'
-                        with open(temp, mode) as f:
-                            for chunk in r.iter_content(chunk_size=1024*1024):
-                                if chunk:
-                                    f.write(chunk)
-                if os.path.exists(temp):
-                    if os.path.exists(target):
-                        os.remove(target)
-                    os.rename(temp, target)
-                    if verbose:
-                        print(f'  [OK] Downloaded {fname}')
-                    break
-            except Exception as e:
-                if verbose:
-                    print(f'  [!] Retry {attempt}/3 for {fname}: {e}')
-                time.sleep(1.5)
+    # NOTE: Piper Hindi download block removed with the Piper engine
+    # (Edge TTS + Gemini Live only) — it used to fetch ~60 MB of dead models here.
 
 def check_wakeword(verbose=True):
     try:
@@ -416,7 +368,6 @@ def run_preflight(verbose=True):
     check_config_init(verbose=verbose)
     check_icon(verbose=verbose)
     check_sfx(verbose=verbose)
-    check_piper_hindi(verbose=verbose)
     check_lfm_model(verbose=verbose)
     check_wakeword(verbose=verbose)
     check_desktop_shortcut(verbose=verbose)

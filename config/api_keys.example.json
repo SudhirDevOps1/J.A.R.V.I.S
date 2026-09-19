@@ -58,6 +58,10 @@
     "custom_llm_url": "",
     "custom_llm_model": "llama3.2",
     "custom_llm_api_key": "",
+    "enable_local_llm": false,
+    "local_llm_url": "http://localhost:11434",
+    "local_llm_model": "deepseek-r1:1.5b",
+    "local_llm_timeout": 15.0,
     "omniroute_auto_detect": true,
     "custom_providers": [
         {

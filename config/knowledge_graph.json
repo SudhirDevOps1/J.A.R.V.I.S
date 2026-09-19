@@ -15,6 +15,14 @@
   "bhajan": {
    "type": "entity",
    "label": "bhajan"
+  },
+  "name": {
+   "type": "entity",
+   "label": "name"
+  },
+  "ritik": {
+   "type": "entity",
+   "label": "ritik"
   }
  },
  "edges": [
@@ -22,6 +30,11 @@
    "mummy",
    "contact_via",
    "whatsapp"
+  ],
+  [
+   "name",
+   "friend",
+   "ritik"
   ]
  ]
 }

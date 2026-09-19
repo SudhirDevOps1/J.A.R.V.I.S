@@ -277,7 +277,7 @@ class _SysMetrics:
         # Probe caches — GPU (NVML) and temperature (WMI) are the expensive
         # queries; initialise their handles once and reuse them instead of
         # rebuilding a connection on every poll.
-        self._slow_tick = 0            # gpu/temp refreshed every 3rd cycle
+        self._slow_tick = 0            # gpu/temp refreshed every 5th cycle (~10 s)
         self._pynvml    = None         # cached pynvml module + device handle
         self._pynvml_h  = None
         self._pynvml_ok = None         # None=untested, False=unavailable here
@@ -312,9 +312,9 @@ class _SysMetrics:
         self._last_net_t = now
 
         # GPU and temperature change slowly and are the most expensive probes
-        # (NVML / WMI) — refresh them every 3rd cycle (~6 s) instead of every
+        # (NVML / WMI) — refresh them every 5th cycle (~10 s) instead of every
         # cycle, reusing the previous reading in between.
-        self._slow_tick = (self._slow_tick + 1) % 3
+        self._slow_tick = (self._slow_tick + 1) % 5
         if self._slow_tick == 1:
             gpu = self._get_gpu()
             tmp = self._get_temp()
@@ -413,6 +413,23 @@ class _SysMetrics:
                 "gpu": self.gpu,
                 "tmp": self.tmp,
             }
+
+    def stop(self) -> None:
+        """Stop the background metrics thread and release cached handles."""
+        self._running = False
+        # Release pynvml handle
+        if self._pynvml_h is not None:
+            try:
+                import pynvml  # type: ignore
+                pynvml.nvmlShutdown()
+            except Exception:
+                pass
+            self._pynvml_h = None
+            self._pynvml = None
+        # Release WMI connection
+        self._wmi_conn = None
+        # Release NVML unix handle
+        self._nv_unix = None
 
 
 _metrics = _SysMetrics()

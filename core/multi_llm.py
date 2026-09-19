@@ -10,6 +10,7 @@ Supports:
   5. Google Gemini API (with multi-key rotation) -> gemini_api_key / gemini_api_keys[]
   6. Smart LLM Cache (SQLite) -> llm_cache_enabled: true
 """
+import concurrent.futures
 import json
 import os
 import sys
@@ -440,7 +441,13 @@ class MultiLLMClient:
         try:
             resp = requests.get(f"{self.omniroute_url.rstrip('/v1')}/health",
                                 timeout=1.5)
-            self._omniroute_running = (resp.status_code in (200, 404))  # any response = running
+            if resp.status_code == 200:
+                self._omniroute_running = True
+                return True
+            # Non-200 (e.g. 404 = some OTHER service on this port) proves
+            # nothing — verify with the real /v1/models endpoint instead.
+            resp = requests.get(f"{self.omniroute_url}/models", timeout=1.5)
+            self._omniroute_running = resp.status_code == 200
         except Exception:
             try:
                 # Try /v1/models as fallback health check
@@ -687,29 +694,34 @@ class MultiLLMClient:
                 candidate_models.insert(0, self.model)
 
             last_err = None
-            # Try each key in pool with round-robin
             keys_to_try = list(self.gemini_key_pool)
-            for api_key in keys_to_try:
+
+            def _attempt_with_key(api_key):
+                """Try every candidate model with ONE key (runs in a worker thread).
+
+                Returns response text on success, None if this key is
+                exhausted/rate-limited, raises the key's last error otherwise.
+                Per-key model fallback order is unchanged — only the keys now
+                race each other instead of queueing up sequentially."""
                 client = genai.Client(api_key=api_key)
+                key_last_err = None
                 for m in candidate_models:
-                    key_rate_limited = False
                     for attempt in range(2):
                         try:
                             resp = client.models.generate_content(model=m, contents=prompt)
-                            return _maybe_cache(LLMResponse(resp.text or ""))
+                            return resp.text or ""
                         except Exception as e:
                             err_str = str(e).lower()
-                            last_err = e
+                            key_last_err = e
                             if "429" in err_str or "quota" in err_str or "rate" in err_str:
-                                # This key is rate-limited, try next key (masked log, never full key)
+                                # This key is rate-limited (masked log, never full key)
                                 try:
                                     from core.secret_vault import mask_secret
                                     _km = mask_secret(api_key)
                                 except Exception:
                                     _km = "***"
                                 print(f"[MultiLLM] Gemini key {_km} rate-limited → trying next key")
-                                key_rate_limited = True
-                                break
+                                return None
                             elif "503" in err_str or "unavailable" in err_str or "high demand" in err_str:
                                 time.sleep(1.5)
                                 continue
@@ -717,9 +729,34 @@ class MultiLLMClient:
                                 break  # Model deprecated/not found, advance to next candidate model
                             else:
                                 time.sleep(1.0)
-                    if key_rate_limited:
-                        break  # Key rate-limited, try next key
-                    continue  # Try next candidate model
+                if key_last_err is not None:
+                    raise key_last_err
+                return None
+
+            # Race all keys in parallel — first success wins. The old code tried
+            # keys strictly sequentially (up to 50+ blocking HTTP calls ≈ a
+            # minute worst case before failing); now total latency is bounded by
+            # one overall deadline no matter how many keys are pooled.
+            _deadline = 60.0
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max(1, len(keys_to_try)),
+                thread_name_prefix="gemini-key",
+            ) as _ex:
+                _pending = {_ex.submit(_attempt_with_key, k): k for k in keys_to_try}
+                try:
+                    for _fut in concurrent.futures.as_completed(_pending, timeout=_deadline):
+                        try:
+                            _out = _fut.result()
+                        except Exception as e:
+                            last_err = e
+                            continue
+                        if _out:
+                            for _p in _pending:
+                                _p.cancel()
+                            return _maybe_cache(LLMResponse(_out))
+                        # None → this key exhausted/rate-limited; keep waiting for the rest
+                except concurrent.futures.TimeoutError:
+                    print(f"[MultiLLM] Gemini key race timed out after {_deadline:.0f}s")
 
             raise RuntimeError(f"All LLM providers failed. Last Gemini error: {last_err}")
 

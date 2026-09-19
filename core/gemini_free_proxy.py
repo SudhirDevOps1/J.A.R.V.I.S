@@ -18,6 +18,7 @@ import re
 import os
 import hashlib
 import threading
+import secrets
 from pathlib import Path
 from typing import Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -47,6 +48,7 @@ CONFIG = {
     "cookie_file": None,
     "proxy": None,
     "temporary_chats": True,
+    "auth_token": None,  # Optional bearer token for API access
 }
 
 MODELS = {
@@ -68,6 +70,22 @@ def _log(msg: str):
     if CONFIG["log_requests"]:
         sys.stderr.write(f"[GeminiProxy] {time.strftime('%H:%M:%S')} {msg}\n")
         sys.stderr.flush()
+
+
+def _check_auth(handler) -> bool:
+    """Check Authorization header for bearer token if configured."""
+    auth_token = CONFIG.get("auth_token")
+    if not auth_token:
+        return True
+    auth_header = handler.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        handler._send_json(401, {"error": "Unauthorized: Bearer token required"})
+        return False
+    token = auth_header[7:].strip()
+    if token != auth_token:
+        handler._send_json(401, {"error": "Unauthorized: Invalid token"})
+        return False
+    return True
 
 
 def _load_cookie() -> tuple:
@@ -257,6 +275,8 @@ class _GeminiHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if not _check_auth(self):
+            return
         if self.path in ("/v1/models", "/v1/models/"):
             model_list = [
                 {"id": m, "object": "model", "created": 1700000000,
@@ -270,6 +290,8 @@ class _GeminiHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "Not found"})
 
     def do_POST(self):
+        if not _check_auth(self):
+            return
         if self.path not in ("/v1/chat/completions", "/chat/completions"):
             self._send_json(404, {"error": "Not found"})
             return
@@ -342,6 +364,11 @@ def start_proxy(port: int = 8081, silent: bool = True) -> bool:
     CONFIG["log_requests"] = not silent
     if COOKIE_FILE.exists():
         CONFIG["cookie_file"] = str(COOKIE_FILE)
+    # Generate auth token if not provided
+    if not CONFIG.get("auth_token"):
+        CONFIG["auth_token"] = secrets.token_urlsafe(32)
+        if not silent:
+            print(f"[GeminiProxy] Auth token: {CONFIG['auth_token']}")
     try:
         _server = _ThreadedHTTPServer(("127.0.0.1", port), _GeminiHandler)
         _server_thread = threading.Thread(
