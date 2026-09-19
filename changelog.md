@@ -2,7 +2,31 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
-## [v1.3.0 - 2026-09-19 15:35] — Autonomous Visual Computer-Use, Self-Healing Screen Agent & Real-Time Screen Streaming
+## [v1.3.0 - 2026-09-19 15:52] — Autonomous Visual Computer-Use, Zero-Trust Privacy Shield & Real-Time Screen Streaming
+
+### 🛡️ Ironclad Web & WebSocket Stream Privacy Engine (`core/privacy_guard.py`, `dashboard/server.py`)
+1. **Default-OFF Stream Authorization Gate**:
+   - Screen streams (`/ws/screen-stream` and `/api/screen-stream.mjpg`) are **LOCKED by default** until the user explicitly authorizes them (`"screen stream allow karo"` or via dashboard toggle).
+   - Unauthorized streams receive an aesthetic, non-leaking dark Privacy Shield canvas (`[🔒 SCREEN STREAM INACTIVE — AUTHORIZATION REQUIRED]`).
+2. **Localhost-Only Enforcement**:
+   - Strictly blocks remote LAN/Wi-Fi devices from snooping on the user's screen stream. Only loopback connections (`127.0.0.1`, `::1`) are permitted by default.
+3. **Real-Time Sensitive Window Auto-Blackout**:
+   - Continuously inspects active foreground window titles and processes.
+   - Categorized auto-masking triggers for:
+     - **Banking & UPI**: `bank`, `netbanking`, `sbi`, `hdfc`, `icici`, `axis`, `kotak`, `paytm`, `phonepe`, `gpay`, `paypal`, `credit card`, `debit card`, `checkout`, `payment`.
+     - **Passwords & Auth**: `1password`, `bitwarden`, `keepass`, `lastpass`, `dashlane`, `authenticator`, `2fa`, `otp`, `credentials`.
+     - **Private Browsing**: `incognito`, `inprivate`, `private browsing`, `tor browser`.
+     - **Confidential Communications**: `whatsapp`, `signal`, `tax`, `aadhaar`, `pan card`.
+   - The moment a sensitive window is in focus, the screen stream and capture are **instantly blacked out** with a Cyberpunk Privacy Shield canvas (`[🛡️ PRIVACY SHIELD ACTIVE — SENSITIVE WINDOW DETECTED]`).
+4. **Master Voice & CLI Privacy Mode**:
+   - Direct voice/chat reflexes in `core/edge_router.py`:
+     - *"privacy mode on"* / *"screen shield on"* -> Master lockdown (blinds all vision & streams).
+     - *"privacy mode off"* / *"screen shield off"* -> Resumes normal operation.
+     - *"screen stream allow karo"* / *"start stream"* -> Authorizes live stream.
+     - *"stop stream"* / *"screen stream band karo"* -> 1-word instant kill-switch.
+     - *"privacy status"* -> Reports active privacy and network isolation status.
+5. **Fast Controller Action Tool (`actions/privacy_ctl.py`)**:
+   - Discovered as an official registered action (46 total active actions).
 
 ### 👁️ Real-Time WebSocket & MJPEG Screen Streaming (`dashboard/server.py`)
 1. **Live Low-Latency WebSocket Stream (`/ws/screen-stream`)**:
@@ -23,7 +47,7 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
    - **Self-Healing Error Dismissal**: Dedicated modal dialog and crash popup detector identifying blocking alerts, warning boxes, or permission prompts; automatically clicks dismiss/retry/close buttons or triggers escape keys to unblock workflows.
    - **Self-Retry Loop**: Executes iteratively up to configured step limit until visual objective is confirmed (`goal_achieved: true`), preventing silent abandonment.
 2. **Tool Schema & Dispatch**:
-   - Auto-discovered as `visual_agent` tool (45 active actions total).
+   - Auto-discovered as `visual_agent` tool (46 active actions total).
    - Direct reflex routing in `core/edge_router.py` for commands like *"screen par error solve karo"*, *"popup band karo"*, *"error hatao"*, *"solve error"*.
    - Integrated into `actions/todo_agent.py` so multi-step autonomous plans route UI interaction steps directly to `visual_agent`.
 
@@ -32,7 +56,7 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 2. **`visual_verify`**: Ground-truth confirmation of visual element presence on screen before advancing workflows.
 
 ### 🧪 Automated Quality & Test Suite
-- **92/92 Passing Unit & Integration Tests** in `tests/` (100% pass rate, 0 failures, 0 regressions across entire codebase).
+- **100/100 Passing Unit & Integration Tests** in `tests/` (100% pass rate, 0 failures, 0 regressions across entire codebase).
 
 ## [v1.2.0 - 2026-09-19 15:15] — Telegram Direct Protocol, Explorer Documents Bug Fix, Obsidian Second Brain REST & Crash Resilience
 

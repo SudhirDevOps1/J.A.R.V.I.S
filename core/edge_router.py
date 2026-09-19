@@ -241,6 +241,26 @@ class NeedleToolRouter:
             url_m = re.search(r"https?://[^\s]+|[a-zA-Z0-9_\-\.]+\.[a-zA-Z]{2,}", clean)
             target_url = url_m.group(0) if url_m else "https://quotes.toscrape.com"
             return _dispatch("api_sniffer", {"url": target_url, "goal": clean})
+        # -- Zero-Trust Privacy Shield & Screen Streaming Controls ----------
+        # "privacy mode on" / "privacy mode chalu karo" / "screen shield on"
+        if re.search(r"\b(privacy\s*mode\s*(?:on|enable|chalu|active)|screen\s*shield\s*on|enable\s*privacy)\b", clean):
+            return _dispatch("privacy_ctl", {"action": "enable_privacy_mode"})
+
+        # "privacy mode off" / "privacy mode band karo" / "screen shield off"
+        if re.search(r"\b(privacy\s*mode\s*(?:off|disable|band|deactive)|screen\s*shield\s*off|disable\s*privacy)\b", clean):
+            return _dispatch("privacy_ctl", {"action": "disable_privacy_mode"})
+
+        # "screen stream allow karo" / "start stream" / "stream allow karo" / "stream chalu karo"
+        if re.search(r"\b((?:screen\s*)?stream\s*(?:allow|start|chalu|enable|kholo)|allow\s*(?:screen\s*)?stream|start\s*(?:screen\s*)?stream)\b", clean):
+            return _dispatch("privacy_ctl", {"action": "allow_stream"})
+
+        # "stop stream" / "screen stream band karo" / "stop screen sharing" / "stream band karo"
+        if re.search(r"\b((?:screen\s*)?stream\s*(?:stop|band|disable|close|rok|roko)|stop\s*(?:screen\s*)?stream|stop\s*screen\s*sharing)\b", clean):
+            return _dispatch("privacy_ctl", {"action": "stop_stream"})
+
+        # "privacy status" / "screen privacy check karo" / "stream status"
+        if re.search(r"\b(privacy\s*status|screen\s*privacy|stream\s*status|privacy\s*check)\b", clean):
+            return _dispatch("privacy_ctl", {"action": "status"})
 
         # -- Visual Self-Healing & Screen Error Dismissal --------------------
         # "screen par error solve karo" / "popup band karo" / "error hatao" / "dialog close karo" / "solve error"

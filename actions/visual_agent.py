@@ -76,6 +76,18 @@ def _call_vision_model(
         return ""
 
     try:
+        from core.privacy_guard import is_privacy_mode_active, detect_sensitive_window
+        if is_privacy_mode_active():
+            print("[VisualAgent] 🛡️ Vision blocked: Master Privacy Mode is active.")
+            return ""
+        is_sens, sens_desc = detect_sensitive_window()
+        if is_sens:
+            print(f"[VisualAgent] 🛡️ Vision blocked: {sens_desc}")
+            return ""
+    except Exception:
+        pass
+
+    try:
         from google import genai
         from google.genai import types as gtypes
         client = genai.Client(api_key=api_key)
@@ -319,6 +331,28 @@ def run_visual_loop(
         log_prefix = f"VISUAL [{step}/{max_steps}]"
         if player:
             player.write_log(f"{log_prefix}: Capturing screen...")
+
+        # Privacy Guard Pre-flight Check
+        try:
+            from core.privacy_guard import is_privacy_mode_active, detect_sensitive_window
+            if is_privacy_mode_active():
+                p_msg = "Sir, Master Privacy Mode ON hai. Visual agent operation security reasons ki wajah se rok diya gaya hai."
+                if player:
+                    player.write_log(f"VISUAL: 🛡️ {p_msg}")
+                if speak_fn and callable(speak_fn):
+                    speak_fn(p_msg)
+                return p_msg
+
+            is_sens, sens_desc = detect_sensitive_window()
+            if is_sens:
+                p_msg = f"Sir, screen par sensitive window detect hui hai ({sens_desc}). Privacy protection ke tehat visual agent operation block kar diya gaya hai."
+                if player:
+                    player.write_log(f"VISUAL: 🛡️ {p_msg}")
+                if speak_fn and callable(speak_fn):
+                    speak_fn(p_msg)
+                return p_msg
+        except Exception:
+            pass
 
         # 1. Observe
         try:

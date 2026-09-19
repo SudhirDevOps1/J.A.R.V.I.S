@@ -126,6 +126,14 @@ def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]
 
 
 def _capture_screen() -> tuple[bytes, str]:
+    try:
+        from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
+        allowed, reason = is_screen_capture_allowed(is_stream=False)
+        if not allowed:
+            print(f"[Vision] 🛡️  Screen capture shielded: {reason}")
+            return generate_shield_frame(reason)
+    except Exception as _p_err:
+        pass
 
     if not _MSS:
         raise RuntimeError("mss is not installed. Run: pip install mss")

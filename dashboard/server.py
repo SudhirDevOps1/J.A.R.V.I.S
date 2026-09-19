@@ -668,7 +668,7 @@ class DashboardServer:
 
         @app.websocket("/ws/screen-stream")
         async def screen_stream_ws(websocket: WebSocket, token: str = "", fps: int = 5):
-            """Stream real-time compressed screen frames over WebSocket to clients."""
+            """Stream real-time compressed screen frames over WebSocket to clients with Privacy Guard."""
             tok = token.strip()
             if tok and tok not in self._tokens:
                 await websocket.close(code=4001)
@@ -676,12 +676,20 @@ class DashboardServer:
             await websocket.accept()
             fps = max(1, min(15, fps or 5))
             interval = 1.0 / fps
+            client_ip = websocket.client.host if websocket.client else "127.0.0.1"
+
             try:
                 from actions.screen_processor import _capture_screen
+                from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
                 while True:
                     t_start = asyncio.get_event_loop().time()
                     try:
-                        img_bytes, _ = await asyncio.to_thread(_capture_screen)
+                        # Check privacy guard before capturing or streaming
+                        allowed, reason = is_screen_capture_allowed(is_stream=True, client_ip=client_ip)
+                        if not allowed:
+                            img_bytes, _ = generate_shield_frame(reason)
+                        else:
+                            img_bytes, _ = await asyncio.to_thread(_capture_screen)
                         await websocket.send_bytes(img_bytes)
                     except Exception as e:
                         try:
@@ -700,8 +708,15 @@ class DashboardServer:
 
         @app.get("/api/screen-frame")
         async def screen_frame_ep(req: Request):
-            """Return current single screen snapshot as image/jpeg."""
+            """Return current single screen snapshot or Privacy Shield frame as image/jpeg."""
             try:
+                client_ip = req.client.host if req.client else "127.0.0.1"
+                from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
+                allowed, reason = is_screen_capture_allowed(is_stream=True, client_ip=client_ip)
+                if not allowed:
+                    img_bytes, mime = generate_shield_frame(reason)
+                    return Response(content=img_bytes, media_type=mime)
+
                 from actions.screen_processor import _capture_screen
                 img_bytes, mime = await asyncio.to_thread(_capture_screen)
                 return Response(content=img_bytes, media_type=mime)
@@ -710,16 +725,22 @@ class DashboardServer:
 
         @app.get("/api/screen-stream.mjpg")
         async def screen_stream_mjpg(req: Request, fps: int = 5):
-            """Motion-JPEG stream compatible with standard <img> tag in any browser."""
-            from actions.screen_processor import _capture_screen
+            """Motion-JPEG stream compatible with standard <img> tag, protected by Zero-Trust Privacy Shield."""
+            client_ip = req.client.host if req.client else "127.0.0.1"
             fps = max(1, min(15, fps or 5))
             interval = 1.0 / fps
 
             async def _frame_generator():
+                from actions.screen_processor import _capture_screen
+                from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
                 while True:
                     t0 = asyncio.get_event_loop().time()
                     try:
-                        img_bytes, _ = await asyncio.to_thread(_capture_screen)
+                        allowed, reason = is_screen_capture_allowed(is_stream=True, client_ip=client_ip)
+                        if not allowed:
+                            img_bytes, _ = generate_shield_frame(reason)
+                        else:
+                            img_bytes, _ = await asyncio.to_thread(_capture_screen)
                         yield (
                             b"--frame\r\n"
                             b"Content-Type: image/jpeg\r\n\r\n" + img_bytes + b"\r\n"
@@ -733,6 +754,37 @@ class DashboardServer:
                 _frame_generator(),
                 media_type="multipart/x-mixed-replace; boundary=frame"
             )
+
+        @app.post("/api/screen-stream/toggle")
+        async def toggle_screen_stream(req: Request):
+            """Toggle screen stream authorization on/off."""
+            from core.privacy_guard import is_stream_allowed, set_stream_allowed
+            target = None
+            try:
+                body = await req.json()
+                if isinstance(body, dict) and "allowed" in body:
+                    target = bool(body["allowed"])
+            except Exception:
+                pass
+            if target is None:
+                target = not is_stream_allowed()
+            msg = set_stream_allowed(target)
+            return JSONResponse({"status": "ok", "stream_allowed": target, "message": msg})
+
+        @app.get("/api/privacy/status")
+        async def get_privacy_status(req: Request):
+            """Return current privacy guard configuration and sensitive window status."""
+            from core.privacy_guard import load_privacy_settings, detect_sensitive_window
+            cfg = load_privacy_settings()
+            is_sens, sens_desc = detect_sensitive_window()
+            return JSONResponse({
+                "privacy_mode": cfg.get("privacy_mode", False),
+                "stream_allowed": cfg.get("stream_allowed", False),
+                "localhost_only": cfg.get("localhost_only", True),
+                "auto_shield_sensitive": cfg.get("auto_shield_sensitive", True),
+                "is_sensitive_window": is_sens,
+                "sensitive_detail": sens_desc
+            })
 
         # ── File sharing ──────────────────────────────────────────────────────
 

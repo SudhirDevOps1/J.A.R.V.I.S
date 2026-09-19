@@ -10,17 +10,18 @@
 ## 🎯 Executive Overview
 
 J.A.R.V.I.S. ships with:
-- **45 bundled actions** in `actions/` (including visual agent, multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
+- **46 bundled actions** in `actions/` (including privacy shield controller, visual agent, multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
 - **10 built-in plugins** in `plugins/` (Spotify, Pomodoro, Stock Quotes, Notion, Gmail, Calendar, Drive, GitHub, Slack, Smart Home)
 - **Tri-Tier Edge AI Router** (`core/edge_router.py`) — Needle 2 Reflex (<15ms, 28MB) → LFM 2.5 offline → Gemini Live Cloud
 - **Synchronized Assistant Persona Modes** — Teacher & Guru, DevOps Beast, Companion & GF, and J.A.R.V.I.S Tactical AI
 - **Headless Smart Services & Transit** — Live weather telemetry, background music playback & controls, multi-modal travel & transit routes, and eCommerce deal comparison with 0 browser popups
+- **Zero-Trust Screen Privacy Shield & Web Stream Security** (`core/privacy_guard.py`) — Default-OFF stream authorization, localhost-only Wi-Fi lock, real-time banking/password/incognito auto-blackout, and voice kill-switch
 - **Autonomous Visual Computer-Use & Self-Healing** (`actions/visual_agent.py`) — Closed-loop visual OODA agent with error popup detection & live WebSocket/MJPEG stream
 - **Autonomous Self-Learning & Mistake-Correction** (`memory/self_correction_log.json`)
 - **22+ free LLM providers** with round-robin key rotation and SQLite cache
 - **PyQt6 Cyberpunk HUD & PiP Companion** with 4 avatar modes, emotional expression badges, and live theming
 - **EdgeTTS & Gemini Live Realtime Neural Voice** stack with customizable pitch and tones
-- **Native Python Git hooks** — zero Node.js overhead, 92/92 passing tests
+- **Native Python Git hooks** — zero Node.js overhead, 100/100 passing tests
 - **Telegram Direct Protocol & Obsidian Brain** — zero-typo direct chat links, dual Local REST & filesystem note vault
 - **Subagent swarm orchestrator** (`core/subagent_swarm.py`) — Researcher, ReverseEngineer, SelfHealer, Reporter agents
 

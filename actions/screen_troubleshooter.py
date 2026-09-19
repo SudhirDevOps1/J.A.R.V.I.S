@@ -57,6 +57,14 @@ def _get_gemini_api_key() -> str:
 
 def _capture_screen_thumbnail() -> tuple[bytes, str]:
     """Capture screen and compress to <= 1280x720 JPEG thumbnail (<150KB)."""
+    try:
+        from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
+        allowed, reason = is_screen_capture_allowed(is_stream=False)
+        if not allowed:
+            return generate_shield_frame(reason)
+    except Exception:
+        pass
+
     if _MSS:
         with mss.mss() as sct:
             monitors = sct.monitors
