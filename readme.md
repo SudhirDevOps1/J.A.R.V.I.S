@@ -17,6 +17,8 @@
 
 A real-time, production-grade voice AI that can **hear, see, understand, and control your computer** — on Windows, macOS, and Linux. Powered by an efficient **Tri-Tier Edge AI Architecture** that runs critical operations fully offline, supports 22+ free LLM providers, and requires zero paid subscriptions to get started.
 
+> 📖 **Full Command & Control Guide:** Read the [Complete User Control & Feature Manual (USER_GUIDE.md)](USER_GUIDE.md) for detailed Hindi, Hinglish, and English voice/text commands across all categories.
+
 ---
 
 ## ✨ Overview
