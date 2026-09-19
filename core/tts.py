@@ -11,7 +11,9 @@ import asyncio
 import os
 import queue as _queue
 import re
+import sys
 import threading
+import time
 from typing import Callable, Optional
 
 import numpy as np
@@ -142,7 +144,23 @@ def _play_np(samples, sample_rate: int) -> None:
 
 
 def _play_audio_bytes(audio_bytes: bytes) -> None:
-    """Decode MP3/WAV/OGG bytes and play via pygame.mixer, soundfile, or miniaudio."""
+    """Decode MP3/WAV/OGG bytes and play via miniaudio, pygame, soundfile, or Windows native MCI."""
+    # 1. miniaudio: fast in-memory decoder, no external DLLs needed
+    try:
+        import miniaudio
+        decoded = miniaudio.decode(
+            audio_bytes,
+            output_format=miniaudio.SampleFormat.FLOAT32,
+            nchannels=1,
+        )
+        samples = np.array(decoded.samples, dtype=np.float32)
+        sd.play(samples, decoded.sample_rate)
+        sd.wait()
+        return
+    except Exception:
+        pass
+
+    # 2. pygame.mixer: if installed and available
     try:
         import io
         import pygame
@@ -157,6 +175,7 @@ def _play_audio_bytes(audio_bytes: bytes) -> None:
     except Exception:
         pass
 
+    # 3. soundfile + sounddevice: works well for WAV/OGG
     try:
         import io
         import soundfile as sf
@@ -168,18 +187,28 @@ def _play_audio_bytes(audio_bytes: bytes) -> None:
     except Exception:
         pass
 
-    try:
-        import miniaudio
-        decoded = miniaudio.decode(
-            audio_bytes,
-            output_format=miniaudio.SampleFormat.FLOAT32,
-            nchannels=1,
-        )
-        samples = np.array(decoded.samples, dtype=np.float32)
-        sd.play(samples, decoded.sample_rate)
-        sd.wait()
-    except Exception as e:
-        print(f"[TTS] Audio playback error: {e}")
+    # 4. Windows native MCI (winmm.dll) fallback: zero-dependency native MP3/WAV player
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+                tf.write(audio_bytes)
+                temp_path = tf.name
+            alias = f"jarvis_tts_{int(time.time() * 1000)}"
+            mci = ctypes.windll.winmm.mciSendStringW
+            mci(f'open "{temp_path}" type mpegvideo alias {alias}', None, 0, 0)
+            mci(f'play {alias} wait', None, 0, 0)
+            mci(f'close {alias}', None, 0, 0)
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+            return
+        except Exception as mci_err:
+            print(f"[TTS] Windows native MCI fallback error: {mci_err}")
+
+    print("[TTS] Audio playback error: No working audio backend found (miniaudio, pygame, soundfile, MCI)")
 
 
 

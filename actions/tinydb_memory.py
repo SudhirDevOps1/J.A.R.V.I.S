@@ -48,7 +48,19 @@ class _SimpleNoSQL:
 
     def _save(self):
         try:
-            self.file_path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
+            save_data = {}
+            for tbl_name, items in self._data.items():
+                if isinstance(items, list):
+                    save_data[tbl_name] = {
+                        str(d.get("_id", i + 1)): d
+                        for i, d in enumerate(items)
+                        if isinstance(d, dict)
+                    }
+                elif isinstance(items, dict):
+                    save_data[tbl_name] = items
+                else:
+                    save_data[tbl_name] = {}
+            self.file_path.write_text(json.dumps(save_data, indent=2), encoding="utf-8")
         except Exception as e:
             print(f"[TinyDB] Save error: {e}")
 
@@ -111,24 +123,43 @@ class _SimpleTable:
 
 
 def _normalize_tinydb_file():
-    """Normalize tinydb_store.json to list-based format for _SimpleNoSQL compatibility."""
+    """Ensure tinydb_store.json uses dictionary-backed tables for TinyDB compatibility."""
     if not _STORE_FILE.exists():
         return
     try:
-        raw = json.loads(_STORE_FILE.read_text(encoding="utf-8"))
+        content = _STORE_FILE.read_text(encoding="utf-8").strip()
+        if not content:
+            _STORE_FILE.write_text("{}", encoding="utf-8")
+            return
+        raw = json.loads(content)
         if not isinstance(raw, dict):
             _STORE_FILE.write_text("{}", encoding="utf-8")
             return
         modified = False
-        for tbl_name, tbl_data in raw.items():
-            if isinstance(tbl_data, dict):
-                # TinyDB-native dict → convert to list (keyed by int id)
-                raw[tbl_name] = list(tbl_data.values())
+        for tbl_name, tbl_data in list(raw.items()):
+            if isinstance(tbl_data, list):
+                # TinyDB requires dict keyed by doc_id string
+                tbl_dict = {}
+                for idx, item in enumerate(tbl_data, 1):
+                    if isinstance(item, dict):
+                        doc_id = str(item.get("_id", idx))
+                        item["_id"] = int(doc_id) if str(doc_id).isdigit() else idx
+                        tbl_dict[doc_id] = item
+                raw[tbl_name] = tbl_dict
                 modified = True
+            elif isinstance(tbl_data, dict):
+                # Ensure dict items have _id
+                for k, v in tbl_data.items():
+                    if isinstance(v, dict) and "_id" not in v and str(k).isdigit():
+                        v["_id"] = int(k)
+                        modified = True
         if modified:
             _STORE_FILE.write_text(json.dumps(raw, indent=2), encoding="utf-8")
     except Exception:
-        pass
+        try:
+            _STORE_FILE.write_text("{}", encoding="utf-8")
+        except Exception:
+            pass
 
 
 def _get_db():
@@ -146,13 +177,16 @@ def add_task_reminder(task: str, due: str = "soon", category: str = "general") -
     db = _get_db()
     try:
         table = db.table("tasks")
-        doc_id = table.insert({
+        doc_data = {
             "task": task,
             "due": due,
             "category": category,
             "status": "pending",
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        })
+        }
+        doc_id = table.insert(doc_data)
+        if _HAS_TINYDB:
+            table.update({"_id": doc_id}, doc_ids=[doc_id])
         return f"✅ Task #{doc_id} yaad rakh liya: '{task}' (Due: {due}). 'tasks list karo' se dekh sakte ho."
     finally:
         if _HAS_TINYDB:
@@ -195,11 +229,21 @@ def complete_task(task_id: int | str) -> str:
         if _HAS_TINYDB:
             Task = Query()
             results = table.search(Task["_id"] == tid)
-            if not results:
+            target_doc_id = None
+            task_title = ""
+            if results:
+                target_doc_id = getattr(results[0], "doc_id", tid)
+                task_title = results[0].get("task", "")
+            elif table.contains(doc_id=tid):
+                doc = table.get(doc_id=tid)
+                if doc:
+                    target_doc_id = tid
+                    task_title = doc.get("task", "")
+            if target_doc_id is None:
                 return f"Task #{tid} nahi mila. 'tasks list karo' se IDs dekho."
             table.update({"status": "done", "completed_at": datetime.now().strftime("%Y-%m-%d %H:%M")},
-                         Task["_id"] == tid)
-            return f"✅ Task #{tid} mark done kar diya: '{results[0].get('task', '')}'"
+                         doc_ids=[target_doc_id])
+            return f"✅ Task #{tid} mark done kar diya: '{task_title}'"
         else:
             task_obj = next((t for t in table.all() if t.get("_id") == tid), None)
             if not task_obj:
@@ -225,10 +269,20 @@ def delete_task(task_id: int | str) -> str:
         if _HAS_TINYDB:
             Task = Query()
             results = table.search(Task["_id"] == tid)
-            if not results:
+            target_doc_id = None
+            task_title = ""
+            if results:
+                target_doc_id = getattr(results[0], "doc_id", tid)
+                task_title = results[0].get("task", "")
+            elif table.contains(doc_id=tid):
+                doc = table.get(doc_id=tid)
+                if doc:
+                    target_doc_id = tid
+                    task_title = doc.get("task", "")
+            if target_doc_id is None:
                 return f"Task #{tid} nahi mila."
-            table.remove(Task["_id"] == tid)
-            return f"🗑️ Task #{tid} delete kar diya: '{results[0].get('task', '')}'"
+            table.remove(doc_ids=[target_doc_id])
+            return f"🗑️ Task #{tid} delete kar diya: '{task_title}'"
         else:
             task_obj = next((t for t in table.all() if t.get("_id") == tid), None)
             if not task_obj:

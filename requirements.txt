@@ -4,6 +4,8 @@ sounddevice
 numpy
 google-genai>=2.8.0
 edge-tts
+miniaudio
+soundfile
 # NOTE: piper-tts REMOVED per user request (Edge TTS + Gemini Live only).
 
 # ── Web search & browser control ──────────────────────────────────────────────

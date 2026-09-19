@@ -563,11 +563,59 @@ class NeedleToolRouter:
         if re.search(r"\b(kaun sa din|aaj kaun sa din|aaj din|din batao)\b", clean):
             return _dispatch("clock", {"action": "day"})
 
-        # ADDITIVE PiP: "pip mode on karo", "mini window kholo", "pip band karo".
+        # ADDITIVE PiP mode control & inspection
+        # "pip mode on karo", "mini window kholo", "pip band karo", "pip bada karo", "pip chhota karo", "pip mode me dekho", "pip window me kya hai"
         if re.search(r"\b(pip(\s*mode)?|mini\s*window)\b", clean):
-            if re.search(r"\b(band|off|close|hat|hatao)\b", clean):
+            # 1. Inspection / Vision queries on PiP window
+            if re.search(r"\b(dekho|dekhna|dekh|check|kya hai|kya likha|padho|inspect|analyze|read|status)\b", clean):
+                if re.search(r"\b(chat|likha|log|transcript|status)\b", clean):
+                    return _dispatch("pip_mode", {"action": "inspect"})
+                return _dispatch("troubleshoot_screen", {"query": "Inspect PiP overlay companion window and active screen"})
+            # 2. Resize / Compact / Expand
+            if re.search(r"\b(bada|expand|maximize|badi)\b", clean):
+                return _dispatch("pip_mode", {"action": "expand"})
+            if re.search(r"\b(chhota|chhoti|compact|shrink|minimize)\b", clean):
+                return _dispatch("pip_mode", {"action": "compact"})
+            if re.search(r"\b(clear|saaf|safai)\b", clean):
+                return _dispatch("pip_mode", {"action": "clear"})
+            # 3. Off / Close
+            if re.search(r"\b(band|off|close|hat|hatao|chhipao|hide)\b", clean):
                 return _dispatch("pip_mode", {"action": "off"})
+            # 4. On / Open
             return _dispatch("pip_mode", {"action": "on"})
+
+        # ADDITIVE Screen & Main Window Vision Inspection:
+        # "main window dekho", "main screen dekho", "screen dekho", "display dekho", "screen check karo", "code error dekho", "terminal crash dekho"
+        # Guard: Camera queries ("camera se dekho") must NOT match here
+        if not re.search(r"\b(camera|webcam|cam)\b", clean):
+            if re.search(r"\b(main\s*(window|screen)|hud|desktop|screen|display|monitor)\s*(?:par|me|mein|pe)?\s*(?:kya hai|dekho|check karo|inspect|analyze|padho)\b", clean) or \
+               re.search(r"\b(dekho|check karo|inspect)\s*(?:to\s*)?(main\s*(window|screen)|screen|desktop|display)\b", clean) or \
+               re.search(r"\b(screen dekho|screen check|code error dekho|terminal crash dekho|error dekho|screen padho)\b", clean):
+                if "main" in clean:
+                    q = "Inspect JARVIS main window and screen content"
+                elif any(w in clean for w in ("code", "error", "crash", "traceback", "bug")):
+                    q = "Identify code error, compiler trace, or terminal crash on screen"
+                else:
+                    q = "Inspect active screen display and describe content"
+                return _dispatch("troubleshoot_screen", {"query": q})
+
+        # Focus Main Window / HUD: "main window kholo", "main window samne lao", "hud dikhao"
+        if re.search(r"\b(main\s*(window|screen)|hud)\s*(?:ko\s*)?(kholo|open|dikhao|samne\s*lao|focus)\b|\b(focus|open)\s*(main\s*(window|screen)|hud)\b", clean):
+            return _dispatch("computer_settings", {"action": "focus_window", "value": "JARVIS"})
+
+        # Instant Alarm & Timed Reminders (Tier 1 <15ms Needle Reflex):
+        # "5 min ka alarm lagao", "10 minute ka timer", "alarm lagao", "kal shaam 6 baje reminder"
+        m_alarm = re.search(r"\b(alarm|timer|reminder|yaad dilao|yaad dilana)\b", clean)
+        if m_alarm and any(w in clean for w in ("laga", "lagao", "set", "karo", "rakho", "do", "dal do")):
+            m_dur = re.search(r"(\d+)\s*(?:minutes?|mins?|min|m|ghante?|hours?|hrs?|hr|h|seconds?|secs?|sec|s)\b", clean)
+            dur_str = m_dur.group(0) if m_dur else ""
+            m_tm = re.search(r"(\d{1,2}(?::\d{2})?\s*(?:am|pm|baje)?)", clean)
+            tm_str = dur_str or (m_tm.group(0) if m_tm else "")
+            msg_clean = re.sub(r"\b(alarm|timer|reminder|yaad dilao|yaad dilana|laga\s*do|lagao|laga|set\s*karo|set|karo|do|ka|ki|ke|ko|par|pe|me|mein|bhai|yaar|please)\b", "", clean).strip()
+            msg_clean = re.sub(r"\s{2,}", " ", msg_clean).strip()
+            final_msg = msg_clean or f"{m_alarm.group(1).title()} Alert"
+            date_arg = "kal" if "kal" in clean or "tomorrow" in clean else ""
+            return _dispatch("reminder", {"time": tm_str or clean, "message": final_msg, "date": date_arg})
 
         # -- System Metrics & Battery -----------------------------------------
         if re.search(r"\b(cpu usage|ram usage|temperature|system status|hardware status|pc performance"

@@ -1,10 +1,11 @@
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, time as dt_time
 from pathlib import Path
 
 _CNW: dict = (
@@ -284,27 +285,99 @@ def _schedule_linux(target_dt: datetime, task_name: str,
     print("[Reminder] ❌ Neither systemd-run nor at found on this Linux system.")
     return ""
 
+
+def _parse_target_datetime(date_str: str, time_str: str, message: str) -> tuple[datetime | None, str]:
+    """Parse relative time, natural date/time, or standard YYYY-MM-DD HH:MM into a datetime object."""
+    now = datetime.now()
+    raw_time = time_str.strip().lower()
+    raw_date = date_str.strip().lower()
+    raw_msg  = message.strip().lower()
+    combined = f"{raw_time} {raw_msg} {raw_date}"
+
+    # 1. Relative durations: e.g. "5 min", "5 minutes", "10 min ka", "1 hr", "2 ghante", "30 sec"
+    m_rel = re.search(r"(\d+)\s*(?:minutes?|mins?|min|m|ghante?|hours?|hrs?|hr|h|seconds?|secs?|sec|s)\b", combined)
+    if m_rel:
+        val = int(m_rel.group(1))
+        unit = m_rel.group(0).lower()
+        if any(h in unit for h in ["h", "ghant"]):
+            return now + timedelta(hours=val), f"{val} hour(s)"
+        elif any(s in unit for s in ["s"]) and not any(m in unit for m in ["min", "m"]):
+            return now + timedelta(seconds=max(val, 10)), f"{val} second(s)"
+        else:
+            return now + timedelta(minutes=val), f"{val} minute(s)"
+
+    # 2. Base date resolution: "kal" / "tomorrow" -> today + 1 day
+    base_date = now.date()
+    if any(k in f"{raw_date} {raw_msg}" for k in ["kal", "tomorrow"]):
+        base_date = base_date + timedelta(days=1)
+    elif any(k in f"{raw_date} {raw_msg}" for k in ["parso"]):
+        base_date = base_date + timedelta(days=2)
+    elif raw_date:
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%d.%m.%Y"):
+            try:
+                base_date = datetime.strptime(raw_date, fmt).date()
+                break
+            except ValueError:
+                pass
+
+    # 3. Direct standard time parsing (e.g. 18:30, 6:30 pm)
+    clean_t = re.sub(r"\b(baje|o'?clock|subah|shaam|dopahar|raat)\b", "", raw_time).strip()
+    for fmt in ("%H:%M", "%I:%M %p", "%I %p", "%I:%M%p", "%I%p", "%H"):
+        try:
+            parsed_t = datetime.strptime(clean_t, fmt).time()
+            target_dt = datetime.combine(base_date, parsed_t)
+            if target_dt <= now and not any(k in f"{raw_date} {raw_msg}" for k in ["kal", "tomorrow", "parso"]):
+                target_dt += timedelta(days=1)
+            return target_dt, ""
+        except ValueError:
+            pass
+
+    # 4. Regex search for time in combined string (e.g. "6:30 pm", "6 pm", "6 baje", "18:00")
+    m_time = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|baje)?\b", combined)
+    if m_time:
+        hh = int(m_time.group(1))
+        mm = int(m_time.group(2)) if m_time.group(2) else 0
+        suffix = m_time.group(3) or ""
+        if "shaam" in combined or "raat" in combined:
+            if hh < 12:
+                hh += 12
+        elif suffix == "pm" and hh < 12:
+            hh += 12
+        elif suffix == "am" and hh == 12:
+            hh = 0
+        try:
+            parsed_t = dt_time(hour=hh, minute=mm)
+            target_dt = datetime.combine(base_date, parsed_t)
+            if target_dt <= now and not any(k in f"{raw_date} {raw_msg}" for k in ["kal", "tomorrow", "parso"]):
+                target_dt += timedelta(days=1)
+            return target_dt, ""
+        except ValueError:
+            pass
+
+    return None, ""
+
+
 def reminder(
     parameters: dict,
     response=None,
     player=None,
     session_memory=None,
 ) -> str:
+    params = parameters or {}
+    date_str = str(params.get("date") or "").strip()
+    time_str = str(params.get("time") or "").strip()
+    message  = str(params.get("message") or params.get("text") or params.get("task") or "Reminder").strip()
 
-    date_str = parameters.get("date", "").strip()
-    time_str = parameters.get("time", "").strip()
-    message  = parameters.get("message", "Reminder").strip()
+    if not time_str and not date_str and not message:
+        return "Reminder ya alarm ke liye time batao (e.g., '5 min ka alarm', 'kal shaam 6 baje')."
 
-    if not date_str or not time_str:
-        return "I need both a date and a time to set a reminder."
+    target_dt, desc = _parse_target_datetime(date_str, time_str, message)
+    if not target_dt:
+        return "Reminder ka time samajh nahi aaya. Please specify time (e.g., '5 min baad', '6:30 pm', 'kal subah 9 baje')."
 
-    try:
-        target_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        return "I couldn't parse that date or time. Please use YYYY-MM-DD and HH:MM."
-
-    if target_dt <= datetime.now():
-        return "That time has already passed — I can't set a reminder in the past."
+    now = datetime.now()
+    if target_dt <= now:
+        return "Yeh time nikal chuka hai — main past ka reminder set nahi kar sakta."
 
     os_name    = _get_os()
     safe_msg   = _sanitise(message)
@@ -315,6 +388,7 @@ def reminder(
     except Exception as e:
         return f"Could not prepare the reminder script: {e}"
 
+    job_id = ""
     try:
         if os_name == "windows":
             job_id = _schedule_windows(target_dt, task_name, script_path, safe_msg)
@@ -323,44 +397,57 @@ def reminder(
         else:
             job_id = _schedule_linux(target_dt, task_name, script_path)
     except Exception as e:
-        script_path.unlink(missing_ok=True)
-        print(f"[Reminder] ❌ Scheduling exception: {e}")
-        return "Something went wrong while scheduling the reminder."
+        print(f"[Reminder] ❌ Primary scheduler exception: {e}")
 
     if not job_id:
-        return "I couldn't register the reminder with the system scheduler."
+        # Fallback background timer for Windows or quick alarms if schtasks fails
+        delay_sec = max(1, int((target_dt - datetime.now()).total_seconds()))
+        if delay_sec <= 3600 * 24:
+            try:
+                cmd = f"import time, subprocess; time.sleep({delay_sec}); subprocess.run([r'{sys.executable}', r'{script_path}'])"
+                subprocess.Popen([sys.executable, "-c", cmd], **_CNW)
+                job_id = task_name
+            except Exception as fb_err:
+                print(f"[Reminder] Fallback timer error: {fb_err}")
+
+    if not job_id:
+        script_path.unlink(missing_ok=True)
+        return "System scheduler me reminder register nahi ho paya."
 
     if player:
-        player.write_log(f"[Reminder] ✅ {date_str} {time_str} — {safe_msg[:40]}")
+        player.write_log(f"[Reminder] ✅ {target_dt.strftime('%Y-%m-%d %H:%M')} — {safe_msg[:40]}")
 
     friendly_time = target_dt.strftime("%B %d at %I:%M %p")
-    return f"Reminder set for {friendly_time}."
+    if desc:
+        return f"✅ Reminder/Alarm set kar diya hai ({desc} baad — {friendly_time}): '{safe_msg}'"
+    return f"✅ Reminder set for {friendly_time}: '{safe_msg}'"
 
 
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "reminder",
-    "description": "Sets a timed reminder using Task Scheduler.",
+    "description": (
+        "Sets a timed reminder, timer, or alarm using Task Scheduler or background timer. "
+        "Supports relative times like '5 min', '10 minutes', '1 hour' and specific times like '6:30 pm', 'kal shaam 6 baje'."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
-            "date": {
-                "type": "STRING",
-                "description": "Date in YYYY-MM-DD format"
-            },
             "time": {
                 "type": "STRING",
-                "description": "Time in HH:MM format (24h)"
+                "description": "Time or duration (e.g. '5 min', '10 minutes', '18:30', '6:30 pm', 'kal 6 baje')"
             },
             "message": {
                 "type": "STRING",
-                "description": "Reminder message text"
+                "description": "Reminder or alarm description/reason"
+            },
+            "date": {
+                "type": "STRING",
+                "description": "Optional date (YYYY-MM-DD or 'today'/'tomorrow'). Defaults to today."
             }
         },
         "required": [
-            "date",
-            "time",
-            "message"
+            "time"
         ]
     },
     "handler": reminder,

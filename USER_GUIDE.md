@@ -197,10 +197,17 @@ Universal drive audio scanner + YouTube fallback:
 
 ---
 
-### 👁️ 5. Vision, Screen Troubleshooter & Camera AI
+### 👁️ 5. Vision, Screen Troubleshooter, PiP Companion & Camera AI
 - **Screen TroubleShooter**:
   - *"Screen dekho aur error samjhao"*
   - High-resolution screen capture karta hai, code bug, console traceback ya dialog box read karke solution batata hai.
+  - *"Main window dekho"* / *"Main window kholo"* — Main interface ko focus ya inspect karta hai.
+- **PiP Mode (Always-On-Top Mini Companion)**:
+  - *"Pip mode on karo"* / *"Mini window kholo"* — Browser ke upar floating compact UI kholta hai.
+  - *"Pip mode me dekho"* / *"Pip window me kya hai"* — Screen par active PiP companion overlay aur screen content inspect karta hai.
+  - *"Pip status dekho"* / *"Pip chat dekho"* — PiP window ka exact status aur recent messages batata hai.
+  - *"Pip bada karo"* / *"Pip chhota karo"* — PiP window ko expand ya compact karta hai.
+  - *"Pip band karo"* / *"Pip hatao"* — PiP mode ko close karta hai.
 - **Camera Vision (Physical Reality)**:
   - *"Camera chalu karo"*
   - *"Camera se dekho yeh kaun si dawai hai?"*
@@ -242,7 +249,8 @@ J.A.R.V.I.S. sirf ek sawaal ka jawab nahi deta, balki complex goals ko autonomou
   - *"Obsidian me search karo Docker commands"*
 - **Clock & Alarms**:
   - *"Abhi kya samay ho raha hai?"*
-  - *"Subah 6 baje ka alarm lagao"*
+  - *"5 min ka alarm lagao"* / *"10 minute ka timer lagao"* (Relative duration auto-calculates without asking for date)
+  - *"Subah 6 baje ka alarm lagao"* / *"Kal shaam 6:30 baje reminder"*
 
 ---
 

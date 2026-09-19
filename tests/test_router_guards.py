@@ -134,3 +134,55 @@ def test_persona_colloquial_directive_injected():
     for verb_family in ("DEKHNA", "SUNNA", "BOLNA", "CHALNA", "KARNA"):
         assert verb_family in prompt
 
+
+def test_pip_mode_and_main_window_routing():
+    """Verify PiP inspection, main window vision, and PiP controls routing."""
+    from core.edge_router import NeedleToolRouter
+    r = NeedleToolRouter()
+
+    # 1. PiP inspection (visual)
+    out_pip_vis = r.classify_tool_intent("pip mode me dekho")
+    assert out_pip_vis is not None and out_pip_vis[0] == "troubleshoot_screen"
+
+    out_pip_what = r.classify_tool_intent("pip window me kya hai")
+    assert out_pip_what is not None and out_pip_what[0] == "troubleshoot_screen"
+
+    # 2. PiP status / transcript inspection
+    out_pip_stat = r.classify_tool_intent("pip status dekho")
+    assert out_pip_stat is not None and out_pip_stat[0] == "pip_mode" and out_pip_stat[1]["action"] == "inspect"
+
+    # 3. PiP controls (on / off / expand / compact)
+    out_on = r.classify_tool_intent("pip mode on karo")
+    assert out_on is not None and out_on[0] == "pip_mode" and out_on[1]["action"] == "on"
+
+    out_off = r.classify_tool_intent("pip band karo")
+    assert out_off is not None and out_off[0] == "pip_mode" and out_off[1]["action"] == "off"
+
+    out_exp = r.classify_tool_intent("pip bada karo")
+    assert out_exp is not None and out_exp[0] == "pip_mode" and out_exp[1]["action"] == "expand"
+
+    out_cmp = r.classify_tool_intent("pip chhota karo")
+    assert out_cmp is not None and out_cmp[0] == "pip_mode" and out_cmp[1]["action"] == "compact"
+
+    # 4. Main window / screen vision
+    out_main = r.classify_tool_intent("main window dekho")
+    assert out_main is not None and out_main[0] == "troubleshoot_screen"
+
+    out_scr = r.classify_tool_intent("screen dekho")
+    assert out_scr is not None and out_scr[0] == "troubleshoot_screen"
+
+
+def test_instant_alarm_reminder_routing():
+    """Verify relative duration alarm and reminder reflex routing."""
+    from core.edge_router import NeedleToolRouter
+    r = NeedleToolRouter()
+
+    out_alarm = r.classify_tool_intent("5 min ka alarm lagao")
+    assert out_alarm is not None and out_alarm[0] == "reminder"
+    assert "5 min" in out_alarm[1]["time"]
+
+    out_rem = r.classify_tool_intent("kal shaam 6 baje reminder set karo")
+    assert out_rem is not None and out_rem[0] == "reminder"
+    assert out_rem[1]["date"] == "kal"
+
+
