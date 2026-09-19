@@ -711,8 +711,9 @@ class JarvisLive:
         # transcription clock update karta tha, to typed baat-cheet ke beech me
         # system-monitor/proactive alerts ghus jate the.
         self._last_user_speech = time.monotonic()
-        # Immediately halt any active audio/speech so typed commands and reflex actions have exclusive audio
-        self.interrupt()
+        # Immediately halt any active audio/speech if AI was speaking mid-sentence
+        if getattr(self, "_is_speaking", False) or (self.audio_in_queue and not self.audio_in_queue.empty()):
+            self.interrupt()
 
         from memory.memory_manager import log_daily_activity
         log_daily_activity(text)
@@ -979,10 +980,9 @@ class JarvisLive:
 
     def interrupt(self) -> None:
         """Stop JARVIS mid-speech: drain queued audio and open mic immediately."""
-        self._interrupted = True
         q = self.audio_in_queue
+        drained = 0
         if q:
-            drained = 0
             while True:
                 try:
                     q.get_nowait()
@@ -999,10 +999,13 @@ class JarvisLive:
         except Exception:
             pass
 
+        was_speaking = getattr(self, "_is_speaking", False) or (drained > 0)
+        self._interrupted = was_speaking
         self.set_speaking(False)
         if self._turn_done_event:
             self._turn_done_event.clear()
-        self.ui.write_log("SYS: Interrupted — listening...")
+        if was_speaking:
+            self.ui.write_log("SYS: Interrupted — listening...")
 
     def speak(self, text: str):
         # ADDITIVE: AI speech clock — TTS/Edge replies _is_speaking set nahi karte,
