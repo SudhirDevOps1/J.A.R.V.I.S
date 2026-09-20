@@ -251,41 +251,13 @@ class EdgeTTSEngine:
         self._loop_thread: threading.Thread | None = None
         self._loop_lock = threading.Lock()
 
-    def _get_loop(self) -> asyncio.AbstractEventLoop:
-        """Get or create a persistent event loop in a dedicated thread."""
-        with self._loop_lock:
-            if self._loop is not None and not self._loop.is_closed():
-                return self._loop
-            # Create new loop in a dedicated thread
-            loop_ready = threading.Event()
-            def run_loop():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                with self._loop_lock:
-                    self._loop = loop
-                loop_ready.set()
-                try:
-                    loop.run_forever()
-                finally:
-                    loop.close()
-                    with self._loop_lock:
-                        if self._loop is loop:
-                            self._loop = None
-            self._loop_thread = threading.Thread(target=run_loop, daemon=True, name="EdgeTTS-Loop")
-            self._loop_thread.start()
-            loop_ready.wait(timeout=5.0)
-            if self._loop is None:
-                raise RuntimeError("Failed to start EdgeTTS event loop")
-            return self._loop
-
     def speak(self, text: str) -> None:
         cleaned = clean_speech_text(text)
         if not cleaned:
             return
-        loop = self._get_loop()
-        future = asyncio.run_coroutine_threadsafe(self._synth(cleaned), loop)
+        
         try:
-            audio_bytes = future.result(timeout=30.0)
+            audio_bytes = asyncio.run(self._synth(cleaned))
         except Exception as e:
             print(f"[EdgeTTS] Synthesis failed ({e}). Attempting offline SAPI fallback...")
             if _speak_sapi_fallback(cleaned):
@@ -295,14 +267,8 @@ class EdgeTTSEngine:
             _play_audio_bytes(audio_bytes)
 
     def shutdown(self) -> None:
-        """Stop the persistent event loop."""
-        with self._loop_lock:
-            if self._loop is not None and not self._loop.is_closed():
-                self._loop.call_soon_threadsafe(self._loop.stop)
-                self._loop = None
-            if self._loop_thread is not None:
-                self._loop_thread.join(timeout=2.0)
-                self._loop_thread = None
+        """Cleanup logic if any."""
+        pass
 
     async def _synth(self, text: str) -> bytes:
         import edge_tts

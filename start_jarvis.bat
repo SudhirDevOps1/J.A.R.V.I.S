@@ -133,6 +133,7 @@ if "%~1"=="--dry-run" (
 :: 6. Hands-Free Launch (Zero Enter required)
 echo [*] Starting J.A.R.V.I.S. neural interface...
 echo.
+set "PYTHONWARNINGS=ignore::DeprecationWarning"
 "%PYTHON_EXE%" main.py %*
 
 if %ERRORLEVEL% NEQ 0 (

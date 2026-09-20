@@ -1,6 +1,8 @@
 import os as _os
 import warnings as _warnings
-_warnings.filterwarnings("ignore", category=DeprecationWarning, module="sounddevice")
+_warnings.filterwarnings("ignore", category=DeprecationWarning)
+_warnings.filterwarnings("ignore", message=".*Setting the shape on a NumPy array.*")
+_os.environ["PYTHONWARNINGS"] = "ignore::DeprecationWarning"
 _os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false;qt.qpa.mime=false;qt.qpa.clipboard=false;qt.pointer.dispatch=false"
 _os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
@@ -58,6 +60,15 @@ from pathlib import Path
 
 import sounddevice as sd
 import numpy as np
+
+# Safe runtime guard for NumPy 2.5 shape setter deprecation in sounddevice callbacks
+try:
+    def _patched_sd_array(buffer, channels, dtype):
+        return np.frombuffer(buffer, dtype=dtype).reshape(-1, channels)
+    sd._array = _patched_sd_array
+except Exception:
+    pass
+
 from google import genai
 from google.genai import types
 
