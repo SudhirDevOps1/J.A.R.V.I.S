@@ -59,6 +59,10 @@ def _dispatch_step_to_tool(step: str, goal: str, player=None, speak_fn=None) -> 
 
     # Destination detection from goal or step argument
     dest = ""
+    is_travel = any(
+        w in (arg_candidate + " " + goal).lower()
+        for w in ("travel", "trip", "tour", "flight", "train", "bus", "hotel", "yatra", "transit", "ghumo", "jao", "ticket", "vacation", "manali", "goa", "jaipur", "shimla", "agra")
+    )
     for text_src in (arg_candidate, goal):
         m = re.search(r"\b(?:to|in|for|reach|visit|jao|jaana|ghumo)\s+([A-Za-z]+)", text_src, re.IGNORECASE)
         if m:
@@ -69,7 +73,8 @@ def _dispatch_step_to_tool(step: str, goal: str, player=None, speak_fn=None) -> 
             if d.lower() in (arg_candidate + " " + goal).lower():
                 dest = d
                 break
-    if not dest:
+    # Strictly do NOT default to Goa for general tasks (e.g. Java study plan, coding, reading)
+    if not dest and is_travel:
         dest = "Goa"
 
     # Tool name normalization
@@ -93,16 +98,16 @@ def _dispatch_step_to_tool(step: str, goal: str, player=None, speak_fn=None) -> 
     if tool_name == "visual_agent":
         params = {"goal": arg_candidate or step or goal, "max_steps": 4}
     elif tool_name == "travel_transit":
-        params = {"destination": dest, "origin": "Delhi", "mode": "all"}
+        params = {"destination": dest or "Delhi", "origin": "Delhi", "mode": "all"}
     elif tool_name == "flight_finder":
-        params = {"origin": "Delhi", "destination": dest, "date": "tomorrow"}
+        params = {"origin": "Delhi", "destination": dest or "Mumbai", "date": "tomorrow"}
     elif tool_name == "web_search":
         q = arg_candidate or goal
-        if dest and dest.lower() not in q.lower():
+        if dest and is_travel and dest.lower() not in q.lower():
             q = f"{q} {dest}"
         params = {"query": q}
     elif tool_name == "reminder":
-        task_text = arg_candidate or f"{goal} pack checklist"
+        task_text = arg_candidate or f"{goal} checklist"
         from datetime import datetime, timedelta
         target = datetime.now() + timedelta(hours=3)
         params = {
@@ -113,7 +118,7 @@ def _dispatch_step_to_tool(step: str, goal: str, player=None, speak_fn=None) -> 
             "reminder": task_text,
         }
     elif tool_name == "send_message":
-        msg_body = f"[Plan: {goal}] {arg_candidate or 'Trip update ready'}"
+        msg_body = f"[Plan: {goal}] {arg_candidate or 'Task update ready'}"
         params = {
             "platform": "telegram",
             "receiver": "Saved Messages",

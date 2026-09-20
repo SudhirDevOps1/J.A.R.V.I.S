@@ -115,6 +115,10 @@ def check_local_llm_health(timeout: float = 1.5) -> Dict[str, Any]:
         }
 
 
+_last_offline_time: float = 0.0
+_OFFLINE_COOLDOWN: float = 30.0
+
+
 def generate_local_llm(
     prompt: str,
     system_prompt: str = "",
@@ -123,8 +127,14 @@ def generate_local_llm(
     """
     Query the local LLM (Ollama) safely.
     If disabled or offline, returns None immediately so JARVIS routes to Gemini Cloud/Live.
+    Includes a 30s cooldown cache to avoid repeated 1.5s socket timeouts when Ollama is not running.
     """
+    global _last_offline_time
     if not is_local_llm_enabled():
+        return None
+
+    now = time.monotonic()
+    if (now - _last_offline_time) < _OFFLINE_COOLDOWN:
         return None
 
     cfg = get_local_llm_config()
@@ -156,10 +166,12 @@ def generate_local_llm(
         with urllib.request.urlopen(req, timeout=to) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             ans = result.get("response", "").strip()
+            _last_offline_time = 0.0
             return ans if ans else None
     except Exception as e:
+        _last_offline_time = time.monotonic()
         if isinstance(e, urllib.error.URLError) and "10061" in str(e):
-            print(f"[LocalLLMBridge] Local engine not running on {cfg['url']}. Falling back to cloud.")
+            print(f"[LocalLLMBridge] Local engine not running on {cfg['url']}. Cooldown active for 30s.")
         else:
-            print(f"[LocalLLMBridge] Request failed ({e}). Falling back to cloud.")
+            print(f"[LocalLLMBridge] Request failed ({e}). Cooldown active for 30s.")
         return None

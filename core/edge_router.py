@@ -75,6 +75,14 @@ def strip_action_verbs(text: str) -> str:
         return (text or "").strip()
 
 
+_OBS_JUNK_TOKENS = {
+    "kro", "karo", "kar", "do", "dena", "karna", "krna", "krke", "karke",
+    "please", "plz", "zara", "abhi", "thoda", "save", "likho", "likh",
+    "banao", "bana", "untitled", "note", "notes", "dal", "daal", "daalo",
+    "is", "us", "ye", "yeh", "wo", "woh", "isko", "ise", "use", "unhe", ""
+}
+
+
 class NeedleToolRouter:
     """Tier 1: Needle 2 Reflex Engine.
     Runs in ~28 MB RAM. Converts spoken or typed natural language commands
@@ -668,14 +676,28 @@ class NeedleToolRouter:
             act = "battery" if any(w in clean for w in ("battery", "charge", "charging")) else "cpu"
             return _dispatch("system_status", {"action": act})
 
-        # ADDITIVE: "X obsidian me save karo" / "obsidian me likho X" -> daily note.
+        # ADDITIVE: "X obsidian me save karo" / "obsidian me likho X" -> daily note or context note.
         # Pehle ye hissa drop ho jata tha (model tool bhool jata tha).
+        _OBS_JUNK_TOKENS = {
+            "kro", "karo", "kar", "do", "dena", "karna", "krna", "krke", "karke",
+            "please", "plz", "zara", "abhi", "thoda", "save", "likho", "likh",
+            "banao", "bana", "untitled", "note", "notes", "dal", "daal", "daalo",
+            "is", "us", "ye", "yeh", "wo", "woh", "isko", "ise", "use", "unhe", ""
+        }
         if not any(w in clean for w in ("rename", "delete", "hatao", "remove", "search", "dhoondh", "khojo", "padho", "read", "kholo", "naam badlo")):
             m_obs = re.search(r"\bobsidian\s*(?:me|mein|ko)?\s*(?:save|likho|likh)\b|\b(?:save|likho|likh)\s+.*?\bobsidian\b", clean)
             if m_obs:
-                _content = re.sub(r"\b(obsidian|me|mein|ko|save|karo|likho|likh|note|and|aur|use|ise|isko)\b", "", clean).strip(" ,.-")
+                _content = re.sub(r"\b(obsidian|me|mein|ko|save|karo|kro|likho|likh|note|notes|and|aur|use|ise|isko|kar\s*do|bana\s*do|banao|daalo|daal)\b", "", clean).strip(" ,.-")
                 _content = " ".join(_content.split())
-                if _content:
+                # If content is empty or pure junk, pull from context buffer (e.g. recent plan/response)
+                if not _content or _content.lower() in _OBS_JUNK_TOKENS:
+                    try:
+                        from core.context_buffer import get_context_buffer
+                        cb = get_context_buffer()
+                        _content = cb.last_assistant_response or cb.last_topic or ""
+                    except Exception:
+                        _content = ""
+                if _content and _content.lower() not in _OBS_JUNK_TOKENS and len(_content) >= 3:
                     return _dispatch("obsidian_brain", {"action": "append_daily", "content": _content})
 
         # -- Weather (Memory-Aware: defaults to user location from long_term.json)
@@ -1097,11 +1119,29 @@ class NeedleToolRouter:
                     r"\b(" + "|".join(_obs_create_words) + r"|notes?|note)\b", " ", _obs_body
                 ).strip()
                 _note_title = re.sub(r"\s+", " ", _note_title).strip(" -_.")
-                _note_path  = (_note_title.replace(" ", "_") or "untitled") + ".md"
+                _body_content = ""
+                if not _note_title or _note_title.lower() in _OBS_JUNK_TOKENS or len(_note_title) < 3:
+                    try:
+                        from core.context_buffer import get_context_buffer
+                        cb = get_context_buffer()
+                        _topic = cb.last_topic or ""
+                        if _topic:
+                            _note_title = _topic
+                        _body_content = cb.last_assistant_response or ""
+                    except Exception:
+                        pass
+
+                if not _note_title or _note_title.lower() in _OBS_JUNK_TOKENS:
+                    _note_title = "JARVIS_Notes"
+
+                _note_path  = _note_title.replace(" ", "_") + ".md"
                 _note_content = (
                     f"# {_note_title.title()}\n\n"
                     f"*Created by J.A.R.V.I.S. on {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M')}*\n\n"
                 )
+                if _body_content:
+                    _note_content += f"{_body_content}\n"
+
                 return _dispatch("obsidian_brain", {
                     "action": "write",
                     "path": _note_path,

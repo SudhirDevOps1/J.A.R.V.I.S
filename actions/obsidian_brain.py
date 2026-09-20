@@ -403,8 +403,9 @@ def rename_note(old_path: str, new_path: str) -> str:
 def append_daily_note(content: str) -> str:
     """Append a thought, summary, or action entry to today's Obsidian daily note."""
     text = (content or "").strip()
-    if not text:
-        return "No content provided to append."
+    _junk_tokens = {"kro", "karo", "do", "dena", "save", "likho", "save karo", "kar do", "please", "zara", "banao"}
+    if not text or text.lower() in _junk_tokens or len(text) < 3:
+        return "❌ Daily note mein add karne ke liye koi meaningful content nahi mila."
 
     today_str = datetime.now().strftime("%Y-%m-%d")
     time_str = datetime.now().strftime("%I:%M %p")

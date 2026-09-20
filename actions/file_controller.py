@@ -222,13 +222,53 @@ def _resolve_path(raw: str) -> Path:
     shortcuts["vault"] = _obs_target
     shortcuts["notes"] = _obs_target
 
-    raw_s = (raw or "").strip()
+    raw_s = (raw or "").strip().strip('"\'')
+    if not raw_s:
+        return _get_desktop()
+
     lower = raw_s.lower()
     if lower in shortcuts:
         return shortcuts[lower]
-    if len(raw_s) == 2 and raw_s[1] == ":":
-        return Path(raw_s.upper() + "\\")
-    return Path(raw_s).expanduser()
+
+    # Shortcut prefix matching (e.g. "desktop/file.md", "downloads\abc.pdf", "documents/notes")
+    for sc_name, sc_path in shortcuts.items():
+        if lower.startswith((f"{sc_name}/", f"{sc_name}\\")):
+            sub = raw_s[len(sc_name) + 1:].lstrip("/\\")
+            return sc_path / sub
+
+    # Absolute Windows drive path (e.g. "C:\...", "D:\...")
+    if len(raw_s) >= 2 and raw_s[1] == ":":
+        if len(raw_s) == 2:
+            return Path(raw_s.upper() + "\\")
+        return Path(raw_s)
+
+    # User home path (~/...)
+    if raw_s.startswith("~"):
+        return Path(raw_s).expanduser()
+
+    # If it is already an absolute path
+    p_raw = Path(raw_s)
+    if p_raw.is_absolute():
+        return p_raw
+
+    # Relative paths:
+    # 1. Prioritize real Desktop (e.g. 'STUDY/New_Java_Notes.md' or 'New_Java_Notes.md')
+    desktop = _get_desktop()
+    if (desktop / raw_s).exists() or (desktop / raw_s).parent.exists():
+        return desktop / raw_s
+
+    # 2. Check if target exists in user's Documents
+    docs = _get_documents()
+    if (docs / raw_s).exists() or (docs / raw_s).parent.exists():
+        return docs / raw_s
+
+    # 3. Check if target exists in user's Downloads
+    down = _get_downloads()
+    if (down / raw_s).exists() or (down / raw_s).parent.exists():
+        return down / raw_s
+
+    # Default: Desktop voice assistant saves user files on Desktop so the user can see them
+    return desktop / raw_s
 
 def _format_size(b: int) -> str:
     for unit in ["B", "KB", "MB", "GB", "TB"]:

@@ -66,7 +66,8 @@ def _capture_screen_thumbnail() -> tuple[bytes, str]:
         pass
 
     if _MSS:
-        with mss.mss() as sct:
+        _mss_cls = getattr(mss, "MSS", None) or mss.mss
+        with _mss_cls() as sct:
             monitors = sct.monitors
             target = monitors[1] if len(monitors) > 1 else monitors[0]
             shot = sct.grab(target)

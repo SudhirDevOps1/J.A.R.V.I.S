@@ -866,14 +866,19 @@ def open_app(
         file_path = (params.get("file_path") or params.get("file") or "").strip()
         if not app_name or not file_path:
             return "Please specify both app_name and file_path for open_with."
+        try:
+            from actions.file_controller import _resolve_path
+            resolved_fp = str(_resolve_path(file_path))
+        except Exception:
+            resolved_fp = file_path
         resolved_target, fallback_note = _resolve_app(app_name)
         try:
             if _SYSTEM == "Windows":
-                subprocess.Popen(f'start "" "{resolved_target}" "{file_path}"', shell=True)
+                subprocess.Popen(f'start "" "{resolved_target}" "{resolved_fp}"', shell=True)
             elif _SYSTEM == "Darwin":
-                subprocess.run(["open", "-a", resolved_target, file_path], capture_output=True, timeout=8)
+                subprocess.run(["open", "-a", resolved_target, resolved_fp], capture_output=True, timeout=8)
             else:
-                subprocess.Popen([resolved_target, file_path],
+                subprocess.Popen([resolved_target, resolved_fp],
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             time.sleep(1.2)
             return f"Opened {file_path} in {app_name}."
@@ -960,6 +965,13 @@ def open_app(
         return f"Unsupported operating system: {_SYSTEM}"
 
     resolved_target, fallback_note = _resolve_app(app_name)
+    if "explorer" in resolved_target.lower() and params.get("file_path"):
+        try:
+            from actions.file_controller import _resolve_path
+            fp = str(_resolve_path(params["file_path"]))
+            resolved_target = f'explorer.exe "{fp}"'
+        except Exception:
+            pass
     print(f"[open_app] Launching: '{app_name}' -> '{resolved_target}' (Note: {fallback_note})")
 
     # ADDITIVE: If app window is already open and visible, bring to front directly
