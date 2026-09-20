@@ -121,6 +121,8 @@ if %ERRORLEVEL% NEQ 0 (
 ) else (
     echo [OK] Sabhi zaroori packages safaltapoorvak install ho gaye!
 )
+:: Automatically ensure NumPy 2.5 safety patch on first run
+"%PYTHON_EXE%" -c "from scripts.auto_pip_updater import patch_sounddevice_numpy_warning; patch_sounddevice_numpy_warning()" >nul 2>&1
 goto :dependencies_ready
 
 :auto_update_all_pip

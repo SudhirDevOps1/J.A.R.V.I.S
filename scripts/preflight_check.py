@@ -56,6 +56,37 @@ def check_config_init(verbose=True):
     else:
         if verbose:
             print('  [OK] Configuration: api_keys.json Active (Protected from Git)')
+        # Additive auto-migration for legacy keys & missing defaults
+        try:
+            import json
+            with open(cfg_file, 'r', encoding='utf-8') as f:
+                cur_cfg = json.load(f)
+            changed = False
+            # 1. Legacy active_provider migration
+            if "active_provider" in cur_cfg and "preferred_llm_provider" not in cur_cfg:
+                cur_cfg["preferred_llm_provider"] = cur_cfg["active_provider"]
+                changed = True
+            # 2. Legacy piper TTS migration
+            if str(cur_cfg.get("tts_engine", "")).lower().startswith("piper"):
+                cur_cfg["tts_engine"] = "edge"
+                changed = True
+            # 3. Additive defaults for local LLM bridge & custom endpoint
+            if "enable_local_llm" not in cur_cfg:
+                cur_cfg["enable_local_llm"] = False
+                changed = True
+            if "custom_llm_url" not in cur_cfg:
+                cur_cfg["custom_llm_url"] = "http://localhost:11434/v1"
+                changed = True
+            if "custom_llm_model" not in cur_cfg:
+                cur_cfg["custom_llm_model"] = "llama3.2"
+                changed = True
+            if changed:
+                with open(cfg_file, 'w', encoding='utf-8') as f:
+                    json.dump(cur_cfg, f, indent=4)
+                if verbose:
+                    print('  [OK] Configuration: Auto-migrated config keys to latest schema')
+        except Exception:
+            pass
 
     # Ensure local runtime state stores exist with clean initial structures
     state_templates = [
