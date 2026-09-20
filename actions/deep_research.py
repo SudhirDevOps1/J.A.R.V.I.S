@@ -32,11 +32,26 @@ def _single_search(query: str) -> str:
         return f"Search failed: {e}"
 
 
+_last_research_query: str = ""
+_last_research_time: float = 0.0
+_last_research_result: str = ""
+_RESEARCH_COOLDOWN: float = 30.0
+
+
 def deep_research(parameters: dict | None = None, player=None, session_memory=None, **_) -> str:
+    global _last_research_query, _last_research_time, _last_research_result
     params = parameters or {}
     query = str(params.get("query", "") or "").strip()
     if not query:
         return "Please specify a research query."
+
+    now = time.monotonic()
+    # If the exact or highly similar query was researched within the cooldown window, return cached result immediately
+    if (now - _last_research_time) < _RESEARCH_COOLDOWN and _last_research_result:
+        if query.lower() in _last_research_query.lower() or _last_research_query.lower() in query.lower():
+            _log(player, f"[research] Cache hit for: {query[:50]}")
+            return _last_research_result
+
     try:
         max_q = max(1, min(3, int(str(params.get("queries", "3") or "3"))))
     except Exception:
@@ -63,8 +78,15 @@ def deep_research(parameters: dict | None = None, player=None, session_memory=No
     except Exception:
         pass
     head = "\n\n".join(seen)[:4000]
-    return (f"Research '{query}' ({len(seen)} sources):\n{head}\n\n"
-            f"[citations: {len(seen)} web sources, content panel me full]")
+    out = (
+        f"Research '{query}' ({len(seen)} sources):\n{head}\n\n"
+        f"[citations: {len(seen)} web sources, content panel me full]\n\n"
+        f"[Instruction: Research completed. Synthesize findings and speak the final answer directly to the user. Do NOT call deep_research again for this turn.]"
+    )
+    _last_research_query = query
+    _last_research_time = now
+    _last_research_result = out
+    return out
 
 
 TOOL = {

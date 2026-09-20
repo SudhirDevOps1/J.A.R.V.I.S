@@ -419,7 +419,8 @@ TOOL_DECLARATIONS = [
         "name": "recall_past_activities",
         "description": (
             "Look up what the user or assistant did yesterday, today, or on any past day from the permanent Daily Activity Journal. "
-            "MUST be called whenever the user asks 'kal maine kya kya kiya tha', 'what did we do yesterday', 'did I do anything yesterday', or asks about past conversation history."
+            "MUST be called whenever the user asks 'pichhli bar kya kya kiye the', 'pichhla kya kiya', 'kal maine kya kya kiya tha', 'what did we do yesterday/earlier', or asks about past conversation history and activities. "
+            "Do NOT call deep_research or web_search when the user asks what was done previously."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -2648,7 +2649,30 @@ class JarvisLive:
         print("[JARVIS] Shutdown complete.")
 
 
+_instance_socket = None
+
+
+def _acquire_single_instance_lock() -> bool:
+    """Ensure only a single instance of J.A.R.V.I.S. runs at any time to prevent audio & API collisions."""
+    global _instance_socket
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1", 49281))
+        _instance_socket = s
+        return True
+    except OSError:
+        return False
+
+
 def main():
+    if not _acquire_single_instance_lock():
+        print("\n" + "=" * 70)
+        print(" [!] J.A.R.V.I.S. is already actively running in another window!")
+        print(" Exiting duplicate instance to prevent mic/speaker collisions & API rate limits.")
+        print("=" * 70 + "\n")
+        sys.exit(0)
+
     ui = JarvisUI("face.png")
 
     try:
