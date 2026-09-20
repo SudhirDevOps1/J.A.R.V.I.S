@@ -708,6 +708,67 @@ class HudCanvas(QWidget):
         self._face_cache = None
         self._face_cache_sz = (-1, -1)
 
+    def _render_v14_hud_upgrades(self, p: QPainter, cx: float, cy: float, W: int, H: int, fw: int, amp: float, is_active: bool, mode: str, glow_mult: float, primary_c: QColor, sec_c: QColor, bloom_c: QColor, white_c: QColor):
+        """Massive visual enhancements overlaid on existing HUD."""
+        if mode == "reactor":
+            # Holographic scanning sweep
+            scan_radius = fw * 0.42
+            scan_a = math.radians(self._tick * 3.5)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            for i in range(3):
+                ang = scan_a + math.radians(i * 120)
+                px = cx + math.cos(ang) * scan_radius
+                py = cy + math.sin(ang) * scan_radius
+                p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(180 * glow_mult)), 1.5))
+                p.drawLine(QPointF(cx, cy), QPointF(px, py))
+            # Intense audio-responsive core bloom
+            if amp > 0.05:
+                cg = QRadialGradient(cx, cy, fw * 0.2)
+                cg.setColorAt(0.0, QColor(white_c.red(), white_c.green(), white_c.blue(), int(min(255, amp * 400 * glow_mult))))
+                cg.setColorAt(1.0, QColor(0, 0, 0, 0))
+                p.setBrush(QBrush(cg))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(cx, cy), fw * 0.2, fw * 0.2)
+
+        elif mode == "celestial":
+            # Stardust orbital parallax layer
+            try:
+                if not hasattr(self, "_v14_stardust"):
+                    self._v14_stardust = [{"a": random.uniform(0, 6.28), "r": random.uniform(fw*0.3, fw*0.6), "s": random.uniform(0.5, 2.5), "spd": random.uniform(0.01, 0.05)} for _ in range(30)]
+                for sd in self._v14_stardust:
+                    sd["a"] += sd["spd"] * (1.0 + amp * 5.0)
+                    sx = cx + math.cos(sd["a"]) * sd["r"]
+                    sy = cy + math.sin(sd["a"]) * sd["r"] * 0.5
+                    p.setBrush(QBrush(QColor(white_c.red(), white_c.green(), white_c.blue(), int((100 + amp*100) * glow_mult))))
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.drawEllipse(QPointF(sx, sy), sd["s"], sd["s"])
+            except Exception: pass
+
+        elif mode == "orb":
+            # 3D Gyro rings
+            rings = 3
+            for i in range(rings):
+                rx = fw * 0.35 + amp * 10
+                ry = fw * 0.15 + amp * 10
+                p.save()
+                p.translate(cx, cy)
+                p.rotate(self._tick * (2.0 + i) * (1 if i % 2 == 0 else -1))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(160 * glow_mult)), 2.0))
+                p.drawEllipse(QPointF(0, 0), rx, ry)
+                p.restore()
+
+        elif mode == "matrix":
+            # Digital glitch burst on high audio
+            if amp > 0.2:
+                for _ in range(int(amp * 10)):
+                    gx = random.randint(0, W)
+                    gy = random.randint(0, H)
+                    gw = random.randint(10, 80)
+                    gh = random.randint(2, 8)
+                    p.fillRect(QRectF(gx, gy, gw, gh), QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(150 * glow_mult)))
+
+
     def _make_grid(self, W: int, H: int) -> QPixmap:
         """Pre-render static celestial stardust grid points for background depth."""
         pm = QPixmap(max(1, W), max(1, H))
@@ -1700,6 +1761,12 @@ class HudCanvas(QWidget):
                     else:
                         cl = qcol(C.BORDER_B)
                 p.fillRect(QRectF(wx0 + i * bw, wy + 20 - hgt, bw - 1, hgt), cl)
+
+        # === ADVANCED HUD UPGRADES (v1.4.0) ===
+        try:
+            self._render_v14_hud_upgrades(p, cx, cy, W, H, fw, amp, is_active, mode, glow_mult, primary_c, sec_c, bloom_c, white_c)
+        except Exception as e:
+            pass
 
         p.end()   # end deterministically so the backing store never flushes an active painter
 

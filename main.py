@@ -961,7 +961,7 @@ class JarvisLive:
                     
                     client = get_llm_model(preferred_provider=prov)
                     persona = build_persona_system_prompt(self._asst_name)
-                    mem = format_memory_for_prompt(load_memory())
+                    mem = format_memory_for_prompt(load_memory(), query=text)
                     y_log = get_daily_journal("yesterday")
                     t_log = get_daily_journal("today")
 

@@ -286,7 +286,7 @@ _IDENTITY_FIELDS = ["name", "age", "birthday", "city", "job",
                     "language", "school", "nationality"]
 
 
-def format_memory_for_prompt(memory: dict | None) -> str:
+def format_memory_for_prompt(memory: dict | None, query: str = "") -> str:
     """Build the memory block that goes into the system prompt.
 
     This used to dump everything. It now sends three things:
@@ -311,8 +311,8 @@ def format_memory_for_prompt(memory: dict | None) -> str:
     if not memory:
         return ""
 
-    # Memoised: identical memory → identical block, no re-sort.
-    _ckey = _prompt_cache_key(memory)
+    # Memoised: identical memory + identical query → identical block
+    _ckey = _prompt_cache_key(memory) + f"_{query}"
     if _ckey:
         with _prompt_cache_lock:
             _hit = _prompt_cache.get(_ckey)
@@ -332,7 +332,7 @@ def format_memory_for_prompt(memory: dict | None) -> str:
             # English" line written months ago reads like a standing order and
             # was one of the reasons a Turkish question came back in English.
             core_lines.append(
-                f"Has spoken to you in: {val} (an observation about the past — "
+                f"Has spoken to you in: {val} (an observation about the past - "
                 f"always answer in the language of their CURRENT message)")
         else:
             core_lines.append(f"{field.title()}: {val}")
@@ -343,7 +343,7 @@ def format_memory_for_prompt(memory: dict | None) -> str:
         if val:
             core_lines.append(f"{_pretty(key).title()}: {val}")
 
-    # 2. Everything else, most recently updated first
+    # 2. Everything else, most recently updated first (or BM25 sorted if query)
     rest: list[tuple[str, str, str, str]] = []   # (updated, cat, key, value)
     for cat in _CATEGORY_LABELS:
         for key, entry in (memory.get(cat, {}) or {}).items():
@@ -352,15 +352,42 @@ def format_memory_for_prompt(memory: dict | None) -> str:
                 continue
             updated = (entry.get("updated", "") if isinstance(entry, dict) else "") or "0000-00-00"
             rest.append((updated, cat, key, val))
-    rest.sort(key=lambda t: t[0], reverse=True)
+
+    if query.strip():
+        try:
+            from actions.bm25_search import PureBM25, _tokenize
+            corpus = [_tokenize(f"{c} {k} {v}") for _, c, k, v in rest]
+            bm25 = PureBM25(corpus)
+            q_tok = _tokenize(query)
+            scores = bm25.get_scores(q_tok)
+            # Sort by score descending, then by updated date descending
+            scored_rest = list(zip(scores, rest))
+            scored_rest.sort(key=lambda t: (t[0], t[1][0]), reverse=True)
+            rest = [t[1] for t in scored_rest]
+        except ImportError:
+            rest.sort(key=lambda t: t[0], reverse=True)
+
+        query_lower = query.lower()
+        if any(w in query_lower for w in ["kal", "today", "aaj", "yesterday"]):
+            from memory.memory_manager import get_daily_journal
+            t_log = get_daily_journal("today")
+            y_log = get_daily_journal("yesterday")
+            if "No activity log found" not in t_log:
+                core_lines.append("")
+                core_lines.append(f"Today's Activities:\n{t_log[:300]}")
+            if "No activity log found" not in y_log:
+                core_lines.append("")
+                core_lines.append(f"Yesterday's Activities:\n{y_log[:300]}")
+    else:
+        rest.sort(key=lambda t: t[0], reverse=True)
 
     used    = sum(len(l) + 1 for l in core_lines)
     shown: dict[str, list[str]] = {}
     overflow: dict[str, list[str]] = {}
 
-    # Recency decides order, but no single category may take the whole budget.
+    # Recency/BM25 decides order, but no single category may take the whole budget.
     # Without the cap, someone with forty stored preferences gets a prompt that
-    # is forty preferences and not one person's name — the categories that
+    # is forty preferences and not one person's name - the categories that
     # matter most in conversation are also the ones that change least often, so
     # pure recency systematically buries them.
     per_cat_used: dict[str, int] = {}
