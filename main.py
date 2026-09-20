@@ -269,6 +269,38 @@ def _clean_transcript(text: str) -> str:
     text = re.sub(r"[\x00-\x08\x0b-\x1f]", "", text)
     return text.strip()
 
+
+# ── Status-intent guard ──────────────────────────────────────────────────────
+# "status batao / kitna hua / bana diye / hua kya" must NEVER reach web search
+# (the old path literally searched the web for the word "status"). These short
+# progress questions are answered from the real background-task + session state.
+_STATUS_WORDS = (
+    "status", "progress", "kitna hua", "kahan tak", "kaha tak", "bana diye",
+    "bana diya", "ban gaya", "ban gaye", "hua kya", "huya kya", "kaam hua",
+    "complete hua", "task status", "kaam kahan", "ready hua",
+)
+_STATUS_CREATE_WORDS = ("banao", "banau", "banado", "create", "start karo", "shuru karo",
+                        "new banao", "add karo", "bana do")
+_STATUS_SKIP_TOPICS = ("computer", "system", "pc", "laptop", "battery", "cpu", "ram",
+                       "whatsapp", "order", "delivery", "flight", "train", "internet", "wifi")
+
+
+def _is_status_intent(t_low: str) -> bool:
+    """True for short task-progress questions. Guards: ≤6 words, no
+    create-verbs ('task banao' creates, doesn't ask), no other topics
+    ('computer ka status' belongs to system_status). Never raises."""
+    try:
+        t = (t_low or "").strip().lower()
+        if not t or len(t.split()) > 6:
+            return False
+        if any(w in t for w in _STATUS_CREATE_WORDS):
+            return False
+        if any(w in t for w in _STATUS_SKIP_TOPICS):
+            return False
+        return any(w in t for w in _STATUS_WORDS)
+    except Exception:
+        return False
+
 TOOL_DECLARATIONS = [
     # ── Inline tools ─────────────────────────────────────────────────────────
     # These stay here (rather than in an actions/*.py TOOL dict) because their
@@ -787,6 +819,24 @@ class JarvisLive:
         manual = self._dashboard.get_manual_url()
         return url, key, f"{url}/auto-login?key={key}", manual
 
+    def _answer_status_intent(self, text: str) -> None:
+        """Answer a task-progress question from REAL state (todo_agent list).
+
+        Runs on the caller's thread; speak()/write_log are thread-safe.
+        """
+        try:
+            from actions.todo_agent import _get_active_task_summary
+            summary = _get_active_task_summary() or "No active background tasks running."
+        except Exception as e:
+            summary = f"Task system note: {e}"
+        self.ui.write_log(f"{self._asst_name}: {summary}")
+        self.speak(summary)
+        try:
+            from memory.memory_manager import log_daily_activity
+            log_daily_activity(text, ai_response=summary)
+        except Exception:
+            pass
+
     def _on_text_command(self, text: str):
         # Respect wake-word sleep: a typed command must not be answered while
         # asleep either (the sleep gate is not just for the mic). Wake first with
@@ -822,6 +872,15 @@ class JarvisLive:
             if matched:
                 self.ui.write_log(f"SYS: Voice pitch updated to {new_pitch}.")
                 self.speak(confirm_msg)
+                return
+        except Exception:
+            pass
+
+        # Status intent: progress questions are answered from real task state,
+        # BEFORE the edge reflex gets a chance to web-search them.
+        try:
+            if _is_status_intent((text or "").lower()):
+                self._answer_status_intent(text)
                 return
         except Exception:
             pass

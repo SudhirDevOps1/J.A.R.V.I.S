@@ -117,6 +117,22 @@ def check_local_llm_health(timeout: float = 1.5) -> Dict[str, Any]:
 
 _last_offline_time: float = 0.0
 _OFFLINE_COOLDOWN: float = 30.0
+_OFFLINE_COOLDOWN_MAX: float = 600.0   # 10 min cap — sustained outage stays quiet
+_offline_logged: bool = False          # loud once per outage, quiet until recovery
+_bridge_lock = __import__("threading").Lock()
+
+
+def _is_port_open(host: str, port: int, timeout: float = 0.05) -> bool:
+    """Fast TCP socket probe. Returns in <2ms when port is closed.
+    This prevents the 1.5s urllib timeout from blocking the main loop
+    every single query when Ollama is not running.
+    """
+    import socket
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 def generate_local_llm(
@@ -127,20 +143,43 @@ def generate_local_llm(
     """
     Query the local LLM (Ollama) safely.
     If disabled or offline, returns None immediately so JARVIS routes to Gemini Cloud/Live.
-    Includes a 30s cooldown cache to avoid repeated 1.5s socket timeouts when Ollama is not running.
+    Uses a fast TCP probe (<2ms) to avoid 1.5s blocking hangs when Ollama is not running.
     """
-    global _last_offline_time
+    global _last_offline_time, _OFFLINE_COOLDOWN, _offline_logged
     if not is_local_llm_enabled():
         return None
 
     now = time.monotonic()
-    if (now - _last_offline_time) < _OFFLINE_COOLDOWN:
+    with _bridge_lock:
+        _cool = _OFFLINE_COOLDOWN
+    if (now - _last_offline_time) < _cool:
         return None
 
     cfg = get_local_llm_config()
     if not cfg.get("url") or not cfg["url"].startswith("http"):
         return None
     to = timeout or cfg["timeout"]
+
+    # Fast pre-check: if Ollama port is closed, skip the full 1.5s HTTP timeout.
+    try:
+        from urllib.parse import urlparse as _up
+        _parsed = _up(cfg["url"])
+        _host = _parsed.hostname or "localhost"
+        _port = _parsed.port or 11434
+    except Exception:
+        _host, _port = "localhost", 11434
+    if not _is_port_open(_host, _port, timeout=0.05):
+        with _bridge_lock:
+            loud = not _offline_logged
+            _last_offline_time = time.monotonic()
+            _OFFLINE_COOLDOWN = min(_OFFLINE_COOLDOWN * 2.0, _OFFLINE_COOLDOWN_MAX)
+            _offline_logged = True
+            cool = _OFFLINE_COOLDOWN
+        if loud:
+            print(f"[LocalLLMBridge] Local engine not running on {cfg['url']}. "
+                  f"Backing off (next retry in {cool:.0f}s).")
+        return None
+
 
     payload = {
         "model": cfg["model"],
@@ -166,12 +205,27 @@ def generate_local_llm(
         with urllib.request.urlopen(req, timeout=to) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             ans = result.get("response", "").strip()
-            _last_offline_time = 0.0
+            with _bridge_lock:
+                recovered = _offline_logged
+                _last_offline_time = 0.0
+                _OFFLINE_COOLDOWN = 30.0
+                _offline_logged = False
+            if recovered:
+                print(f"[LocalLLMBridge] Local engine back online on {cfg['url']}.")
             return ans if ans else None
     except Exception as e:
-        _last_offline_time = time.monotonic()
-        if isinstance(e, urllib.error.URLError) and "10061" in str(e):
-            print(f"[LocalLLMBridge] Local engine not running on {cfg['url']}. Cooldown active for 30s.")
-        else:
-            print(f"[LocalLLMBridge] Request failed ({e}). Cooldown active for 30s.")
+        with _bridge_lock:
+            _last_offline_time = time.monotonic()
+            # Exponential backoff: 30s → 60s → … → 600s cap. A dead server
+            # must not cost a log line (or a timeout wait) on every query.
+            _OFFLINE_COOLDOWN = min(_OFFLINE_COOLDOWN * 2.0, _OFFLINE_COOLDOWN_MAX)
+            loud = not _offline_logged
+            _offline_logged = True
+            cool = _OFFLINE_COOLDOWN
+        if loud:
+            if isinstance(e, urllib.error.URLError) and "10061" in str(e):
+                print(f"[LocalLLMBridge] Local engine not running on {cfg['url']}. "
+                      f"Backing off (next retry in {cool:.0f}s).")
+            else:
+                print(f"[LocalLLMBridge] Request failed ({e}). Backing off ({cool:.0f}s).")
         return None

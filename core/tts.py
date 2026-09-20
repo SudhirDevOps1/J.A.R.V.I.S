@@ -235,6 +235,17 @@ def _speak_sapi_fallback(text: str) -> bool:
         return False
 
 
+# ── EdgeTTS circuit breaker ──────────────────────────────────────────────────
+# speech.platform.bing.com stalls hang synthesis for 30s+ and block the whole
+# speech queue behind one stuck utterance. After ANY failure, Edge is skipped
+# for a cooldown and the offline SAPI fallback answers instantly instead.
+# Success resets the breaker. First failure still logs loudly; repeats stay quiet.
+_EDGE_FAIL_COOLDOWN = 90.0
+_EDGE_SYNTH_TIMEOUT = 25.0
+_edge_last_fail = 0.0
+_edge_fail_lock = threading.Lock()
+
+
 class EdgeTTSEngine:
     """Microsoft EdgeTTS – free, requires internet with dynamic pitch and rate control."""
 
@@ -255,14 +266,32 @@ class EdgeTTSEngine:
         cleaned = clean_speech_text(text)
         if not cleaned:
             return
-        
-        try:
-            audio_bytes = asyncio.run(self._synth(cleaned))
-        except Exception as e:
-            print(f"[EdgeTTS] Synthesis failed ({e}). Attempting offline SAPI fallback...")
+
+        global _edge_last_fail
+        with _edge_fail_lock:
+            cooling = (time.monotonic() - _edge_last_fail) < _EDGE_FAIL_COOLDOWN
+        if cooling:
+            # Breaker open: don't hang the queue on a dead endpoint again.
             if _speak_sapi_fallback(cleaned):
                 return
             return
+
+        try:
+            audio_bytes = asyncio.run(
+                asyncio.wait_for(self._synth(cleaned), timeout=_EDGE_SYNTH_TIMEOUT)
+            )
+        except Exception as e:
+            with _edge_fail_lock:
+                first = (time.monotonic() - _edge_last_fail) >= _EDGE_FAIL_COOLDOWN
+                _edge_last_fail = time.monotonic()
+            if first:
+                print(f"[EdgeTTS] Synthesis failed ({e}). "
+                      f"Offline SAPI fallback for next {_EDGE_FAIL_COOLDOWN:.0f}s...")
+            if _speak_sapi_fallback(cleaned):
+                return
+            return
+        with _edge_fail_lock:
+            _edge_last_fail = 0.0  # success resets the breaker
         if audio_bytes:
             _play_audio_bytes(audio_bytes)
 

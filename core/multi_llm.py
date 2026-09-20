@@ -43,6 +43,29 @@ except ImportError:
 _gemini_key_index = 0
 _gemini_key_lock = __import__("threading").Lock()
 
+# Per-key 429 cooldown: a rate-limited key is skipped for 5 minutes instead of
+# being hammered on every query. Thread-safe; best-effort (never breaks routing).
+_key_cooldown_until: dict[str, float] = {}
+_key_cooldown_lock = __import__("threading").Lock()
+_KEY_COOLDOWN_SECS = 300.0
+
+
+def _key_in_cooldown(api_key: str) -> bool:
+    try:
+        with _key_cooldown_lock:
+            until = _key_cooldown_until.get(api_key, 0.0)
+        return bool(until) and time.monotonic() < until
+    except Exception:
+        return False
+
+
+def _cool_key_down(api_key: str) -> None:
+    try:
+        with _key_cooldown_lock:
+            _key_cooldown_until[api_key] = time.monotonic() + _KEY_COOLDOWN_SECS
+    except Exception:
+        pass
+
 
 def get_base_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -744,6 +767,8 @@ class MultiLLMClient:
                 exhausted/rate-limited, raises the key's last error otherwise.
                 Per-key model fallback order is unchanged — only the keys now
                 race each other instead of queueing up sequentially."""
+                if _key_in_cooldown(api_key):
+                    return None  # 429'd recently — don't hammer, let others race
                 client = genai.Client(api_key=api_key)
                 key_last_err = None
                 for m in candidate_models:
@@ -761,7 +786,9 @@ class MultiLLMClient:
                                     _km = mask_secret(api_key)
                                 except Exception:
                                     _km = "***"
-                                print(f"[MultiLLM] Gemini key {_km} rate-limited → trying next key")
+                                _cool_key_down(api_key)
+                                print(f"[MultiLLM] Gemini key {_km} rate-limited "
+                                      f"(cooling {_KEY_COOLDOWN_SECS:.0f}s) → trying next key")
                                 return None
                             elif "503" in err_str or "unavailable" in err_str or "high demand" in err_str:
                                 time.sleep(1.5)

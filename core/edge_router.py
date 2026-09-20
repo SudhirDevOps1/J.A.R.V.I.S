@@ -754,6 +754,30 @@ class NeedleToolRouter:
             dest = m_route.group(2).title() if m_route else "Mumbai"
             return _dispatch("flight_finder", {"origin": origin, "destination": dest, "date": "tomorrow"})
 
+        # -- Status Intent Guard ----------------------------------------------
+        # "status batao" / "kitna hua" / "bana diye" MUST NEVER go to web_search.
+        # Route them to todo_agent(action='list') so the user gets REAL progress.
+        _STATUS_INTENT_WORDS = (
+            "status", "progress", "kitna hua", "kahan tak", "kaha tak",
+            "bana diye", "bana diya", "ban gaya", "ban gaye", "hua kya",
+            "kaam hua", "complete hua", "task status", "kaam kahan", "ready hua",
+            "kitna bana", "task progress", "todo status",
+        )
+        _STATUS_CREATE_SKIP = ("banao", "banau", "banado", "create", "start karo",
+                               "shuru karo", "new banao", "add karo", "bana do")
+        _STATUS_TOPIC_SKIP  = ("computer", "system", "pc", "laptop", "battery",
+                               "cpu", "ram", "whatsapp", "order", "delivery",
+                               "flight", "train", "internet", "wifi", "electricity",
+                               "bijli", "network")
+        _is_status_intent = (
+            any(w in clean for w in _STATUS_INTENT_WORDS)
+            and not any(w in clean for w in _STATUS_CREATE_SKIP)
+            and not any(w in clean for w in _STATUS_TOPIC_SKIP)
+            and len(clean.split()) <= 7
+        )
+        if _is_status_intent:
+            return _dispatch("todo_agent", {"action": "list"})
+
         # -- Web Search -------------------------------------------------------
         # "google karo X" / "X dhundo" / "search karo X" / "X ke baare mein batao"
         m_ws_en = re.search(r"\b(search|google|bing|find|lookup)\s+(?:for\s+)?(.+)", clean)
@@ -785,7 +809,10 @@ class NeedleToolRouter:
             "mujhe", "tumhe", "batao", "kuch", "kuchh", "ek", "koi", "kya",
             "aur", "aage", "fir", "phir", "bolo", "suno", "kaise ho",
             "main kya kr raha hu", "main kya kar raha hoon", "kya chal raha hai",
-            "kya kar raha hu", "kya ho raha hai"
+            "kya kar raha hu", "kya ho raha hai",
+            # ADDITIVE: task-progress words must never hit DDG
+            "status", "progress", "kitna hua", "bana diye", "bana diya",
+            "ban gaya", "ban gaye", "hua kya", "kaam hua", "complete hua",
         )
 
         if not _is_vision_query and not _is_obsidian_query and not _is_conversational and m_ws_en and "click" not in clean:

@@ -79,14 +79,26 @@ def _gemini_search(query: str) -> str:
     return f"Search result for '{query}': Information retrieved from available sources."
 
 
-def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
+def _ddg_client():
+    """DDGS client factory preferring the renamed `ddgs` package.
+
+    The module-level warning filters don't always hold (other modules reset
+    warning state), so the legacy import is wrapped in catch_warnings: the
+    deprecation notice must never pollute the assistant log on every search.
+    """
     try:
         from ddgs import DDGS
+        return DDGS()
     except ImportError:
-        from duckduckgo_search import DDGS
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from duckduckgo_search import DDGS
+            return DDGS()
 
+
+def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
     results = []
-    with DDGS() as ddgs:
+    with _ddg_client() as ddgs:
         for r in ddgs.text(query, max_results=max_results):
             results.append({
                 "title":   r.get("title",  ""),
@@ -98,14 +110,10 @@ def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
 
 def _ddg_news(query: str, max_results: int = 8) -> list[dict]:
     """DDG news search — returns actual articles, not website homepages."""
-    try:
-        from ddgs import DDGS
-    except ImportError:
-        from duckduckgo_search import DDGS
 
     results = []
     try:
-        with DDGS() as ddgs:
+        with _ddg_client() as ddgs:
             for r in ddgs.news(query, max_results=max_results):
                 results.append({
                     "title":   r.get("title",  ""),
