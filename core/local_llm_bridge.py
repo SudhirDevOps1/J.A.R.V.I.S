@@ -62,13 +62,20 @@ def set_local_llm_enabled(enabled: bool) -> bool:
 
 
 def get_local_llm_config() -> Dict[str, Any]:
-    """Retrieve local LLM settings (URL, model, timeout)."""
+    """Retrieve local LLM settings (URL, model, timeout). Unified with custom UI config."""
     cfg = _load_config()
+    # Fallback to custom_llm_url if local_llm_url is not specifically set
+    url = cfg.get("local_llm_url", cfg.get("custom_llm_url", "http://localhost:11434")).rstrip("/")
+    if url.endswith("/v1"):
+        url = url[:-3]  # Strip /v1 for native Ollama API probes
+        
+    model = cfg.get("local_llm_model", cfg.get("custom_llm_model", "llama3.2"))
+    
     return {
         "enabled": is_local_llm_enabled(),
-        "url": cfg.get("local_llm_url", "http://localhost:11434").rstrip("/"),
-        "model": cfg.get("local_llm_model", "deepseek-r1:1.5b"),
-        "timeout": float(cfg.get("local_llm_timeout", 15.0)),
+        "url": url,
+        "model": model,
+        "timeout": float(cfg.get("local_llm_timeout", 1.5)),
     }
 
 
@@ -143,5 +150,8 @@ def generate_local_llm(
             ans = result.get("response", "").strip()
             return ans if ans else None
     except Exception as e:
-        print(f"[LocalLLMBridge] Request failed ({e}). Falling back to cloud.")
+        if isinstance(e, urllib.error.URLError) and "10061" in str(e):
+            print(f"[LocalLLMBridge] Local engine not running on {cfg['url']}. Falling back to cloud.")
+        else:
+            print(f"[LocalLLMBridge] Request failed ({e}). Falling back to cloud.")
         return None

@@ -2993,6 +2993,15 @@ class ProviderSettingsOverlay(QWidget):
         k_lay.addWidget(self._custom_stat)
         self._stat_labels["custom"] = self._custom_stat
 
+        # Add toggle for Tier 2.5 Local Bridge
+        from core.local_llm_bridge import is_local_llm_enabled
+        self._local_bridge_cb = QCheckBox("Enable Tier 2.5 Local Bridge (Fast-Fail)")
+        self._local_bridge_cb.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        self._local_bridge_cb.setChecked(is_local_llm_enabled())
+        self._local_bridge_cb.setStyleSheet(f"QCheckBox {{ color: {C.TEXT}; spacing: 6px; }}")
+        k_lay.addWidget(self._local_bridge_cb)
+
+
         def _on_custom_test():
             self._custom_stat.setText("🟡 Pinging local endpoint...")
             self._custom_stat.setStyleSheet("color: #ffaa00;")
@@ -3585,6 +3594,8 @@ class ProviderSettingsOverlay(QWidget):
                 data["deepseek_api_key"] = self._deepseek_input.text().strip()
             if hasattr(self, "_custom_url"):
                 data["custom_llm_url"] = self._custom_url.text().strip()
+            if hasattr(self, "_local_bridge_cb"):
+                data["enable_local_llm"] = self._local_bridge_cb.isChecked()
 
             # Save all dynamic registered provider keys
             if hasattr(self, "_key_inputs"):
