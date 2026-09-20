@@ -709,64 +709,200 @@ class HudCanvas(QWidget):
         self._face_cache_sz = (-1, -1)
 
     def _render_v14_hud_upgrades(self, p: QPainter, cx: float, cy: float, W: int, H: int, fw: int, amp: float, is_active: bool, mode: str, glow_mult: float, primary_c: QColor, sec_c: QColor, bloom_c: QColor, white_c: QColor):
-        """Massive visual enhancements overlaid on existing HUD."""
+        """Massive visual enhancements overlaid on existing HUD with next-gen Stark VFX."""
+        tick = getattr(self, "_tick", 0)
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
         if mode == "reactor":
-            # Holographic scanning sweep
-            scan_radius = fw * 0.42
-            scan_a = math.radians(self._tick * 3.5)
+            # ══════════════════════════════════════════════════════════════════
+            # STARK MARK 85 NANOTECH ARC REACTOR OVERDRIVE
+            # ══════════════════════════════════════════════════════════════════
+            R = fw * 0.36
+            ret_r = R * 1.25
+
+            # 1. Holographic Sci-Fi Targeting Reticle Brackets [   ]
+            b_alpha = max(20, min(255, int((110 + math.sin(tick * 0.06) * 35 + amp * 90) * glow_mult)))
+            p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), b_alpha), 1.8))
             p.setBrush(Qt.BrushStyle.NoBrush)
-            for i in range(3):
-                ang = scan_a + math.radians(i * 120)
-                px = cx + math.cos(ang) * scan_radius
-                py = cy + math.sin(ang) * scan_radius
-                p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(180 * glow_mult)), 1.5))
-                p.drawLine(QPointF(cx, cy), QPointF(px, py))
-            # Intense audio-responsive core bloom
-            if amp > 0.05:
-                cg = QRadialGradient(cx, cy, fw * 0.2)
-                cg.setColorAt(0.0, QColor(white_c.red(), white_c.green(), white_c.blue(), int(min(255, amp * 400 * glow_mult))))
-                cg.setColorAt(1.0, QColor(0, 0, 0, 0))
+            d_arm = ret_r * 0.22
+            # Top-Left Bracket
+            p.drawLine(QPointF(cx - ret_r, cy - ret_r + d_arm), QPointF(cx - ret_r, cy - ret_r))
+            p.drawLine(QPointF(cx - ret_r, cy - ret_r), QPointF(cx - ret_r + d_arm, cy - ret_r))
+            # Top-Right Bracket
+            p.drawLine(QPointF(cx + ret_r - d_arm, cy - ret_r), QPointF(cx + ret_r, cy - ret_r))
+            p.drawLine(QPointF(cx + ret_r, cy - ret_r), QPointF(cx + ret_r, cy - ret_r + d_arm))
+            # Bottom-Left Bracket
+            p.drawLine(QPointF(cx - ret_r, cy + ret_r - d_arm), QPointF(cx - ret_r, cy + ret_r))
+            p.drawLine(QPointF(cx - ret_r, cy + ret_r), QPointF(cx - ret_r + d_arm, cy + ret_r))
+            # Bottom-Right Bracket
+            p.drawLine(QPointF(cx + ret_r - d_arm, cy + ret_r), QPointF(cx + ret_r, cy + ret_r))
+            p.drawLine(QPointF(cx + ret_r, cy + ret_r), QPointF(cx + ret_r, cy + ret_r - d_arm))
+
+            # 2. Outer Rotating Vernier Telemetry Ring & Degree Notches
+            p.save()
+            p.translate(cx, cy)
+            p.rotate(tick * 0.45)
+            dash_pen = QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(90 * glow_mult)), 1.2)
+            dash_pen.setStyle(Qt.PenStyle.DashLine)
+            p.setPen(dash_pen)
+            p.drawEllipse(QPointF(0, 0), ret_r * 0.98, ret_r * 0.98)
+            p.setPen(QPen(white_c, 2.0))
+            for card_deg in (0, 90, 180, 270):
+                c_rad = math.radians(card_deg)
+                p.drawLine(QPointF(math.cos(c_rad) * (ret_r * 0.93), math.sin(c_rad) * (ret_r * 0.93)),
+                           QPointF(math.cos(c_rad) * (ret_r * 1.02), math.sin(c_rad) * (ret_r * 1.02)))
+            p.restore()
+
+            # 3. High-Voltage Electric Arc Lightning Tendrils (Reactor Core to Coils)
+            lightning_chance = 0.85 if is_active or amp > 0.03 else 0.25
+            if random.random() < lightning_chance:
+                coil_r = R * 0.72
+                bolt_count = random.randint(2, 5) if amp > 0.05 else random.randint(1, 2)
+                for _ in range(bolt_count):
+                    target_coil_idx = random.randint(0, 11)
+                    target_coil_ang = math.radians(target_coil_idx * 30 + getattr(self, "_reactor_outer_ang", 0.0))
+                    tc_x = cx + math.cos(target_coil_ang) * coil_r
+                    tc_y = cy + math.sin(target_coil_ang) * coil_r
+                    start_ang = math.radians(random.uniform(0, 360))
+                    sc_r = R * 0.28
+                    sc_x = cx + math.cos(start_ang) * sc_r
+                    sc_y = cy + math.sin(start_ang) * sc_r
+                    mid1_x = (sc_x * 0.65 + tc_x * 0.35) + random.uniform(-10, 10)
+                    mid1_y = (sc_y * 0.65 + tc_y * 0.35) + random.uniform(-10, 10)
+                    mid2_x = (sc_x * 0.30 + tc_x * 0.70) + random.uniform(-8, 8)
+                    mid2_y = (sc_y * 0.30 + tc_y * 0.70) + random.uniform(-8, 8)
+
+                    bolt_alpha = max(100, min(255, int((180 + amp * 75) * glow_mult)))
+                    p.setPen(QPen(QColor(white_c.red(), white_c.green(), white_c.blue(), bolt_alpha), 1.6))
+                    p.drawLine(QPointF(sc_x, sc_y), QPointF(mid1_x, mid1_y))
+                    p.drawLine(QPointF(mid1_x, mid1_y), QPointF(mid2_x, mid2_y))
+                    p.setPen(QPen(QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), bolt_alpha - 30), 1.2))
+                    p.drawLine(QPointF(mid2_x, mid2_y), QPointF(tc_x, tc_y))
+
+            # 4. Outward Audio Kinetic Shockwave Rings (Speaker Flare)
+            if not hasattr(self, "_reactor_shockwaves"):
+                self._reactor_shockwaves = []
+            if amp > 0.08 and (not self._reactor_shockwaves or self._reactor_shockwaves[-1]["r"] > R * 0.45):
+                self._reactor_shockwaves.append({"r": R * 0.28, "alpha": 1.0, "spd": 2.4 + amp * 4.5})
+
+            alive_sw = []
+            for sw in self._reactor_shockwaves:
+                sw["r"] += sw["spd"]
+                sw["alpha"] -= 0.022
+                if sw["alpha"] > 0.02 and sw["r"] < R * 1.35:
+                    sw_alpha = max(0, min(255, int(sw["alpha"] * 210 * glow_mult)))
+                    p.setPen(QPen(QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), sw_alpha), 1.8))
+                    p.drawEllipse(QPointF(cx, cy), sw["r"], sw["r"])
+                    alive_sw.append(sw)
+            self._reactor_shockwaves = alive_sw
+
+            # 5. Holographic Radar Sweep (360° Conical Particle Radar)
+            p.save()
+            p.translate(cx, cy)
+            p.rotate(tick * 2.8)
+            sweep_r = R * 1.05
+            sweep_grad = QConicalGradient(0, 0, 0)
+            sweep_grad.setColorAt(0.0, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(70 * glow_mult)))
+            sweep_grad.setColorAt(0.12, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), int(25 * glow_mult)))
+            sweep_grad.setColorAt(0.20, QColor(0, 0, 0, 0))
+            sweep_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+            p.setBrush(QBrush(sweep_grad))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawPie(QRectF(-sweep_r, -sweep_r, sweep_r * 2, sweep_r * 2), 0, int(72 * 16))
+            p.restore()
+
+            # 6. Central Supercharged Core Pulse & Flare
+            if amp > 0.03 or is_active:
+                core_flare_r = R * (0.32 + amp * 0.25)
+                cg = QRadialGradient(cx, cy, core_flare_r)
+                cg.setColorAt(0.0, QColor(255, 255, 255, max(0, min(255, int((220 + amp * 35) * glow_mult)))))
+                cg.setColorAt(0.40, QColor(bloom_c.red(), bloom_c.green(), bloom_c.blue(), max(0, min(255, int((160 + amp * 80) * glow_mult)))))
+                cg.setColorAt(1.0, QColor(primary_c.red(), primary_c.green(), primary_c.blue(), 0))
                 p.setBrush(QBrush(cg))
                 p.setPen(Qt.PenStyle.NoPen)
-                p.drawEllipse(QPointF(cx, cy), fw * 0.2, fw * 0.2)
+                p.drawEllipse(QPointF(cx, cy), core_flare_r, core_flare_r)
 
         elif mode == "celestial":
-            # Stardust orbital parallax layer
+            # ══════════════════════════════════════════════════════════════════
+            # CELESTIAL STARDUST NEBULA & ORBITAL PARALLAX
+            # ══════════════════════════════════════════════════════════════════
             try:
-                if not hasattr(self, "_v14_stardust"):
-                    self._v14_stardust = [{"a": random.uniform(0, 6.28), "r": random.uniform(fw*0.3, fw*0.6), "s": random.uniform(0.5, 2.5), "spd": random.uniform(0.01, 0.05)} for _ in range(30)]
-                for sd in self._v14_stardust:
-                    sd["a"] += sd["spd"] * (1.0 + amp * 5.0)
-                    sx = cx + math.cos(sd["a"]) * sd["r"]
-                    sy = cy + math.sin(sd["a"]) * sd["r"] * 0.5
-                    p.setBrush(QBrush(QColor(white_c.red(), white_c.green(), white_c.blue(), int((100 + amp*100) * glow_mult))))
-                    p.setPen(Qt.PenStyle.NoPen)
-                    p.drawEllipse(QPointF(sx, sy), sd["s"], sd["s"])
-            except Exception: pass
+                if not hasattr(self, "_v14_stardust") or len(self._v14_stardust) < 45:
+                    self._v14_stardust = [{
+                        "a": random.uniform(0, 6.28),
+                        "r": random.uniform(fw * 0.25, fw * 0.65),
+                        "s": random.uniform(0.8, 2.8),
+                        "spd": random.uniform(0.012, 0.045),
+                        "depth": random.uniform(0.3, 1.0)
+                    } for _ in range(45)]
 
-        elif mode == "orb":
-            # 3D Gyro rings
-            rings = 3
-            for i in range(rings):
-                rx = fw * 0.35 + amp * 10
-                ry = fw * 0.15 + amp * 10
+                # Galactic Spiral Arms
                 p.save()
                 p.translate(cx, cy)
-                p.rotate(self._tick * (2.0 + i) * (1 if i % 2 == 0 else -1))
+                p.rotate(tick * 0.4)
+                arm_pen = QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(35 * glow_mult)), 1.2)
+                p.setPen(arm_pen)
                 p.setBrush(Qt.BrushStyle.NoBrush)
-                p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(160 * glow_mult)), 2.0))
+                for arm in range(3):
+                    arm_ang = arm * (math.pi * 2 / 3)
+                    pts = []
+                    for step in range(12):
+                        s_r = (fw * 0.08) + step * (fw * 0.042)
+                        s_a = arm_ang + step * 0.32
+                        pts.append(QPointF(math.cos(s_a) * s_r, math.sin(s_a) * s_r))
+                    for idx in range(len(pts) - 1):
+                        p.drawLine(pts[idx], pts[idx + 1])
+                p.restore()
+
+                # Stardust with Depth Parallax
+                for sd in self._v14_stardust:
+                    sd["a"] += sd["spd"] * (1.0 + amp * 4.5)
+                    sx = cx + math.cos(sd["a"]) * sd["r"]
+                    sy = cy + math.sin(sd["a"]) * (sd["r"] * 0.48)
+                    sd_alpha = max(20, min(255, int((120 * sd["depth"] + amp * 120) * glow_mult)))
+                    p.setBrush(QBrush(QColor(white_c.red(), white_c.green(), white_c.blue(), sd_alpha)))
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.drawEllipse(QPointF(sx, sy), sd["s"], sd["s"])
+            except Exception:
+                pass
+
+        elif mode == "orb":
+            # ══════════════════════════════════════════════════════════════════
+            # QUANTUM ORB (4D Hyper-Sphere & Triple Gimbal Gyros)
+            # ══════════════════════════════════════════════════════════════════
+            rings = 4
+            for i in range(rings):
+                rx = fw * (0.32 + i * 0.05) + amp * 15
+                ry = fw * (0.12 + i * 0.04) + amp * 8
+                p.save()
+                p.translate(cx, cy)
+                p.rotate(tick * (1.6 + i * 0.9) * (1 if i % 2 == 0 else -1) + i * 45)
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                ring_alpha = max(30, min(255, int((140 - i * 20 + amp * 80) * glow_mult)))
+                p.setPen(QPen(QColor(primary_c.red(), primary_c.green(), primary_c.blue(), ring_alpha), 1.8 if i == 0 else 1.2))
                 p.drawEllipse(QPointF(0, 0), rx, ry)
+                # Gimbal node points
+                p.setBrush(QBrush(white_c))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(rx, 0), 2.2, 2.2)
+                p.drawEllipse(QPointF(-rx, 0), 2.2, 2.2)
                 p.restore()
 
         elif mode == "matrix":
-            # Digital glitch burst on high audio
-            if amp > 0.2:
-                for _ in range(int(amp * 10)):
-                    gx = random.randint(0, W)
-                    gy = random.randint(0, H)
-                    gw = random.randint(10, 80)
-                    gh = random.randint(2, 8)
-                    p.fillRect(QRectF(gx, gy, gw, gh), QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(150 * glow_mult)))
+            # ══════════════════════════════════════════════════════════════════
+            # CYBER MATRIX RAIN OVERDRIVE & DIGITAL GLITCH TEAR
+            # ══════════════════════════════════════════════════════════════════
+            if amp > 0.12:
+                glitch_bars = min(12, int(amp * 16))
+                for _ in range(glitch_bars):
+                    gx = random.randint(0, int(W * 0.8))
+                    gy = random.randint(0, int(H * 0.9))
+                    gw = random.randint(25, 120)
+                    gh = random.randint(2, 6)
+                    p.fillRect(QRectF(gx, gy, gw, gh), QColor(primary_c.red(), primary_c.green(), primary_c.blue(), int(160 * glow_mult)))
+
+        p.restore()
 
 
     def _make_grid(self, W: int, H: int) -> QPixmap:
@@ -941,7 +1077,7 @@ class HudCanvas(QWidget):
         self._shockwaves = active_sw
 
         # ── Supernova dynamics: beam rotation, idle debris drift, eruption rings
-        _is_nova = (getattr(self, "_avatar_mode", "celestial") == "nova")
+        _is_nova = (getattr(self, "_avatar_mode", "reactor") == "nova")
         self._nova_ang = (self._nova_ang
                           + ((1.4 + amp * 4.0) if (_is_nova and is_active) else 0.35)) % 360.0
         if _is_nova and rot_spd <= 0.001:
@@ -1099,7 +1235,7 @@ class HudCanvas(QWidget):
             bloom_c   = QColor(255, 180, 50)
             status_txt, status_col = ("●  READY" if self._blink else "○  READY"), qcol(C.PRI)
 
-        mode = getattr(self, "_avatar_mode", "celestial")
+        mode = getattr(self, "_avatar_mode", "reactor")
 
         # ── MODE RENDERING ────────────────────────────────────────────────────
         if mode == "reactor":
@@ -8793,7 +8929,7 @@ class MainWindow(QMainWindow):
             retheme_all_widgets(old, current_palette())
 
     def _apply_name_update(self, name: str, user_name: str, ui_color: str = "",
-                           voice: str = "", avatar_mode: str = "celestial",
+                           voice: str = "", avatar_mode: str = "reactor",
                            particle_density: int = 200, hud_fx: dict = None,
                            sfx_enabled: bool = True, anim_mode: str = "reactive",
                            hud_glow: int = 60, persona_mode: str = "jarvis",

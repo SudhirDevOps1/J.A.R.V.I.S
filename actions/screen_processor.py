@@ -152,7 +152,8 @@ def _capture_screen() -> tuple[bytes, str]:
     except Exception:
         pass
 
-    with mss.mss() as sct:
+    mss_cls = getattr(mss, 'MSS', None) or getattr(mss, 'mss', None)
+    with mss_cls() as sct:
         monitors = sct.monitors          # [0] = all combined, [1..n] = real screens
         target   = monitors[1] if len(monitors) > 1 else monitors[0]
         shot     = sct.grab(target)

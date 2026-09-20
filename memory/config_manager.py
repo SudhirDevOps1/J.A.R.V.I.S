@@ -318,14 +318,14 @@ def save_tts_engine(engine_name: str) -> None:
 
 
 def get_avatar_mode() -> str:
-    """Return chosen avatar mode ('celestial', 'reactor', 'orb', 'matrix', 'nova'). Default: 'celestial'."""
-    mode = (load_api_keys().get("avatar_mode", "celestial") or "celestial").lower().strip()
-    return mode if mode in ("celestial", "reactor", "orb", "matrix", "nova") else "celestial"
+    """Return chosen avatar mode ('celestial', 'reactor', 'orb', 'matrix', 'nova'). Default: 'reactor'."""
+    mode = (load_api_keys().get("avatar_mode", "reactor") or "reactor").lower().strip()
+    return mode if mode in ("celestial", "reactor", "orb", "matrix", "nova") else "reactor"
 
 
 def save_avatar_mode(mode: str) -> None:
     """Persist chosen avatar mode."""
-    _patch_config(avatar_mode=(mode or "celestial").strip().lower())
+    _patch_config(avatar_mode=(mode or "reactor").strip().lower())
 
 
 def get_particle_density() -> int:

@@ -2,7 +2,9 @@ import os as _os
 import warnings as _warnings
 _warnings.filterwarnings("ignore", category=DeprecationWarning)
 _warnings.filterwarnings("ignore", message=".*Setting the shape on a NumPy array.*")
-_os.environ["PYTHONWARNINGS"] = "ignore::DeprecationWarning"
+_warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*duckduckgo_search.*")
+_warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*mss.*")
+_os.environ["PYTHONWARNINGS"] = "ignore::DeprecationWarning,ignore::RuntimeWarning"
 _os.environ["QT_LOGGING_RULES"] = "qt.text.font.db=false;qt.qpa.mime=false;qt.qpa.clipboard=false;qt.pointer.dispatch=false"
 _os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 

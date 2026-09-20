@@ -65,11 +65,17 @@ def get_local_llm_config() -> Dict[str, Any]:
     """Retrieve local LLM settings (URL, model, timeout). Unified with custom UI config."""
     cfg = _load_config()
     # Fallback to custom_llm_url if local_llm_url is not specifically set
-    url = cfg.get("local_llm_url", cfg.get("custom_llm_url", "http://localhost:11434")).rstrip("/")
+    raw_url = str(cfg.get("local_llm_url") or cfg.get("custom_llm_url") or "http://localhost:11434").strip()
+    if not raw_url:
+        raw_url = "http://localhost:11434"
+    if not raw_url.startswith("http://") and not raw_url.startswith("https://"):
+        raw_url = "http://" + raw_url
+    url = raw_url.rstrip("/")
     if url.endswith("/v1"):
         url = url[:-3]  # Strip /v1 for native Ollama API probes
         
-    model = cfg.get("local_llm_model", cfg.get("custom_llm_model", "llama3.2"))
+    raw_model = str(cfg.get("local_llm_model") or cfg.get("custom_llm_model") or "llama3.2").strip()
+    model = raw_model if raw_model else "llama3.2"
     
     return {
         "enabled": is_local_llm_enabled(),
@@ -122,6 +128,8 @@ def generate_local_llm(
         return None
 
     cfg = get_local_llm_config()
+    if not cfg.get("url") or not cfg["url"].startswith("http"):
+        return None
     to = timeout or cfg["timeout"]
 
     payload = {
