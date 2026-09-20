@@ -3,8 +3,8 @@
 PLUGIN = {
     "name": "notion_sync",
     "description": (
-        "Create or search Notion pages. Trigger on 'notion me note', 'notion search'. "
-        "Do NOT use obsidian_brain for Notion — use this instead."
+        "Create or search Notion workspace pages. Trigger ONLY when the user explicitly mentions 'Notion' by name. "
+        "Do NOT call this tool for local notes, desktop notes, obsidian notes, or general study notes."
     ),
     "parameters": {
         "type": "OBJECT",

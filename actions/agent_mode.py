@@ -53,15 +53,25 @@ def _plan_goal(goal: str) -> list[str]:
             "reminder: pack travel essentials checklist",
             "send_message: share trip itinerary draft",
         ]
+    elif any(w in g for w in ("study", "learn", "course", "syllabus", "padhna", "notes", "tutorial", "guide", "roadmap", "plan", "java", "python", "javascript", "dsa", "cpp", "c++", "rust", "go", "sql")):
+        steps = [
+            f"web_search: core syllabus and topics for {goal}",
+            f"file_controller: write comprehensive study plan and notes for {goal} to Desktop",
+            f"obsidian_brain: sync {goal} notes to Obsidian vault",
+            "open_app: notepad",
+        ]
     elif any(w in g for w in ("setup", "dev", "project", "code")):
         steps = ["open_app: open code editor (routine)", "open_app: open browser",
                  "file_controller: create project folder", "todo_agent: track milestones"]
-    elif any(w in g for w in ("morning", "briefing", "day plan", "din")):
+    elif any(w in g for w in ("morning briefing", "morning routine", "subah ka plan", "aaj ka din", "today briefing", "daily digest")) and not any(w in g for w in ("study", "learn", "course", "notes", "syllabus", "java", "python", "code", "coding")):
         steps = ["web_search: news headlines", "weather_report: today weather",
                  "recall_past_activities: yesterday recap", "reminder: today tasks"]
     else:
-        steps = [f"Step 1: break '{goal}' into parts", "Step 2: execute via tools one by one",
-                 "Step 3: confirm + journal"]
+        steps = [
+            f"web_search: key resources and structure for {goal}",
+            f"file_controller: write detailed roadmap for {goal} to Desktop",
+            f"todo_agent: track completion of {goal}",
+        ]
     return steps
 
 

@@ -5,6 +5,8 @@ import warnings
 from pathlib import Path
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*duckduckgo_search.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*renamed to.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*ddgs.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_search")
 
 def _get_base_dir() -> Path:

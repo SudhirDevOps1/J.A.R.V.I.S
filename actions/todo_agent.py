@@ -133,7 +133,22 @@ def _dispatch_step_to_tool(step: str, goal: str, player=None, speak_fn=None) -> 
         app = "code" if any(x in arg_candidate.lower() for x in ("code", "editor", "vscode")) else (arg_candidate or "notepad")
         params = {"app_name": app}
     elif tool_name == "file_controller":
-        params = {"action": "status"}
+        if any(w in (arg_candidate + " " + step).lower() for w in ("write", "create", "save", "note", "plan", "roadmap", "curriculum")):
+            fname = re.sub(r"[^\w\s-]", "", goal).strip().replace(" ", "_") or "Plan"
+            params = {
+                "action": "write",
+                "path": f"STUDY/{fname}.md",
+                "content": f"# {goal.title()}\n\n*Created by J.A.R.V.I.S. Autonomous Agent*\n\n## Plan & Guidelines\n{arg_candidate or goal}\n",
+            }
+        else:
+            params = {"action": "status"}
+    elif tool_name == "obsidian_brain":
+        fname = re.sub(r"[^\w\s-]", "", goal).strip().replace(" ", "_") or "Plan"
+        params = {
+            "action": "write",
+            "path": f"{fname}.md",
+            "content": f"# {goal.title()}\n\n*Synced by J.A.R.V.I.S. Autonomous Agent*\n\n## Notes & Overview\n{arg_candidate or goal}\n",
+        }
     elif tool_name == "ecommerce_search":
         params = {"query": arg_candidate or goal}
     elif reg and reg.has(tool_name):
@@ -150,7 +165,8 @@ def _dispatch_step_to_tool(step: str, goal: str, player=None, speak_fn=None) -> 
     else:
         # Fallback to web_search for any non-tool freeform steps
         tool_name = "web_search"
-        params = {"query": f"{step} {dest}".strip()}
+        q_text = f"{step} {dest}".strip() if (dest and is_travel and dest.lower() not in step.lower()) else step.strip()
+        params = {"query": q_text}
 
     if reg and reg.has(tool_name):
         ctx = {"player": player, "speak": speak_fn, "response": None, "session_memory": None}

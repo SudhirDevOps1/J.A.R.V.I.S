@@ -230,6 +230,18 @@ def _resolve_path(raw: str) -> Path:
     if lower in shortcuts:
         return shortcuts[lower]
 
+    # Redirect non-existent or hallucinated Windows user home directories (e.g. "C:\Users\Sudhir\..." -> "C:\Users\DELL\...")
+    import re
+    m_user = re.match(r"^[A-Za-z]:[/\\]Users[/\\]([^/\\]+)(?:[/\\](.*))?$", raw_s, re.IGNORECASE)
+    if m_user:
+        target_user = m_user.group(1)
+        sub_path = (m_user.group(2) or "").lstrip("/\\")
+        actual_home = Path.home()
+        if target_user.lower() != actual_home.name.lower():
+            target_p = Path(raw_s[:2] + "\\Users\\" + target_user)
+            if not target_p.exists() or not os.access(str(target_p), os.W_OK):
+                return actual_home / sub_path if sub_path else actual_home
+
     # Shortcut prefix matching (e.g. "desktop/file.md", "downloads\abc.pdf", "documents/notes")
     for sc_name, sc_path in shortcuts.items():
         if lower.startswith((f"{sc_name}/", f"{sc_name}\\")):
