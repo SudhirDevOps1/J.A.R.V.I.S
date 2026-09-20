@@ -337,6 +337,69 @@ def delete_note(path: str) -> str:
     return f"Note [[{p}]] not found."
 
 
+def rename_note(old_path: str, new_path: str) -> str:
+    """Rename or move a note in Obsidian vault (supports both REST API & local vault)."""
+    p_old = (old_path or "").strip()
+    p_new = (new_path or "").strip()
+    if not p_old:
+        return "Please specify the current note path to rename."
+    if not p_new:
+        return "Please specify the new note name or destination path."
+
+    p_old = re.sub(r'(\.md)+$', '.md', p_old, flags=re.IGNORECASE)
+    if not p_old.lower().endswith(".md"):
+        p_old += ".md"
+    p_old = p_old.strip(" _")
+
+    p_new = re.sub(r'(\.md)+$', '.md', p_new, flags=re.IGNORECASE)
+    if not p_new.lower().endswith(".md"):
+        p_new += ".md"
+    p_new = p_new.strip(" _")
+
+    if p_old == p_new:
+        return f"Old and new note names are identical: [[{p_old}]]."
+
+    # 1. Try REST API (Read old -> Write new -> Delete old)
+    cfg = _get_obsidian_settings()
+    if (cfg.get("api_key") or "").strip():
+        clean_old = urllib.parse.quote(p_old, safe="/")
+        clean_new = urllib.parse.quote(p_new, safe="/")
+        
+        read_res = _rest_request("GET", f"vault/{clean_old}")
+        if read_res and read_res.status_code == 200:
+            content = read_res.text or ""
+            put_res = _rest_request("PUT", f"vault/{clean_new}", data=content)
+            if put_res and put_res.status_code in (200, 204):
+                _rest_request("DELETE", f"vault/{clean_old}")
+                return f"✅ Renamed note [[{p_old}]] to [[{p_new}]] in Obsidian via REST API."
+
+    # 2. Local Vault Filesystem
+    vault = _get_local_vault_dir()
+    old_file = vault / p_old
+    new_file = vault / p_new
+
+    if old_file.exists():
+        try:
+            new_file.parent.mkdir(parents=True, exist_ok=True)
+            old_file.rename(new_file)
+            return f"✅ Renamed note [[{p_old}]] to [[{p_new}]] in local Obsidian vault ({vault.name})."
+        except Exception as e:
+            return f"❌ Failed to rename note [[{p_old}]]: {e}"
+
+    # Case-insensitive fallback match in local vault
+    if vault.exists():
+        for f in vault.rglob("*.md"):
+            if f.name.lower() == Path(p_old).name.lower():
+                try:
+                    dest = f.parent / Path(p_new).name
+                    f.rename(dest)
+                    return f"✅ Renamed note [[{f.name}]] to [[{dest.name}]] in local Obsidian vault."
+                except Exception as e:
+                    return f"❌ Failed to rename: {e}"
+
+    return f"Note [[{p_old}]] not found in Obsidian vault."
+
+
 def append_daily_note(content: str) -> str:
     """Append a thought, summary, or action entry to today's Obsidian daily note."""
     text = (content or "").strip()
@@ -425,6 +488,9 @@ def obsidian_brain(parameters: dict, player=None, **_) -> str:
         return append_to_note(path, content)
     elif action in ("delete", "remove"):
         return delete_note(path or query)
+    elif action in ("rename", "move"):
+        new_p = (parameters.get("new_path") or parameters.get("target") or parameters.get("destination") or query or content or "").strip()
+        return rename_note(path, new_p)
     elif action in ("delete_all", "clear_all", "sab_delete"):
         # List vault, delete every .md that is NOT a daily note
         res_list = _rest_request("GET", "vault/")
@@ -470,14 +536,14 @@ def obsidian_brain(parameters: dict, player=None, **_) -> str:
                 f"(Port {cfg.get('port', 27123)})")
     else:
         return (f"Unknown obsidian action: '{action}'. "
-                f"Available: list, search, read, write, append, delete, append_daily, status.")
+                f"Available: list, search, read, write, append, rename, delete, append_daily, status.")
 
 
 TOOL = {
     "name": "obsidian_brain",
     "description": (
         "Interact with the user's Obsidian Second Brain markdown notes vault. "
-        "Search notes, read/write/append/delete notes, list vault contents, "
+        "Search notes, read/write/append/rename/delete notes, list vault contents, "
         "or bulk delete/clear all notes ('all notes delete karo', 'sab delete kar do', 'clear notes'). "
         "Use this whenever user mentions Obsidian, notes, second brain, or wants to store/retrieve/clean knowledge."
     ),
@@ -493,6 +559,7 @@ TOOL = {
                     "'read' (read note content), "
                     "'write' (create/overwrite note), "
                     "'append' (add to existing note without overwriting), "
+                    "'rename' (rename or move a note to a new name/path), "
                     "'delete' (remove single note), "
                     "'delete_all' (delete/clear all created markdown notes from vault), "
                     "'append_daily' (add entry to today's daily note), "
@@ -502,6 +569,10 @@ TOOL = {
             "path": {
                 "type": "STRING",
                 "description": "Path or name of the note (e.g. 'ProjectPlan.md', 'Ideas/Python', 'Daily Notes/2024-01-15')",
+            },
+            "new_path": {
+                "type": "STRING",
+                "description": "New path or name for the note when action is 'rename'",
             },
             "content": {
                 "type": "STRING",

@@ -145,9 +145,21 @@ class NeedleToolRouter:
             clean = re.sub(_fp, " ", clean).strip()
         clean = re.sub(r"\s{2,}", " ", clean).strip()
 
+        # Resolve anaphora (pronouns like 'isko', 'use', 'wahan') using multi-turn context
+        try:
+            from core.context_buffer import resolve_anaphora, update_context
+            clean = resolve_anaphora(clean)
+        except Exception:
+            pass
+
         # Helper to record and return tool execution for repeat command support
         def _dispatch(tool_name: str, tool_args: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
             self._last_tool_call = (tool_name, tool_args)
+            try:
+                from core.context_buffer import update_context
+                update_context(query=text, tool=tool_name, args=tool_args)
+            except Exception:
+                pass
             return (tool_name, tool_args)
 
         # -- Improvement 5: Repeat Last Tool Command --------------------------
@@ -658,12 +670,13 @@ class NeedleToolRouter:
 
         # ADDITIVE: "X obsidian me save karo" / "obsidian me likho X" -> daily note.
         # Pehle ye hissa drop ho jata tha (model tool bhool jata tha).
-        m_obs = re.search(r"\bobsidian\s*(?:me|mein|ko)?\s*(?:save|likho|likh|note)\b", clean)
-        if m_obs:
-            _content = re.sub(r"\b(obsidian|me|mein|ko|save|karo|likho|likh|note|and|aur|use|ise|isko)\b", "", clean).strip(" ,.-")
-            _content = " ".join(_content.split())
-            if _content:
-                return _dispatch("obsidian_brain", {"action": "append_daily", "content": _content})
+        if not any(w in clean for w in ("rename", "delete", "hatao", "remove", "search", "dhoondh", "khojo", "padho", "read", "kholo", "naam badlo")):
+            m_obs = re.search(r"\bobsidian\s*(?:me|mein|ko)?\s*(?:save|likho|likh)\b|\b(?:save|likho|likh)\s+.*?\bobsidian\b", clean)
+            if m_obs:
+                _content = re.sub(r"\b(obsidian|me|mein|ko|save|karo|likho|likh|note|and|aur|use|ise|isko)\b", "", clean).strip(" ,.-")
+                _content = " ".join(_content.split())
+                if _content:
+                    return _dispatch("obsidian_brain", {"action": "append_daily", "content": _content})
 
         # -- Weather (Memory-Aware: defaults to user location from long_term.json)
         # "Delhi ka mausam" / "aaj weather" / "kal baarish hogi kya"
@@ -1052,13 +1065,26 @@ class NeedleToolRouter:
         _obs_read_words   = ("padho", "read", "dikhao", "kholo", "open")
         _obs_list_words   = ("list", "dikhao", "sab notes", "notes kya hain", "notes dikhao", "all notes")
         _obs_delete_words = ("delete", "hatao", "remove", "mita", "mitao")
+        _obs_rename_words = ("rename", "naam badlo", "naam change", "move", "badlo")
         _clean_l = clean.lower()
 
         if "obsidian" in _clean_l or re.search(r"\bsecond[\s-]?brain\b", _clean_l):
             _obs_body = re.sub(
                 r"\b(obsidian|second\s*brain|mein|me|se|ka|ki|ke)\b", " ", _clean_l
             ).strip()
-            if any(w in _clean_l for w in _obs_delete_words):
+            if any(w in _clean_l for w in _obs_rename_words):
+                # Pattern: "obsidian note X ko Y me rename karo" / "rename note X to Y"
+                m_rn = re.search(r"(?:note\s+)?([a-zA-Z0-9_\-\.\s]+?)\s+(?:ko|to)\s+([a-zA-Z0-9_\-\.\s]+?)(?:\s+(?:me|mein|par))?\s*(?:rename|move|badlo)", _clean_l)
+                if m_rn:
+                    _p_old = re.sub(r"\b(obsidian|second\s*brain|note|notes?)\b", "", m_rn.group(1)).strip()
+                    _p_new = re.sub(r"\b(obsidian|second\s*brain|note|notes?)\b", "", m_rn.group(2)).strip()
+                    return _dispatch("obsidian_brain", {"action": "rename", "path": _p_old, "new_path": _p_new})
+                _p = re.sub(r"\b(obsidian|mein|me|se|ka|ki|ke|rename|move|naam|badlo|note|notes?)\b", " ", _clean_l).strip()
+                _parts = _p.split()
+                if len(_parts) >= 2:
+                    return _dispatch("obsidian_brain", {"action": "rename", "path": _parts[0], "new_path": _parts[1]})
+                return _dispatch("obsidian_brain", {"action": "rename", "path": _p})
+            elif any(w in _clean_l for w in _obs_delete_words):
                 # extract note name to delete
                 _p = re.sub(
                     r"\b(obsidian|mein|me|se|ka|ki|ke|delete|hatao|remove|mita|mitao|note|notes?)\b",
@@ -1616,6 +1642,13 @@ class TriTierDispatcher:
 
     def route(self, user_text: str, is_online: bool = True) -> Dict[str, Any]:
         """Determine execution tier and routing payload."""
+        # Step -0.5: Resolve anaphora (pronouns: isko, use, wahan) from active context buffer
+        try:
+            from core.context_buffer import resolve_anaphora
+            user_text = resolve_anaphora(user_text)
+        except Exception:
+            pass
+
         # Step 0: Fast-path Obsidian check on raw text BEFORE LFM normalization.
         # This prevents LFM from converting "obsidian mein search karo" →
         # "search obsidian mein java" which then hits web_search instead.

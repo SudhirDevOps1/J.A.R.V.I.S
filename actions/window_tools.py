@@ -206,6 +206,32 @@ def _awake(minutes: str, player=None) -> str:
     return "Awake abhi sirf Windows par supported hai."
 
 
+def _force_win_foreground(w) -> bool:
+    try:
+        w.restore()
+    except Exception:
+        pass
+    if _SYSTEM == "Windows":
+        try:
+            import ctypes
+            u32 = ctypes.windll.user32
+            hwnd = getattr(w, "_hWnd", None)
+            if hwnd:
+                u32.ShowWindow(hwnd, 9)
+                u32.keybd_event(0x12, 0, 0, 0)
+                u32.SetForegroundWindow(hwnd)
+                u32.keybd_event(0x12, 0, 2, 0)
+                return True
+        except Exception:
+            pass
+    try:
+        w.activate()
+        return True
+    except Exception:
+        pass
+    return False
+
+
 def _walker(query: str, player=None) -> str:
     """ADDITIVE Window Walker: fuzzy title match + bring-to-front. Purana untouched."""
     import difflib as _dl
@@ -224,20 +250,14 @@ def _walker(query: str, player=None) -> str:
     titles = [w.title for w in wins]
     for w in wins:
         if q in w.title.lower():
-            try:
-                w.restore(); w.activate()
-            except Exception:
-                pass
+            _force_win_foreground(w)
             _log(player, f"[walker] {w.title}")
             return f"'{w.title}' window saamne le aaya."
     close = _dl.get_close_matches(query, titles, n=1, cutoff=0.5)
     if close:
         for w in wins:
             if w.title == close[0]:
-                try:
-                    w.restore(); w.activate()
-                except Exception:
-                    pass
+                _force_win_foreground(w)
                 return f"'{w.title}' window saamne le aaya."
     shown = ", ".join(t[:30] for t in titles[:8])
     return f"'{query}' nahi mili. Khuli windows: {shown}."

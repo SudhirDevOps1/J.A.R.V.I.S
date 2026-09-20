@@ -513,6 +513,34 @@ def _snapshot_pids() -> set:
         return set()
 
 
+def _force_window_to_front(w) -> bool:
+    """Force window to foreground bypassing Windows SetForegroundWindow lock."""
+    try:
+        w.restore()
+    except Exception:
+        pass
+    if _SYSTEM == "Windows":
+        try:
+            import ctypes
+            u32 = ctypes.windll.user32
+            hwnd = getattr(w, "_hWnd", None)
+            if hwnd:
+                u32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                # Windows SetForegroundWindow lock bypass via simulated ALT keystroke
+                u32.keybd_event(0x12, 0, 0, 0)  # ALT down
+                u32.SetForegroundWindow(hwnd)
+                u32.keybd_event(0x12, 0, 2, 0)  # ALT up
+                return True
+        except Exception:
+            pass
+    try:
+        w.activate()
+        return True
+    except Exception:
+        pass
+    return False
+
+
 def _activate_window(hint: str) -> bool:
     """Best-effort window activation: bring existing window matching hint to front."""
     try:
@@ -526,12 +554,8 @@ def _activate_window(hint: str) -> bool:
             w_low = w.title.lower()
             for t in toks:
                 if t in w_low:
-                    try:
-                        w.restore()
-                        w.activate()
+                    if _force_window_to_front(w):
                         return True
-                    except Exception:
-                        pass
     except Exception:
         pass
     return False
@@ -949,6 +973,9 @@ def open_app(
 
     try:
         if launcher(resolved_target):
+            # Best-effort post-launch foreground boost
+            time.sleep(0.3)
+            _activate_window(app_name)
             if fallback_note:
                 return f"{fallback_note}, aur successfully open kar diya!"
             return f"Opened {app_name}."
@@ -956,6 +983,8 @@ def open_app(
         # Secondary attempt with raw app_name
         if resolved_target.lower() != app_name.lower():
             if launcher(app_name):
+                time.sleep(0.3)
+                _activate_window(app_name)
                 return f"Opened {app_name}."
 
         return (

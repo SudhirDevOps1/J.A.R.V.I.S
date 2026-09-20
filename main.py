@@ -805,6 +805,14 @@ class JarvisLive:
         from memory.memory_manager import log_daily_activity
         log_daily_activity(text)
 
+        # Multi-turn Context Buffer & Anaphora resolution (e.g. 'isko', 'use', 'wahan')
+        try:
+            from core.context_buffer import resolve_anaphora, update_context
+            text = resolve_anaphora(text)
+            update_context(query=text)
+        except Exception:
+            pass
+
         # Hermes autonomous learning & pitch intent handler
         try:
             from memory.hermes_personalization import learn_from_interaction, adjust_pitch_by_intent
@@ -1256,6 +1264,13 @@ class JarvisLive:
 
         print(f"[JARVIS] 🔧 {name}  {args}")
         self.ui.set_state("THINKING")
+
+        # Update multi-turn context buffer with tool execution
+        try:
+            from core.context_buffer import update_context
+            update_context(tool=name, args=args)
+        except Exception:
+            pass
 
         if name == "save_memory":
             category = args.get("category", "notes")
