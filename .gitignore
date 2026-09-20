@@ -103,6 +103,7 @@ logs/
 downloads/
 screenshots/
 scratch/
+cache/
 config/generated_sniffers/*.py
 config/swarm_outputs/*.json
 node_modules/

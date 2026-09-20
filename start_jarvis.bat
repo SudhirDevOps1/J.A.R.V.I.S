@@ -98,10 +98,19 @@ goto :pip_setup
 :: 3. Pip self-repair and upgrade
 "%PYTHON_EXE%" -m ensurepip --default-pip >nul 2>&1
 
+:: Check for explicit update command line flags
+if "%~1"=="--update" goto :auto_update_all_pip
+if "%~1"=="--upgrade" goto :auto_update_all_pip
+if "%~1"=="-u" goto :auto_update_all_pip
+
 :: 4. Check and Auto-Install Python Dependencies on First Run
 echo [*] Checking libraries and system dependencies...
 "%PYTHON_EXE%" -c "import PyQt6, google.genai, requests, sounddevice, edge_tts, PIL, cv2, psutil, tinydb, rank_bm25, thefuzz, keyboard, sklearn, fastapi, uvicorn, cryptography, win32api, comtypes, pycaw" >nul 2>&1
-if %ERRORLEVEL% EQU 0 goto :dependencies_ready
+if %ERRORLEVEL% EQU 0 (
+    :: Auto-check for package updates (checks PyPI and auto-upgrades when new releases appear)
+    "%PYTHON_EXE%" scripts\auto_pip_updater.py
+    goto :dependencies_ready
+)
 
 echo [*] Pehli baar setup ho raha hai ya missing packages hain.
 echo [*] Auto-installing required packages from requirements.txt...
@@ -112,7 +121,12 @@ if %ERRORLEVEL% NEQ 0 (
 ) else (
     echo [OK] Sabhi zaroori packages safaltapoorvak install ho gaye!
 )
-echo.
+goto :dependencies_ready
+
+:auto_update_all_pip
+echo [*] Force checking PyPI and updating all Python dependencies...
+"%PYTHON_EXE%" scripts\auto_pip_updater.py --force
+goto :dependencies_ready
 
 :dependencies_ready
 :: 5. Run Preflight Check (Auto-downloads models, LFM2.5, SFX, icons, sets up desktop shortcut)
@@ -127,6 +141,16 @@ if "%~1"=="--check" (
 if "%~1"=="--dry-run" (
     echo.
     echo [OK] J.A.R.V.I.S. automated setup and verification complete. Everything is ready!
+    exit /b 0
+)
+if "%~1"=="--update" (
+    echo.
+    echo [OK] J.A.R.V.I.S. Python dependencies updated successfully!
+    exit /b 0
+)
+if "%~1"=="--upgrade" (
+    echo.
+    echo [OK] J.A.R.V.I.S. Python dependencies updated successfully!
     exit /b 0
 )
 
