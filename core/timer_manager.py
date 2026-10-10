@@ -161,6 +161,13 @@ class TimerManager:
                 return True
             return False
 
+    def clear_all_timers(self) -> int:
+        with self._lock:
+            count = len(self._timers)
+            self._timers.clear()
+            self._save()
+            return count
+
     def get_active_timers(self) -> List[ActiveTimer]:
         with self._lock:
             now = datetime.now()
@@ -222,6 +229,9 @@ def get_primary_timer() -> Optional[ActiveTimer]:
 
 def check_expired_timers() -> List[ActiveTimer]:
     return get_timer_manager().check_and_trigger_expired()
+
+def clear_all_timers() -> int:
+    return get_timer_manager().clear_all_timers()
 
 def get_pending_tasks_for_ui(limit: int = 3) -> List[Dict[str, Any]]:
     return get_timer_manager().get_pending_tasks(limit=limit)

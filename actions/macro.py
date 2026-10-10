@@ -207,7 +207,7 @@ def macro(parameters: dict | None = None, player=None, session_memory=None, **_)
             # keyboard/mouse input. run_command.py fails closed on the same
             # condition; a recorded macro is arbitrary input injection, so a
             # broken gate must stop the replay, not wave it through.
-            _audit("macro_play_gate_failed", f"{name}: {e}")
+            _audit("macro_play_gate_failed", f"{name}: {_e}")
             return (f"Confirm gate unavailable ({_e}). Macro replay refuse kiya gaya — "
                     "sirf jab CONFIRM system kaam kar raha ho tab chalega.")
     return "Unknown macro action. Use record, stop, list, play."
