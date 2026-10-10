@@ -383,6 +383,40 @@ class NeedleToolRouter:
             if ticker and ticker.lower() not in ("kya", "batao", "hai", "rupees", "rupee", "inr", "usd", "ka", "ki", "ke"):
                 return _dispatch("stock_price", {"symbol": ticker})
 
+        # -- MCP server control ----------------------------------------------------
+        # "mcp status", "mcp servers", "mcp start chrome-devtools", "mcp stop websift",
+        # "mcp tools dikhao". Requires an explicit mcp keyword so it can never
+        # shadow normal conversation ("map" / "mcp" similarity).
+        if re.search(r"\bmcp\b", clean):
+            _m_action = "status"
+            _m_target = ""
+            _m_sub = re.search(
+                r"\bmcp\b\s*(?:server\s*)?(start|chalu|run|stop|band|kill|status|list|tools|"
+                r"servers|dikhao|show|list_servers|chalu\s*karo|band\s*karo)\b",
+                clean,
+            )
+            if _m_sub:
+                _m_verb = _m_sub.group(1)
+                if _m_verb in ("start", "chalu", "run", "chalu karo"):
+                    _m_action = "start"
+                elif _m_verb in ("stop", "band", "kill", "band karo"):
+                    _m_action = "stop"
+                elif _m_verb in ("list", "tools"):
+                    _m_action = "list"
+                else:
+                    _m_action = "status"
+                _rest = re.sub(
+                    r"^\s*mcp\b|\b(server|status|start|chalu|run|stop|band|kill|list|tools|"
+                    r"servers|dikhao|show|list_servers|chalu\s*karo|band\s*karo|kaunse|kaunsa)\b",
+                    " ",
+                    clean,
+                ).strip(" ?")
+                _m_target = _rest if _rest and _rest != clean else ""
+            return _dispatch("mcp_control", {
+                "action": _m_action,
+                "server": _m_target,
+            })
+
         # -- The Tool: TinyDB Persistent Memory & Reminders -------------------
         # "yaad rakhna kal mujhe Java ke multi-threading concepts revise karne hain"
         if re.search(r"\b(yaad\s*(?:rakhna|rakho)|remember\s*that|task\s*save|save\s*task)\b", clean):

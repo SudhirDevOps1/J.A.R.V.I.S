@@ -392,6 +392,7 @@ class DashboardServer:
         self._uploads_dir                 = UPLOADS_DIR
         self._login_html                  = _read("login.html")
         self._app_html                    = _read("app.html")
+        self._servers: list                = []   # live uvicorn.Server handles
         self.app                          = self._build_app()
 
     # ── one-time key management ───────────────────────────────────────────
@@ -1020,20 +1021,6 @@ class DashboardServer:
 
     # ── serve ─────────────────────────────────────────────────────────────
 
-    async def _serve_alias(self) -> None:
-        """Second HTTPS server on PORT+1 sharing the same app and in-memory state.
-        Chrome HTTPS-upgrades any bare IP:PORT the user types, so this port also needs TLS.
-        User types IP:8001 → Chrome tries https → self-signed cert warning → accept once → done."""
-        ssl_key  = BASE_DIR / "config" / "certs" / "jarvis.key"
-        ssl_cert = BASE_DIR / "config" / "certs" / "jarvis.crt"
-        asyncio.get_event_loop().run_in_executor(None, _ensure_network_access, PORT + 1)
-        cfg = uvicorn.Config(
-            self.app, host="0.0.0.0", port=PORT + 1, log_level="warning",
-            ssl_keyfile=str(ssl_key), ssl_certfile=str(ssl_cert),
-        )
-        print(f"[Dashboard] Manual entry:  {self._ip}:{PORT + 1}  (type in browser, accept cert once)")
-        await uvicorn.Server(cfg).serve()
-
     async def serve(self) -> None:
         if not _DEPS_OK:
             print("[Dashboard] fastapi/uvicorn not installed — dashboard disabled.")
@@ -1049,14 +1036,47 @@ class DashboardServer:
         ssl_cert = BASE_DIR / "config" / "certs" / "jarvis.crt"
 
         if use_ssl:
-            asyncio.create_task(self._serve_alias())
-
-        cfg = uvicorn.Config(
-            self.app, host="0.0.0.0", port=PORT, log_level="warning",
-            **({"ssl_keyfile": str(ssl_key), "ssl_certfile": str(ssl_cert)} if use_ssl else {}),
-        )
+            # The HTTPS alias port needs the same firewall treatment.
+            asyncio.get_event_loop().run_in_executor(None, _ensure_network_access, PORT + 1)
 
         proto = "https" if use_ssl else "http"
         print(f"[Dashboard] {proto}://{self._ip}:{PORT}")
         print("[Dashboard] Press 'Remote Control' in JARVIS UI to get the QR code.")
-        await uvicorn.Server(cfg).serve()
+        if use_ssl:
+            print(f"[Dashboard] Manual entry: {self._ip}:{PORT + 1} "
+                  "(type in browser, accept cert once)")
+        # Hold references so request_shutdown() can actually stop the servers.
+        # Previously there was no handle at all, and main.py called a
+        # `.shutdown()` method that does not exist — the AttributeError was
+        # swallowed, so uvicorn was never signalled and only died with the
+        # process. Any in-process restart would have left the port bound.
+        self._servers = [
+            uvicorn.Server(uvicorn.Config(
+                self.app, host="0.0.0.0", port=PORT, log_level="warning",
+                **({"ssl_keyfile": str(ssl_key), "ssl_certfile": str(ssl_cert)} if use_ssl else {}),
+            ))
+        ]
+        if use_ssl:
+            self._servers.append(uvicorn.Server(uvicorn.Config(
+                self.app, host="0.0.0.0", port=PORT + 1, log_level="warning",
+                ssl_keyfile=str(ssl_key), ssl_certfile=str(ssl_cert),
+            )))
+        try:
+            for srv in self._servers:
+                await srv.serve()
+        finally:
+            self._servers = []
+
+    def request_shutdown(self) -> None:
+        """Ask every uvicorn server to exit. Safe to call when not serving.
+
+        Thread-safe and idempotent: uvicorn.Server.should_exit is a plain flag
+        that the server's main loop polls, so setting it from the Qt shutdown
+        path is sufficient and non-blocking.
+        """
+        servers = getattr(self, "_servers", None) or []
+        for srv in servers:
+            try:
+                srv.should_exit = True
+            except Exception:
+                pass

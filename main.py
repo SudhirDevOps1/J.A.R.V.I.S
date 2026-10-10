@@ -628,6 +628,23 @@ class JarvisLive:
         self.ui.request_say = self.plugin_say   # plugins: mid-task speech channel
         self.ui.speak       = self.speak        # ADDITIVE: Unified speech channel for HUD alerts/timers
 
+        # ── MCP servers (config/mcp_servers.json) ────────────────────────────
+        # Declarative MCP: tools declared there join Gemini's tool list under an
+        # mcp__<server>__<tool> namespace. Discovery is lazy and must not block
+        # boot — a missing or slow optional server must never delay startup, so
+        # this runs on a background thread and only the auto_start servers are
+        # touched synchronously (none by default).
+        self._mcp = None
+        try:
+            from core.mcp_manager import get_mcp_manager
+            self._mcp = get_mcp_manager(_base_dir / "config" / "mcp_servers.json")
+            _n = self._mcp.load_config()
+            if _n:
+                print(f"[MCP] {_n} enabled server(s) in config")
+            self._refresh_mcp_tools_async()
+        except Exception as e:
+            print(f"[MCP] manager unavailable: {e}")
+
         # ── Wake word ────────────────────────────────────────────────────────
         # _awake gates the mic (see _listen_audio) and the background speakers.
         # It is True whenever wake word is OFF, so default behaviour is unchanged.
@@ -641,6 +658,45 @@ class JarvisLive:
         self.ui.on_wake_toggle   = self._ui_wake_toggle   # (enable: bool) -> str
         self.ui.on_wake_manual   = self._ui_wake_manual   # () -> toggle awake/asleep
         self.ui.on_wake_install  = self._ui_wake_install  # () -> (ok, msg)
+
+    # ── MCP: config-driven tool discovery ─────────────────────────────────────
+
+    def _mcp_tool_declarations(self) -> list:
+        """Gemini function declarations for every live MCP tool.
+
+        Returns an empty list when MCP is unconfigured or a server failed to
+        start — MCP is strictly additive, so it must never be able to prevent
+        the session from connecting.
+        """
+        if self._mcp is None:
+            return []
+        try:
+            decls = self._mcp.all_tool_declarations(include_offline=False)
+        except Exception as e:
+            print(f"[MCP] declaration collection failed: {e}")
+            return []
+        return decls or []
+
+    def _refresh_mcp_tools_async(self) -> None:
+        """Warm MCP server sessions off the main thread.
+
+        Called once at construction. Discovery is what populates
+        _mcp_tool_declarations(), and doing it inline would add seconds to boot
+        for servers the user may not touch today.
+        """
+        def _worker():
+            try:
+                if self._mcp is None:
+                    return
+                self._mcp.start_auto()
+                self._mcp.all_tool_declarations(include_offline=True)
+            except Exception as e:
+                print(f"[MCP] warm-up note: {e}")
+        try:
+            threading.Thread(target=_worker, daemon=True,
+                             name="jarvis-mcp-warmup").start()
+        except Exception as e:
+            print(f"[MCP] warm-up thread failed: {e}")
 
     # ── Wake word: state machine ─────────────────────────────────────────────
 
@@ -1290,6 +1346,7 @@ class JarvisLive:
                 TOOL_DECLARATIONS
                 + self._action_registry.get_tool_declarations()
                 + self._plugin_registry.get_tool_declarations()
+                + self._mcp_tool_declarations()
             )}],
             # Hand back the handle captured from the last session_resumption
             # update. `handle=None` is exactly the old behaviour (ask for
@@ -1497,6 +1554,18 @@ class JarvisLive:
                     import os as _os
                     _os._exit(0)
                 asyncio.create_task(_do_shutdown())
+
+            elif name.startswith("mcp__"):
+                # MCP tool call. Routed through the manager (not the action
+                # registry) because these tools are discovered at runtime from
+                # config/mcp_servers.json, not from actions/*.py. The manager
+                # starts the owning server on demand.
+                if self._mcp is None:
+                    result = "MCP manager is not available."
+                else:
+                    _mcp_ok, _mcp_out = await loop.run_in_executor(
+                        None, lambda: self._mcp.call_tool(name, args))
+                    result = _mcp_out if _mcp_ok else f"MCP tool error: {_mcp_out}"
 
             elif self._action_registry.has(name):
                 # file_processor: fall back to the currently-uploaded file when none is given
@@ -2700,11 +2769,22 @@ class JarvisLive:
         except Exception:
             pass
         # Stop dashboard
+        # BUGFIX: DashboardServer has no .shutdown() method. The old code called
+        # it inside a bare `except Exception: pass`, so the AttributeError was
+        # swallowed every time and uvicorn was never actually told to stop —
+        # it only died with the process. DashboardServer.serve() now owns a
+        # should_exit flag, so ask it to stop properly.
         if self._dashboard is not None:
             try:
-                self._dashboard.shutdown()
+                self._dashboard.request_shutdown()
             except Exception:
                 pass
+        # Stop MCP server processes (child processes we spawned)
+        try:
+            if self._mcp is not None:
+                self._mcp.stop_all()
+        except Exception:
+            pass
         print("[JARVIS] Shutdown complete.")
 
 
