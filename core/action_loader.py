@@ -29,6 +29,7 @@ import importlib.util
 import inspect
 import re
 import sys
+import time
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,6 +56,14 @@ class ActionRegistry:
         self._actions = actions          # name -> ActionRecord, VALID entries only
         self._all_records: list[ActionRecord] = []
         self._logger = logger
+        # The phrase that produced this invocation, when the caller knows it.
+        # Set by main.py before dispatch; consumed by the learning loop so that
+        # outcomes accumulate against the words the user actually said.
+        self._current_phrase: str = ""
+
+    def set_current_phrase(self, phrase: str) -> None:
+        """Record which utterance is about to be dispatched."""
+        self._current_phrase = str(phrase or "")[:160]
 
     # -- called by main.py at LiveConnectConfig build time --
     def get_tool_declarations(self) -> list[dict]:
@@ -74,12 +83,54 @@ class ActionRegistry:
         rec = self._actions.get(name)
         if rec is None or not rec.valid:
             return f"Action '{name}' is not available."
+        # Learning loop: observe every invocation so repeated phrases
+        # accumulate evidence and can be promoted to the fast reflex path.
+        # Best-effort — a learning failure must never change the result.
+        phrase = self._current_phrase
         try:
-            return _call_handler(rec.handler, parameters, ctx or {}) or "Done."
+            from core import learning_loop
+        except Exception:
+            learning_loop = None  # type: ignore
+        t0 = time.perf_counter()
+        ok = True
+        try:
+            out = _call_handler(rec.handler, parameters, ctx or {}) or "Done."
         except Exception as e:
+            ok = False
+            out = f"Tool '{name}' failed: {e}"
             self._logger(f"Action '{name}' crashed during run(): {e}")
             traceback.print_exc()
-            return f"Tool '{name}' failed: {e}"
+        if learning_loop is not None and phrase:
+            try:
+                learning_loop.record_outcome(
+                    phrase=phrase,
+                    tool=name,
+                    ok=ok and not _looks_like_failure(out),
+                    duration_ms=int((time.perf_counter() - t0) * 1000),
+                    logger=self._logger,
+                )
+            except Exception as e:
+                self._logger(f"learning loop skipped: {e}")
+        return out
+
+
+# Handlers report failure in their return string rather than by raising, so the
+# registry cannot rely on an exception to mean "this did not work". These
+# markers are the convention used across actions/; a handler that cannot be
+# interpreted is treated as success, because false failures would poison the
+# learning signal and suppress a command that actually worked.
+_FAILURE_MARKERS = (
+    "not available", "failed", "error", "kuch nahi mila", "nahi mila",
+    "nahi chala", "refuse", "galat", "invalid", "not found", "unavailable",
+    "confirm gate unavailable", "nahi hua", "ho gayi hai?",
+)
+
+
+def _looks_like_failure(output: str) -> bool:
+    o = str(output or "").strip().lower()
+    if not o:
+        return True
+    return any(m in o for m in _FAILURE_MARKERS)
 
 
 def _call_handler(fn: Callable, parameters: dict, ctx: dict) -> str:

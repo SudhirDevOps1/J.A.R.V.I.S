@@ -383,6 +383,24 @@ class NeedleToolRouter:
             if ticker and ticker.lower() not in ("kya", "batao", "hai", "rupees", "rupee", "inr", "usd", "ka", "ki", "ke"):
                 return _dispatch("stock_price", {"symbol": ticker})
 
+        # -- Learning loop control -------------------------------------------------
+        # "kya seekha", "learning dikhao", "learning stats", "sab bhul ja",
+        # "corrections dikhao". Distinct from self_learning (which is manual
+        # teach/correct) — this inspects the automatic usage loop.
+        if re.search(r"\b(learning|seekha|seekha\s*hai)\b", clean):
+            _l_action = "summary"
+            if re.search(r"\b(stats|numbers|detail)\b", clean):
+                _l_action = "stats"
+            elif re.search(r"\b(patterns?|commands?)\b", clean):
+                _l_action = "patterns"
+            elif re.search(r"\b(promotions?|ready)\b", clean):
+                _l_action = "promotions"
+            elif re.search(r"\b(corrections?|galtiyan?|lessons?)\b", clean):
+                _l_action = "corrections"
+            elif re.search(r"\b(bhul\s*ja|forget|reset|clear)\b", clean):
+                _l_action = "reset"
+            return _dispatch("learning_ctl", {"action": _l_action})
+
         # -- MCP server control ----------------------------------------------------
         # "mcp status", "mcp servers", "mcp start chrome-devtools", "mcp stop websift",
         # "mcp tools dikhao". Requires an explicit mcp keyword so it can never

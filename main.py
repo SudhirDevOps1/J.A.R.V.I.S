@@ -170,6 +170,37 @@ _LEVEL_FLOOR = 60.0
 _LEVEL_FULL  = 2600.0
 
 
+# Shared worker pool for blocking work dispatched from synchronous handlers.
+# Tier-1 edge actions perform file I/O, subprocess calls and network requests;
+# running them inline on the calling (often Qt GUI) thread froze the UI for
+# minutes on a slow command. A small bounded pool keeps that off the UI thread
+# without spawning a thread per keystroke.
+_EXECUTOR = None
+_EXECUTOR_LOCK = threading.Lock()
+
+
+def _run_in_bg(fn, *args, **kwargs):
+    """Run fn(*args) on a worker thread and block for the result.
+
+    Falls back to calling fn() inline if the pool cannot be created, so a pool
+    failure degrades to the old behaviour instead of breaking dispatch.
+    """
+    global _EXECUTOR
+    with _EXECUTOR_LOCK:
+        if _EXECUTOR is None:
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+                _EXECUTOR = ThreadPoolExecutor(
+                    max_workers=8, thread_name_prefix="jarvis-exec")
+            except Exception:
+                return fn(*args, **kwargs)
+    try:
+        return _EXECUTOR.submit(fn, *args, **kwargs).result()
+    except Exception as e:
+        print(f"[BG] {fn.__name__} failed: {e}")
+        return None
+
+
 def _pcm_level(samples) -> float:
     """Map a block of int16 PCM samples to a 0.0–1.0 loudness level for the HUD
     waveform. Returns 0.0 on empty/invalid input so it can never raise."""
@@ -962,7 +993,19 @@ class JarvisLive:
                             self.ui.write_log(f"⚡ [Ear Normalizer]: '{text}' -> '{routing['ear_normalized']}'")
                         self.ui.write_log(f"⚡ [Fast Local Reflex]: {t_name} {t_args}")
                         _ctx = {"player": self.ui, "speak": self.speak, "response": None, "session_memory": None}
-                        t_res = self._action_registry.run(t_name, t_args, _ctx)
+                        # Tell the registry which utterance produced this call so
+                        # the learning loop can accumulate evidence per phrase.
+                        try:
+                            self._action_registry.set_current_phrase(text)
+                        except Exception:
+                            pass
+                        # Keep this dispatch OFF the calling thread. Tier-1 actions do file I/O,
+                        # subprocess calls and network work; running them inline
+                        # here froze the whole UI for minutes on a slow command.
+                        # _on_text_command is synchronous, so a worker thread is
+                        # used rather than asyncio.to_thread.
+                        t_res = _run_in_bg(
+                            self._action_registry.run, t_name, t_args, _ctx)
                         if t_res:
                             self.ui.write_log(f"{self._asst_name}: {t_res}")
                             self.speak(t_res)
