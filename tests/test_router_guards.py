@@ -1,5 +1,7 @@
 """Additive tests: web garbage guard, obsidian-save route (no launches)."""
 
+import pytest
+
 
 def test_web_garbage_falls_through():
     from core.edge_router import NeedleToolRouter
@@ -67,6 +69,7 @@ def test_camera_app_resolves_instantly():
     assert "camera" in target.lower()
 
 
+@pytest.mark.network
 def test_weather_salutation_is_persona_clean():
     from actions.weather_report import weather_action
     msg = weather_action({"city": "Patna"})

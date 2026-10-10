@@ -17,7 +17,14 @@ from actions.ecommerce_search import ecommerce_action
 from actions.flight_finder import flight_finder
 from core.edge_router import NeedleToolRouter
 
+# Tests marked `network` call live third-party APIs (Open-Meteo, Amazon/Flipkart,
+# Google Flights). They are inherently non-deterministic — rate limits, network
+# policy and upstream markup changes all break them for reasons unrelated to this
+# codebase. CI runs `-m "not network"` so the gate reflects our code, not the
+# weather. Run them locally with: pytest -m network
 
+
+@pytest.mark.network
 def test_open_meteo_weather_geocoding_live():
     """Verify Open-Meteo geocodes city and returns structured temperature and description."""
     w = get_free_weather(city="Mumbai")
@@ -30,6 +37,7 @@ def test_open_meteo_weather_geocoding_live():
         assert "Mumbai" in w.get("city", "")
 
 
+@pytest.mark.network
 def test_weather_action_headless():
     """Verify weather_action does not open browser by default and renders HUD card."""
     mock_player = MagicMock()
@@ -65,6 +73,7 @@ def test_youtube_video_playback_controls():
     assert "stopped" in res_stop.lower()
 
 
+@pytest.mark.network
 def test_ecommerce_search_headless():
     """Verify ecommerce_search extracts prices, renders HUD comparison card and does not open browser."""
     mock_player = MagicMock()
@@ -78,6 +87,7 @@ def test_ecommerce_search_headless():
         assert "DEALS" in card_title
 
 
+@pytest.mark.network
 def test_flight_finder_headless():
     """Verify flight_finder operates headlessly when open_browser is not requested."""
     mock_player = MagicMock()
