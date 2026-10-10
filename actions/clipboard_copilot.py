@@ -112,7 +112,8 @@ def clipboard_copilot(
         details = []
         if file_lines:
             last_file, last_line = file_lines[-1]
-            details.append(f"• Location: File {last_file.split('/')[-1].split('\\')[-1]}, Line {last_line}")
+            fname = last_file.replace("\\", "/").split("/")[-1]
+            details.append(f"• Location: File {fname}, Line {last_line}")
         if err_matches:
             details.append(f"• Root Cause: {err_matches[-1]}")
             
