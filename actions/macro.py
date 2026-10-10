@@ -200,8 +200,16 @@ def macro(parameters: dict | None = None, player=None, session_memory=None, **_)
             return _cg.request("macro_play", f"Macro chalao: {name}",
                                f"'{name}' replay hoga x{speed:g} speed par (3s countdown ke saath).",
                                _do)
-        except Exception:
-            return _play(name, speed, player)
+        except Exception as _e:
+            # FAIL CLOSED. This used to `return _play(name, speed, player)` —
+            # i.e. any error importing core.confirm silently downgraded a
+            # confirm-gated macro replay into an UNGATED one that replays raw
+            # keyboard/mouse input. run_command.py fails closed on the same
+            # condition; a recorded macro is arbitrary input injection, so a
+            # broken gate must stop the replay, not wave it through.
+            _audit("macro_play_gate_failed", f"{name}: {e}")
+            return (f"Confirm gate unavailable ({_e}). Macro replay refuse kiya gaya — "
+                    "sirf jab CONFIRM system kaam kar raha ho tab chalega.")
     return "Unknown macro action. Use record, stop, list, play."
 
 

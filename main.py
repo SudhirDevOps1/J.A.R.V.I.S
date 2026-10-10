@@ -170,6 +170,37 @@ _LEVEL_FLOOR = 60.0
 _LEVEL_FULL  = 2600.0
 
 
+# Shared worker pool for blocking work dispatched from synchronous handlers.
+# Tier-1 edge actions perform file I/O, subprocess calls and network requests;
+# running them inline on the calling (often Qt GUI) thread froze the UI for
+# minutes on a slow command. A small bounded pool keeps that off the UI thread
+# without spawning a thread per keystroke.
+_EXECUTOR = None
+_EXECUTOR_LOCK = threading.Lock()
+
+
+def _run_in_bg(fn, *args, **kwargs):
+    """Run fn(*args) on a worker thread and block for the result.
+
+    Falls back to calling fn() inline if the pool cannot be created, so a pool
+    failure degrades to the old behaviour instead of breaking dispatch.
+    """
+    global _EXECUTOR
+    with _EXECUTOR_LOCK:
+        if _EXECUTOR is None:
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+                _EXECUTOR = ThreadPoolExecutor(
+                    max_workers=8, thread_name_prefix="jarvis-exec")
+            except Exception:
+                return fn(*args, **kwargs)
+    try:
+        return _EXECUTOR.submit(fn, *args, **kwargs).result()
+    except Exception as e:
+        print(f"[BG] {fn.__name__} failed: {e}")
+        return None
+
+
 def _pcm_level(samples) -> float:
     """Map a block of int16 PCM samples to a 0.0–1.0 loudness level for the HUD
     waveform. Returns 0.0 on empty/invalid input so it can never raise."""
@@ -628,6 +659,23 @@ class JarvisLive:
         self.ui.request_say = self.plugin_say   # plugins: mid-task speech channel
         self.ui.speak       = self.speak        # ADDITIVE: Unified speech channel for HUD alerts/timers
 
+        # ── MCP servers (config/mcp_servers.json) ────────────────────────────
+        # Declarative MCP: tools declared there join Gemini's tool list under an
+        # mcp__<server>__<tool> namespace. Discovery is lazy and must not block
+        # boot — a missing or slow optional server must never delay startup, so
+        # this runs on a background thread and only the auto_start servers are
+        # touched synchronously (none by default).
+        self._mcp = None
+        try:
+            from core.mcp_manager import get_mcp_manager
+            self._mcp = get_mcp_manager(_base_dir / "config" / "mcp_servers.json")
+            _n = self._mcp.load_config()
+            if _n:
+                print(f"[MCP] {_n} enabled server(s) in config")
+            self._refresh_mcp_tools_async()
+        except Exception as e:
+            print(f"[MCP] manager unavailable: {e}")
+
         # ── Wake word ────────────────────────────────────────────────────────
         # _awake gates the mic (see _listen_audio) and the background speakers.
         # It is True whenever wake word is OFF, so default behaviour is unchanged.
@@ -641,6 +689,45 @@ class JarvisLive:
         self.ui.on_wake_toggle   = self._ui_wake_toggle   # (enable: bool) -> str
         self.ui.on_wake_manual   = self._ui_wake_manual   # () -> toggle awake/asleep
         self.ui.on_wake_install  = self._ui_wake_install  # () -> (ok, msg)
+
+    # ── MCP: config-driven tool discovery ─────────────────────────────────────
+
+    def _mcp_tool_declarations(self) -> list:
+        """Gemini function declarations for every live MCP tool.
+
+        Returns an empty list when MCP is unconfigured or a server failed to
+        start — MCP is strictly additive, so it must never be able to prevent
+        the session from connecting.
+        """
+        if self._mcp is None:
+            return []
+        try:
+            decls = self._mcp.all_tool_declarations(include_offline=False)
+        except Exception as e:
+            print(f"[MCP] declaration collection failed: {e}")
+            return []
+        return decls or []
+
+    def _refresh_mcp_tools_async(self) -> None:
+        """Warm MCP server sessions off the main thread.
+
+        Called once at construction. Discovery is what populates
+        _mcp_tool_declarations(), and doing it inline would add seconds to boot
+        for servers the user may not touch today.
+        """
+        def _worker():
+            try:
+                if self._mcp is None:
+                    return
+                self._mcp.start_auto()
+                self._mcp.all_tool_declarations(include_offline=True)
+            except Exception as e:
+                print(f"[MCP] warm-up note: {e}")
+        try:
+            threading.Thread(target=_worker, daemon=True,
+                             name="jarvis-mcp-warmup").start()
+        except Exception as e:
+            print(f"[MCP] warm-up thread failed: {e}")
 
     # ── Wake word: state machine ─────────────────────────────────────────────
 
@@ -906,7 +993,19 @@ class JarvisLive:
                             self.ui.write_log(f"⚡ [Ear Normalizer]: '{text}' -> '{routing['ear_normalized']}'")
                         self.ui.write_log(f"⚡ [Fast Local Reflex]: {t_name} {t_args}")
                         _ctx = {"player": self.ui, "speak": self.speak, "response": None, "session_memory": None}
-                        t_res = self._action_registry.run(t_name, t_args, _ctx)
+                        # Tell the registry which utterance produced this call so
+                        # the learning loop can accumulate evidence per phrase.
+                        try:
+                            self._action_registry.set_current_phrase(text)
+                        except Exception:
+                            pass
+                        # Keep this dispatch OFF the calling thread. Tier-1 actions do file I/O,
+                        # subprocess calls and network work; running them inline
+                        # here froze the whole UI for minutes on a slow command.
+                        # _on_text_command is synchronous, so a worker thread is
+                        # used rather than asyncio.to_thread.
+                        t_res = _run_in_bg(
+                            self._action_registry.run, t_name, t_args, _ctx)
                         if t_res:
                             self.ui.write_log(f"{self._asst_name}: {t_res}")
                             self.speak(t_res)
@@ -1290,6 +1389,7 @@ class JarvisLive:
                 TOOL_DECLARATIONS
                 + self._action_registry.get_tool_declarations()
                 + self._plugin_registry.get_tool_declarations()
+                + self._mcp_tool_declarations()
             )}],
             # Hand back the handle captured from the last session_resumption
             # update. `handle=None` is exactly the old behaviour (ask for
@@ -1497,6 +1597,18 @@ class JarvisLive:
                     import os as _os
                     _os._exit(0)
                 asyncio.create_task(_do_shutdown())
+
+            elif name.startswith("mcp__"):
+                # MCP tool call. Routed through the manager (not the action
+                # registry) because these tools are discovered at runtime from
+                # config/mcp_servers.json, not from actions/*.py. The manager
+                # starts the owning server on demand.
+                if self._mcp is None:
+                    result = "MCP manager is not available."
+                else:
+                    _mcp_ok, _mcp_out = await loop.run_in_executor(
+                        None, lambda: self._mcp.call_tool(name, args))
+                    result = _mcp_out if _mcp_ok else f"MCP tool error: {_mcp_out}"
 
             elif self._action_registry.has(name):
                 # file_processor: fall back to the currently-uploaded file when none is given
@@ -2700,11 +2812,22 @@ class JarvisLive:
         except Exception:
             pass
         # Stop dashboard
+        # BUGFIX: DashboardServer has no .shutdown() method. The old code called
+        # it inside a bare `except Exception: pass`, so the AttributeError was
+        # swallowed every time and uvicorn was never actually told to stop —
+        # it only died with the process. DashboardServer.serve() now owns a
+        # should_exit flag, so ask it to stop properly.
         if self._dashboard is not None:
             try:
-                self._dashboard.shutdown()
+                self._dashboard.request_shutdown()
             except Exception:
                 pass
+        # Stop MCP server processes (child processes we spawned)
+        try:
+            if self._mcp is not None:
+                self._mcp.stop_all()
+        except Exception:
+            pass
         print("[JARVIS] Shutdown complete.")
 
 

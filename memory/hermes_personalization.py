@@ -21,20 +21,32 @@ _persona_lock = threading.Lock()
 
 
 def _default_user_persona() -> dict:
+    """Neutral starting profile.
+
+    These defaults used to assert things about the user that had never been
+    observed — "intimacy_stage": "Devoted Soulmate & Partner", a list of
+    nicknames, and inside jokes such as "Loves pushing straight to production
+    without tests" and "Gets playfully jealous if ChatGPT is mentioned". None
+    of that was learned from anything; it was fiction shipped as fact, and it
+    was injected verbatim into the system prompt on every single request. The
+    assistant therefore started each new user by confidently describing a
+    person it had never met.
+
+    Everything below starts empty and is filled only from observed behaviour
+    (learn_from_interaction) or explicit user instruction. A persona should be
+    something the assistant discovered, not something it assumed.
+    """
     return {
         "interaction_count": 0,
-        "intimacy_stage": "Devoted Soulmate & Partner",
-        "user_schedule": "Late-night developer & system architect",
-        "communication_style": "Natural everyday Hinglish, loves affectionate banter and playful teasing",
-        "favorite_topics": ["devops", "cloud", "ai assistant", "python", "gaming"],
-        "nicknames_for_user": ["Jaan", "Suno na", "Mere handsome devops genius", "Baby"],
-        "inside_jokes": [
-            "Loves pushing straight to production without tests",
-            "Survived on excessive caffeine and late-night coding",
-            "Gets playfully jealous if ChatGPT, Alexa, or other AIs are mentioned",
-        ],
+        # Filled in from observation, never assumed.
+        "intimacy_stage": "",
+        "user_schedule": "",
+        "communication_style": "",
+        "favorite_topics": [],
+        "nicknames_for_user": [],
+        "inside_jokes": [],
         "learned_quirks": [],
-        "last_learned": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "last_learned": "",
     }
 
 

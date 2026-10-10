@@ -56,14 +56,25 @@ def _get_gemini_api_key() -> str:
 
 
 def _capture_screen_thumbnail() -> tuple[bytes, str]:
-    """Capture screen and compress to <= 1280x720 JPEG thumbnail (<150KB)."""
+    """Capture screen and compress to <= 1280x720 JPEG thumbnail (<150KB).
+
+    Privacy guard is FAIL CLOSED — an exception inside the guard used to fall
+    through to `pass` and the capture proceeded anyway.
+    """
     try:
         from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
         allowed, reason = is_screen_capture_allowed(is_stream=False)
         if not allowed:
             return generate_shield_frame(reason)
-    except Exception:
-        pass
+    except Exception as _p_err:
+        print(f"[Troubleshooter] 🛡️  Privacy guard unavailable ({_p_err}) — capture blocked.")
+        try:
+            from core.privacy_guard import generate_shield_frame
+            return generate_shield_frame("PRIVACY GUARD UNAVAILABLE - CAPTURE BLOCKED")
+        except Exception:
+            raise RuntimeError(
+                "Privacy guard unavailable — screen capture blocked."
+            ) from _p_err
 
     if _MSS:
         _mss_cls = getattr(mss, "MSS", None) or mss.mss

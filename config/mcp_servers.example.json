@@ -1,0 +1,69 @@
+{
+  "_comment": [
+    "MCP servers for J.A.R.V.I.S. Copy config/mcp_servers.example.json to",
+    "config/mcp_servers.json and edit. Same format as Claude Desktop / Cursor,",
+    "so an existing config can be pasted in unchanged.",
+    "",
+    "Fields per server:",
+    "  command        (required) executable name or absolute path",
+    "  args           (optional) list of arguments",
+    "  cwd            (optional) working directory",
+    "  env            (optional) extra env vars for the child process",
+    "  enabled        (optional, default true) set false to keep it configured",
+    "                                but not start it",
+    "  auto_start     (optional, default false) start at boot instead of on",
+    "                                 first use. Leave false for anything slow",
+    "                                 — startup is lazy by default.",
+    "  startup_timeout / call_timeout  (optional) seconds",
+    "",
+    "Servers that are not installed are disabled with a clear reason instead of",
+    "crashing the assistant. Use 'mcp status' in chat to see what is running.",
+    "",
+    "The child process inherits only a minimal environment (PATH, HOME, etc.),",
+    "not your full shell environment."
+  ],
+
+  "mcpServers": {
+    "websift": {
+      "command": "websift",
+      "args": ["serve", "--transport", "stdio"],
+      "enabled": true,
+      "auto_start": false,
+      "description": "Web search + page fetch, no API key needed. Install: pip install websift[mcp]"
+    },
+
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "enabled": true,
+      "auto_start": false,
+      "startup_timeout": 60,
+      "description": "Google's official Chrome DevTools MCP — real DOM inspection, clicking, typing, console + network capture."
+    },
+
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem",
+               "C:/Users/Public/JARVIS", "C:/Users/Public"],
+      "enabled": false,
+      "auto_start": false,
+      "description": "Scoped filesystem access. Enable ONLY with paths you are happy to expose. Keep disabled by default — the assistant already has full local file control via file_controller."
+    },
+
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "enabled": false,
+      "auto_start": false,
+      "description": "Knowledge-graph memory. Disabled by default — JARVIS already has SQLite FTS5 memory in core/unified_memory.py, so this would duplicate it."
+    },
+
+    "agentic-store": {
+      "command": "python",
+      "args": ["-m", "agentic_store_mcp"],
+      "enabled": false,
+      "auto_start": false,
+      "description": "LLM prompt firewall + audit logging + 31 privacy tools. Install: pip install agentic-store-mcp. Enable if you want an outbound-prompt inspector in front of the cloud LLM."
+    }
+  }
+}

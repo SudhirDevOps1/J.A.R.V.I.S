@@ -22,18 +22,18 @@ jobs:
 
     steps:
       - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
       - name: 🐍 Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@0b93645e9fea731b6e0d4c759e9f8f3c2c8c1a1a  # v5.2.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
-      - name: 📦 Install Core Dependencies
+      - name: 📦 Install Full Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 pytest requests psutil
+          pip install -r requirements.txt
 
       - name: 🔒 Security & Secrets Audit
         shell: bash
@@ -72,10 +72,9 @@ jobs:
           print('News test count:', len(n))
           "
 
-      - name: 🧪 Run Unit Tests (additive, never blocks on missing optional deps)
-        shell: bash
+      - name: 🧪 Run Unit Tests (real gate — failure breaks the build)
         run: |
-          pytest --tb=short -q || echo "pytest finished with code $?"
+          pytest --tb=short -q
 
       - name: 🔍 Lint & Code Health Check
         shell: bash

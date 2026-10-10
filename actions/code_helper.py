@@ -99,6 +99,19 @@ def _has_error(output: str) -> bool:
 
 
 def _take_screenshot() -> Path | None:
+    # Privacy shield BEFORE capturing. This screenshot is uploaded to a cloud
+    # model by _screen_debug_action, and it previously had no privacy check, so
+    # Privacy Mode did not protect this path at all.
+    try:
+        from core.privacy_guard import is_screen_capture_allowed
+        _ok, _why = is_screen_capture_allowed(is_stream=False)
+        if not _ok:
+            print(f"[Code] 🛡️  screen_debug blocked by Privacy Shield: {_why}")
+            return None
+    except Exception as _p_err:
+        print(f"[Code] 🛡️  Privacy guard unavailable ({_p_err}) — capture blocked.")
+        return None
+
     try:
         import pyautogui
         

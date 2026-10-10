@@ -207,18 +207,16 @@ def _patch_config(**fields) -> None:
                 data = {}
         # ADDITIVE: secret-looking values encrypted at rest (ENC blobs on disk).
         # Plaintext readers unaffected (load decrypts); non-secrets untouched.
-        # Nested dicts (obsidian_config, plugin_config) handled recursively.
+        # Nested dicts AND lists are handled recursively (obsidian_config,
+        # plugin_config, gemini_api_keys rotation pools, custom_providers).
+        #
+        # NOTE: the walk itself lives in core.secret_vault.encrypt_tree, which is
+        # the same code path used by decrypt_dict on read. It used to be a local
+        # copy here that walked lists while the reader did not — that asymmetry
+        # silently shipped ENC(...) ciphertext to providers as a Bearer token.
         try:
-            from core.secret_vault import is_secret_key, encrypt_value
-
-            def _enc_walk(obj):
-                if isinstance(obj, dict):
-                    return {k: (encrypt_value(v) if isinstance(v, str) and is_secret_key(str(k)) and v.strip() else _enc_walk(v)) for k, v in obj.items()}
-                if isinstance(obj, list):
-                    return [_enc_walk(x) for x in obj]
-                return obj
-
-            fields = _enc_walk(dict(fields))
+            from core.secret_vault import encrypt_tree
+            fields = encrypt_tree(dict(fields))
         except Exception:
             pass
         data.update(fields)

@@ -8512,10 +8512,19 @@ class MainWindow(QMainWindow):
             pass
 
     def _cta_run(self, cmd: str) -> None:
-        """CTA chip → existing text-command pipeline (nayi wiring nahi)."""
+        """CTA chip → existing text-command pipeline (nayi wiring nahi).
+
+        This runs on the Qt GUI thread (it is a `clicked` handler), and
+        on_text_command can dispatch a Tier-1 action that performs file I/O,
+        subprocess calls or network requests. Calling it inline froze the whole
+        window for minutes. Hop to a thread, matching the other three
+        text-input paths which already do this.
+        """
         try:
-            if callable(getattr(self, "on_text_command", None)):
-                self.on_text_command(cmd)
+            fn = getattr(self, "on_text_command", None)
+            if callable(fn):
+                threading.Thread(target=fn, args=(cmd,), daemon=True,
+                                 name="jarvis-cta").start()
         except Exception:
             pass
 

@@ -199,22 +199,101 @@ def decrypt_value(stored: str):
         return stored
 
 
-def decrypt_dict(d: dict) -> dict:
-    """Decrypt secret values in a flat config dict (nested dicts preserved as-is,
-    values inside decrypted recursively). Returns NEW dict. Logs errors."""
-    try:
-        out: dict = {}
-        for k, v in (d or {}).items():
-            if isinstance(v, dict):
-                out[k] = decrypt_dict(v)
-            elif isinstance(v, str) and is_secret_key(str(k)):
-                out[k] = decrypt_value(v)
+def _is_secret_str_list(node) -> bool:
+    """True for a non-empty list whose members are all strings (e.g.
+    ``["AIzaSyA", "AIzaSyB"]``). Such a list has no per-element key name, so the
+    parent's secret-looking key is the only signal we get that its members are
+    secrets rather than ordinary data."""
+    return (
+        isinstance(node, list)
+        and len(node) > 0
+        and all(isinstance(x, str) for x in node)
+    )
+
+
+def _encrypt_walk(node):
+    """Recursively encrypt every secret-looking value in a JSON-ish structure.
+
+    SINGLE SOURCE OF TRUTH for the encrypt direction. memory.config_manager
+    delegates here so the encrypt and decrypt walks can never drift apart again
+    (the original bug: encrypt walked lists, decrypt did not).
+
+    Rules (mirrored exactly by _decrypt_walk):
+      dict -> recurse per key; encrypt the value when the KEY looks secret.
+              A list-of-strings under a secret key has no per-element key name,
+              so each element is encrypted individually.
+      list -> recurse element-wise, preserving order and length.
+      other -> passthrough untouched.
+    """
+    if isinstance(node, dict):
+        out = {}
+        for k, v in node.items():
+            secret_key = is_secret_key(str(k))
+            if isinstance(v, str):
+                out[k] = encrypt_value(v) if (secret_key and v.strip()) else v
+            elif _is_secret_str_list(v):
+                # Bare strings under a secret-looking key (key rotation pools).
+                out[k] = [encrypt_value(x) if x.strip() else x for x in v] if secret_key else list(v)
+            elif isinstance(v, (dict, list)):
+                out[k] = _encrypt_walk(v)
             else:
                 out[k] = v
         return out
+    if isinstance(node, list):
+        return [_encrypt_walk(x) for x in node]
+    return node
+
+
+def encrypt_tree(node):
+    """Public entry point: encrypt every secret in a config structure.
+    Returns a NEW object; the caller's structure is never mutated. Never raises."""
+    try:
+        return _encrypt_walk(node)
+    except Exception as e:
+        _log.exception("encrypt_tree failed: %s", e)
+        return node
+
+
+def _decrypt_walk(node):
+    """Recursively decrypt every secret-looking value in a JSON-ish structure.
+
+    MUST stay structurally symmetric with _encrypt_walk above.
+
+    Why this exists: the original decrypt_dict only recursed into dicts, while
+    the writer walked lists too. So anything inside a list
+    (``gemini_api_keys: [...]``, ``custom_providers: [{...api_key...}]``) was
+    written as ``ENC(...)`` and read back still as ``ENC(...)`` — the literal
+    ciphertext was sent to the provider as a Bearer token, failing forever with
+    an opaque 401.
+    """
+    if isinstance(node, dict):
+        out = {}
+        for k, v in node.items():
+            secret_key = is_secret_key(str(k))
+            if isinstance(v, str):
+                out[k] = decrypt_value(v) if secret_key else v
+            elif _is_secret_str_list(v):
+                out[k] = [decrypt_value(x) for x in v] if secret_key else list(v)
+            elif isinstance(v, (dict, list)):
+                out[k] = _decrypt_walk(v)
+            else:
+                out[k] = v
+        return out
+    if isinstance(node, list):
+        return [_decrypt_walk(x) for x in node]
+    return node
+
+
+def decrypt_dict(d: dict) -> dict:
+    """Decrypt every secret value in a config structure. Returns a NEW object;
+    the caller's dict is never mutated. Never raises."""
+    try:
+        if not isinstance(d, dict):
+            return d
+        return _decrypt_walk(d)
     except Exception as e:
         _log.exception("decrypt_dict failed: %s", e)
-        return d if isinstance(d, dict) else {}
+        return d
 
 
 def mask_secret(s: str, keep: int = 4) -> str:

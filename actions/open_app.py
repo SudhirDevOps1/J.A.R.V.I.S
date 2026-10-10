@@ -617,12 +617,30 @@ def _looks_like_appid(name: str) -> bool:
     return ("!" in n) or ("." in n and len(n) > 4)
 
 
+def _win_start(target: str, *extra: str) -> None:
+    """Launch a Windows target via `start` WITHOUT shell interpolation.
+
+    Every previous call site used subprocess.Popen(f'start "" "{x}"', shell=True).
+    `app_name` arrives from the model's tool-call arguments, so a value like
+    `x" & calc &"` closed the quoted argument and ran a second command. Windows
+    has no argv form of `start`, so cmd.exe is invoked explicitly as a LIST —
+    cmd /c receives the whole thing as one argument and never re-parses our
+    quoting into a new command. This is the standard Windows equivalent of a
+    shell=True launch and removes the injection vector.
+    """
+    cmd = ["cmd", "/c", "start", "", target, *extra]
+    kw = {}
+    if os.name == "nt":
+        kw["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    subprocess.Popen(cmd, **kw)
+
+
 def _launch_windows(app_name: str) -> bool:
     """Launch application on Windows via path, AppID, shell protocol, or Start Menu."""
     # 1. Direct path to .lnk or .exe
     if app_name.endswith(".lnk") or app_name.endswith(".exe") and os.path.exists(app_name):
         try:
-            subprocess.Popen(f'start "" "{app_name}"', shell=True)
+            _win_start(app_name)
             time.sleep(1.0)
             return True
         except Exception:
@@ -631,11 +649,15 @@ def _launch_windows(app_name: str) -> bool:
     # 2. Direct binary on PATH
     if shutil.which(app_name) or shutil.which(app_name.split(".")[0]):
         try:
+            kw = {}
+            if os.name == "nt":
+                kw["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            # No shell: the resolved executable is executed directly.
             subprocess.Popen(
                 app_name,
-                shell=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                **kw,
             )
             time.sleep(1.2)
             return True
@@ -645,7 +667,7 @@ def _launch_windows(app_name: str) -> bool:
     # 3. Protocol handler (e.g. ms-settings:)
     if ":" in app_name and not ("\\" in app_name or "/" in app_name):
         try:
-            subprocess.Popen(f"start {app_name}", shell=True)
+            _win_start(app_name)
             time.sleep(1.0)
             return True
         except Exception:
@@ -658,7 +680,15 @@ def _launch_windows(app_name: str) -> bool:
     if app_name and _looks_like_appid(app_name):
         try:
             _before = _snapshot_pids()
-            subprocess.Popen(f'explorer.exe "shell:AppsFolder\\\\{app_name}"', shell=True)
+            # No shell: explorer.exe is exec'd directly with the shell: namespace
+            # URI as an argv element, so no quoting/escaping is involved.
+            kw = {}
+            if os.name == "nt":
+                kw["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            subprocess.Popen(
+                ["explorer.exe", f"shell:AppsFolder\\{app_name}"],
+                **kw,
+            )
             if _process_appeared(app_name, _before, timeout=2.5):
                 time.sleep(0.5)
                 return True
@@ -874,7 +904,7 @@ def open_app(
         resolved_target, fallback_note = _resolve_app(app_name)
         try:
             if _SYSTEM == "Windows":
-                subprocess.Popen(f'start "" "{resolved_target}" "{resolved_fp}"', shell=True)
+                _win_start(resolved_target, resolved_fp)
             elif _SYSTEM == "Darwin":
                 subprocess.run(["open", "-a", resolved_target, resolved_fp], capture_output=True, timeout=8)
             else:

@@ -1,7 +1,9 @@
 import subprocess
 import sys
 import json
+import os
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -18,6 +20,7 @@ PROJECTS_DIR     = Path.home() / "Desktop" / "JarvisProjects"
 MAX_FIX_ATTEMPTS = 5
 MODEL_PLANNER    = "gemini-flash-latest"
 MODEL_WRITER     = "gemini-flash-latest"
+_OS              = __import__("platform").system()
 
 def _get_api_key() -> str:
     try:
@@ -283,12 +286,29 @@ def _open_vscode(project_dir: Path) -> bool:
     ]
     for cmd in vscode_candidates:
         try:
-            subprocess.Popen(
-                [cmd, str(project_dir)],
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
+            # No shell. Passing a LIST together with shell=True is the same bug
+            # class as CVE-2024-4030 / CVE-2024-3566: the list is joined and
+            # re-parsed by the shell, so the argv boundary the caller believed
+            # it had does not exist. Resolving the executable ourselves and
+            # exec'ing it directly removes the shell from the path entirely.
+            if shutil.which(cmd):
+                exe = shutil.which(cmd)
+            elif os.path.isfile(cmd):
+                exe = cmd
+            else:
+                continue
+            kw = {}
+            if _OS == "Windows" and exe.lower().endswith((".cmd", ".bat")):
+                # .cmd shims genuinely need cmd.exe; pass the payload as a LIST
+                # so cmd receives one argument and cannot re-split it.
+                kw = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+                subprocess.Popen(["cmd", "/c", exe, str(project_dir)],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, **kw)
+            else:
+                subprocess.Popen([exe, str(project_dir)],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, **kw)
             time.sleep(1.5)
             print(f"[DevAgent] 💻 VSCode opened: {project_dir}")
             return True

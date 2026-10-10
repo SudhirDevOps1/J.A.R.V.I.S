@@ -274,8 +274,20 @@ def is_screen_capture_allowed(
         # Check Localhost Only constraint
         if cfg.get("localhost_only", True):
             clean_ip = (client_ip or "").strip()
-            if clean_ip not in ("127.0.0.1", "::1", "localhost", "testclient"):
-                return False, f"Remote LAN access blocked ({clean_ip} is not localhost)"
+            # Normalise IPv4-mapped IPv6 loopback. On dual-stack hosts
+            # ::ffff:127.0.0.1 IS the loopback address, but the old allowlist
+            # only matched the bare "127.0.0.1" form, so legitimate local
+            # clients were refused — which invites a future "fix" that loosens
+            # the check further.
+            #
+            # "localhost" is retained for the string form used by internal
+            # callers. "testclient" has been REMOVED: it was a test-only value
+            # shipped inside the PRODUCTION allowlist, so any caller passing
+            # client_ip="testclient" bypassed the LAN guard entirely.
+            if clean_ip.startswith("::ffff:"):
+                clean_ip = clean_ip[len("::ffff:"):]
+            if clean_ip not in ("127.0.0.1", "::1", "localhost"):
+                return False, f"Remote LAN access blocked ({client_ip} is not localhost)"
 
         # Check Stream Authorization Gate
         if not cfg.get("stream_allowed", False):

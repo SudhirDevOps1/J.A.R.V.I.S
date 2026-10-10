@@ -329,6 +329,124 @@ def _ensure_crypto_js() -> None:
 _ensure_crypto_js()
 
 
+# ── TLS provisioning ─────────────────────────────────────────────────────────
+
+def _ensure_self_signed_cert() -> bool:
+    """Generate a self-signed cert for the dashboard's LAN address.
+
+    WHY: the dashboard serves a bearer token that authorises full remote control
+    of the machine. Over plain HTTP that token crosses the LAN in cleartext, so
+    anything on the same Wi-Fi could capture it and drive the assistant. TLS used
+    to be opt-in and required the user to produce certificates by hand, which
+    almost nobody does — so in practice the dashboard ran unencrypted on a port
+    the app itself opened in the Windows firewall.
+
+    Generating a self-signed certificate locally fixes the transport. It is not
+    trusted by browsers (the user accepts the warning once), which is the same
+    trade-off the existing HTTPS alias port already made, just without requiring
+    manual setup.
+
+    Uses only the standard library plus `cryptography`, which is already a
+    declared dependency (core/secret_vault.py uses Fernet). An openssl fallback
+    covers environments where that import fails.
+
+    Returns True when a usable key+cert pair exists afterwards.
+    """
+    cert_dir = BASE_DIR / "config" / "certs"
+    key_p = cert_dir / "jarvis.key"
+    crt_p = cert_dir / "jarvis.crt"
+    if key_p.exists() and crt_p.exists():
+        return True
+
+    try:
+        cert_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"[Dashboard] Could not create certs dir: {e}")
+        return False
+
+    ip = _local_ip()
+    san = [x for x in (ip, "localhost", "127.0.0.1") if x]
+
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.x509.oid import NameOID
+        import datetime
+        import ipaddress
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "J.A.R.V.I.S. Local Dashboard"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "J.A.R.V.I.S."),
+        ])
+        now = datetime.datetime.now(datetime.timezone.utc)
+        alt_names = []
+        for entry in san:
+            try:
+                alt_names.append(x509.IPAddress(ipaddress.ip_address(entry)))
+            except ValueError:
+                alt_names.append(x509.DNSName(entry))
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - datetime.timedelta(days=1))
+            .not_valid_after(now + datetime.timedelta(days=730))
+            .add_extension(x509.SubjectAlternativeName(alt_names), critical=False)
+            .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+            .sign(key, hashes.SHA256())
+        )
+        key_p.write_bytes(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
+        crt_p.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+        try:
+            os.chmod(key_p, 0o600)      # private key must not be world-readable
+        except Exception:
+            pass
+        print(f"[Dashboard] Self-signed certificate generated for {ip} "
+              "(browser will warn once — accept it).")
+        return True
+
+    except Exception:
+        # Fallback: openssl where available (Linux/macOS, Git-for-Windows on Win).
+        try:
+            conf = ""
+            for entry in san:
+                try:
+                    import ipaddress
+                    ipaddress.ip_address(entry)
+                    kind = "IP"
+                except ValueError:
+                    kind = "DNS"
+                conf += ("," if conf else "") + f"{kind}:{entry}"
+            r = subprocess.run(
+                ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                 "-keyout", str(key_p), "-out", str(crt_p), "-days", "730",
+                 "-subj", "/CN=J.A.R.V.I.S. Local Dashboard",
+                 "-addext", f"subjectAltName={conf}"],
+                capture_output=True, timeout=60,
+            )
+            if r.returncode == 0 and key_p.exists() and crt_p.exists():
+                try:
+                    os.chmod(key_p, 0o600)
+                except Exception:
+                    pass
+                print("[Dashboard] Self-signed certificate generated via openssl.")
+                return True
+        except Exception:
+            pass
+
+    print("[Dashboard] TLS unavailable — dashboard will run over plain HTTP. "
+          "Use it only on a network you trust.")
+    return False
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _local_ip() -> str:
@@ -392,6 +510,7 @@ class DashboardServer:
         self._uploads_dir                 = UPLOADS_DIR
         self._login_html                  = _read("login.html")
         self._app_html                    = _read("app.html")
+        self._servers: list                = []   # live uvicorn.Server handles
         self.app                          = self._build_app()
 
     # ── one-time key management ───────────────────────────────────────────
@@ -460,8 +579,51 @@ class DashboardServer:
         app = FastAPI(docs_url=None, redoc_url=None)
 
         def _auth(req: Request) -> bool:
+            """Bearer-token check for HTTP routes.
+
+            Uses secrets.compare_digest against the full token set so that token
+            comparison is constant-time; a plain `in` on a set leaks timing
+            information and is also the wrong tool for a growing token set.
+
+            Also runs the TTL sweep. The sweep used to live only inside the
+            /login handler, which meant that if nobody re-logged-in, tokens
+            minted by /auto-login and /api/device-login were valid FOREVER —
+            the 24h expiry was documented but never actually enforced for them.
+            """
+            _sweep_expired_tokens()
             tok = req.headers.get("authorization", "").removeprefix("Bearer ").strip()
-            return bool(tok) and tok in self._tokens
+            if not tok:
+                return False
+            return any(secrets.compare_digest(tok, known) for known in self._tokens)
+
+        def _sweep_expired_tokens() -> None:
+            """Drop bearer tokens older than 24h. Cheap: called on every auth
+            check, but the token set is a handful of entries in practice."""
+            now = time.time()
+            for t in [t for t, ts in self._token_created.items() if now - ts > 86400]:
+                self._tokens.discard(t)
+                self._token_keys.pop(t, None)
+                self._token_created.pop(t, None)
+            # _aes_cache is keyed by session_key, NOT by bearer token, so the
+            # previous `self._aes_cache.pop(t, None)` could never match and the
+            # cache grew without bound. Evict by looking up each live token's
+            # session key instead.
+            live_keys = {self._token_keys.get(t) for t in self._tokens}
+            live_keys.discard(None)
+            for sk in [k for k in self._aes_cache if k not in live_keys]:
+                self._aes_cache.pop(sk, None)
+
+        def _auth_token(tok: str) -> bool:
+            """Same check for WebSocket / query-string callers that carry the
+            token as a value rather than an Authorization header."""
+            _sweep_expired_tokens()
+            tok = (tok or "").strip()
+            if not tok:
+                return False
+            return any(secrets.compare_digest(tok, known) for known in self._tokens)
+
+        def _unauthorized() -> JSONResponse:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
 
         # serve CryptoJS from local cache, fallback to CDN redirect
         @app.get("/static/crypto.js")
@@ -501,16 +663,9 @@ class DashboardServer:
                 self._login_attempts[_ip] = _hits[-10:]
             except Exception:
                 pass
-            # Additive TTL sweep: 24h se purane bearer tokens safai (active untouched)
-            try:
-                _old = [t for t, ts in list(self._token_created.items()) if now - ts > 86400]
-                for t in _old:
-                    self._tokens.discard(t)
-                    self._token_keys.pop(t, None)
-                    self._token_created.pop(t, None)
-                    self._aes_cache.pop(t, None)
-            except Exception:
-                pass
+            # Additive TTL sweep now lives in _sweep_expired_tokens(), which every
+            # auth check invokes (not just this handler).
+            _sweep_expired_tokens()
             if entered in self._pending_keys and self._pending_keys[entered] > now:
                 del self._pending_keys[entered]          # one-time use
                 tok = secrets.token_urlsafe(32)
@@ -611,17 +766,34 @@ class DashboardServer:
 
         @app.post("/api/command")
         async def command(req: Request):
+            """Queue a text command for the live session.
+
+            SECURITY FIX: `enc` was optional — omitting it made the server accept
+            plaintext, which silently bypassed the AES-256-CBC transport design
+            documented at the top of this module. Anyone holding a valid token
+            could (and a network observer could read) every command in the clear.
+            Plaintext is now refused; only encrypted payloads are accepted.
+            """
             if not _auth(req):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
-            body  = await req.json()
+            try:
+                body = await req.json()
+            except Exception:
+                return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+            if not isinstance(body, dict):
+                return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
             token = req.headers.get("authorization", "").removeprefix("Bearer ").strip()
-            enc   = body.get("enc", "")
-            if enc:
-                text = self._decrypt(token, enc)
-                if text is None:
-                    return JSONResponse({"error": "Decryption failed"}, status_code=400)
-            else:
-                text = (body.get("text") or "").strip()
+            enc   = body.get("enc") or ""
+            if not enc:
+                return JSONResponse(
+                    {"error": "Encrypted payload required ('enc' field missing). "
+                              "Plaintext commands are refused."},
+                    status_code=400,
+                )
+            text = self._decrypt(token, enc)
+            if text is None:
+                return JSONResponse({"error": "Decryption failed"}, status_code=400)
+            text = text.strip()
             if text:
                 await self._command_queue.put(text)
                 if self._wake_callback:
@@ -640,11 +812,11 @@ class DashboardServer:
 
         @app.websocket("/ws/phone-audio")
         async def phone_audio_ws(websocket: WebSocket, token: str = ""):
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            if not _auth_token(token):
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
+            tok = token.strip()
             asyncio.create_task(self.broadcast(
                 {"type": "sys", "text": "Phone microphone live."}
             ))
@@ -668,12 +840,19 @@ class DashboardServer:
 
         @app.websocket("/ws/screen-stream")
         async def screen_stream_ws(websocket: WebSocket, token: str = "", fps: int = 5):
-            """Stream real-time compressed screen frames over WebSocket to clients with Privacy Guard."""
-            tok = token.strip()
-            if tok and tok not in self._tokens:
+            """Stream real-time compressed screen frames over WebSocket to clients with Privacy Guard.
+
+            SECURITY FIX: the guard read `if tok and tok not in self._tokens`.
+            An empty token short-circuits that condition to False, so the
+            connection was accepted with NO token at all — an unauthenticated
+            live screen stream. The two sibling WebSocket handlers already used
+            the correct `if not tok or ...` form. Now normalised via _auth_token.
+            """
+            if not _auth_token(token):
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
+            tok = token.strip()
             fps = max(1, min(15, fps or 5))
             interval = 1.0 / fps
             client_ip = websocket.client.host if websocket.client else "127.0.0.1"
@@ -708,7 +887,16 @@ class DashboardServer:
 
         @app.get("/api/screen-frame")
         async def screen_frame_ep(req: Request):
-            """Return current single screen snapshot or Privacy Shield frame as image/jpeg."""
+            """Return current single screen snapshot or Privacy Shield frame as image/jpeg.
+
+            SECURITY: this endpoint returns a live image of the user's entire
+            screen (banking sessions, password managers, private chats). It used
+            to be reachable with NO authentication by anyone who could reach the
+            port. The server binds 0.0.0.0 and opens the Windows Firewall, so
+            "anyone who could reach the port" means the whole LAN.
+            """
+            if not _auth(req):
+                return _unauthorized()
             try:
                 client_ip = req.client.host if req.client else "127.0.0.1"
                 from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
@@ -725,7 +913,13 @@ class DashboardServer:
 
         @app.get("/api/screen-stream.mjpg")
         async def screen_stream_mjpg(req: Request, fps: int = 5):
-            """Motion-JPEG stream compatible with standard <img> tag, protected by Zero-Trust Privacy Shield."""
+            """Motion-JPEG stream compatible with standard <img> tag, protected by Zero-Trust Privacy Shield.
+
+            SECURITY: was unauthenticated — a continuous, caller-paced (up to 15
+            fps) live feed of the user's screen. Now requires a bearer token.
+            """
+            if not _auth(req):
+                return _unauthorized()
             client_ip = req.client.host if req.client else "127.0.0.1"
             fps = max(1, min(15, fps or 5))
             interval = 1.0 / fps
@@ -757,7 +951,15 @@ class DashboardServer:
 
         @app.post("/api/screen-stream/toggle")
         async def toggle_screen_stream(req: Request):
-            """Toggle screen stream authorization on/off."""
+            """Toggle screen stream authorization on/off.
+
+            SECURITY: was unauthenticated AND CSRF-reachable. A simple cross-site
+            POST (no preflight) could disable the Privacy Shield, after which the
+            (also unauthenticated) frame endpoints would serve the raw screen.
+            Now requires a bearer token.
+            """
+            if not _auth(req):
+                return _unauthorized()
             from core.privacy_guard import is_stream_allowed, set_stream_allowed
             target = None
             try:
@@ -773,7 +975,15 @@ class DashboardServer:
 
         @app.get("/api/privacy/status")
         async def get_privacy_status(req: Request):
-            """Return current privacy guard configuration and sensitive window status."""
+            """Return current privacy guard configuration and sensitive window status.
+
+            SECURITY: was unauthenticated. It leaked the privacy configuration AND,
+            via detect_sensitive_window(), the title of the user's foreground
+            window — an information-disclosure primitive telling any caller which
+            app the victim was looking at. Now requires a bearer token.
+            """
+            if not _auth(req):
+                return _unauthorized()
             from core.privacy_guard import load_privacy_settings, detect_sensitive_window
             cfg = load_privacy_settings()
             is_sens, sens_desc = detect_sensitive_window()
@@ -874,22 +1084,32 @@ class DashboardServer:
         @app.get("/uploads/{filename}")
         async def download_file(filename: str, token: str = ""):
             # Auth via query param — browser <a download> can't send custom headers
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            if not _auth_token(token):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
-            safe = re.sub(r'[/\\]', '', filename)
-            path = self._uploads_dir / safe
+            # Containment by construction rather than by separator-stripping:
+            # resolve the candidate and require it to stay inside UPLOADS_DIR.
+            # The previous `re.sub(r'[/\\]', '', filename)` only removed
+            # separators, so a ".." segment could still be supplied (Starlette's
+            # single-segment converter limited it, but the guarantee was
+            # incidental, not designed).
+            try:
+                uploads_root = self._uploads_dir.resolve()
+                path = (uploads_root / filename).resolve()
+                if not path.is_relative_to(uploads_root):
+                    return JSONResponse({"error": "Not found"}, status_code=404)
+            except Exception:
+                return JSONResponse({"error": "Not found"}, status_code=404)
             if not path.exists() or not path.is_file():
                 return JSONResponse({"error": "Not found"}, status_code=404)
-            return FileResponse(str(path), filename=safe)
+            return FileResponse(str(path), filename=path.name)
 
         @app.websocket("/ws")
         async def ws_ep(websocket: WebSocket, token: str = ""):
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            if not _auth_token(token):
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
+            tok = token.strip()
             self._clients.add(websocket)
             for entry in self._history[-50:]:
                 try:
@@ -900,10 +1120,14 @@ class DashboardServer:
                 while True:
                     data = await websocket.receive_json()
                     if data.get("type") == "command":
-                        enc = data.get("enc", "")
-                        t   = self._decrypt(tok, enc) if enc else (data.get("text") or "").strip()
-                        if t:
-                            await self._command_queue.put(t)
+                        # Same rule as POST /api/command: enc is mandatory so the
+                        # encrypted transport cannot be bypassed with plaintext.
+                        enc = data.get("enc") or ""
+                        if not enc:
+                            continue
+                        t = self._decrypt(tok, enc)
+                        if t and t.strip():
+                            await self._command_queue.put(t.strip())
                             if self._wake_callback:
                                 self._wake_callback()
             except WebSocketDisconnect:
@@ -915,20 +1139,6 @@ class DashboardServer:
 
     # ── serve ─────────────────────────────────────────────────────────────
 
-    async def _serve_alias(self) -> None:
-        """Second HTTPS server on PORT+1 sharing the same app and in-memory state.
-        Chrome HTTPS-upgrades any bare IP:PORT the user types, so this port also needs TLS.
-        User types IP:8001 → Chrome tries https → self-signed cert warning → accept once → done."""
-        ssl_key  = BASE_DIR / "config" / "certs" / "jarvis.key"
-        ssl_cert = BASE_DIR / "config" / "certs" / "jarvis.crt"
-        asyncio.get_event_loop().run_in_executor(None, _ensure_network_access, PORT + 1)
-        cfg = uvicorn.Config(
-            self.app, host="0.0.0.0", port=PORT + 1, log_level="warning",
-            ssl_keyfile=str(ssl_key), ssl_certfile=str(ssl_cert),
-        )
-        print(f"[Dashboard] Manual entry:  {self._ip}:{PORT + 1}  (type in browser, accept cert once)")
-        await uvicorn.Server(cfg).serve()
-
     async def serve(self) -> None:
         if not _DEPS_OK:
             print("[Dashboard] fastapi/uvicorn not installed — dashboard disabled.")
@@ -939,19 +1149,58 @@ class DashboardServer:
         # no waiting for UAC dialogs or subprocess timeouts.
         asyncio.get_event_loop().run_in_executor(None, _ensure_network_access, PORT)
 
+        # Auto-provision TLS so the bearer token never crosses the LAN in
+        # cleartext. If the user already has certs they are respected; if not,
+        # a self-signed cert is generated (browser will warn once — accept it).
+        # If TLS truly cannot be provided, we fall back to plain HTTP with a
+        # loud warning so the user knows the transport is unencrypted.
+        _ensure_self_signed_cert()
         use_ssl  = self._ssl_enabled()
         ssl_key  = BASE_DIR / "config" / "certs" / "jarvis.key"
         ssl_cert = BASE_DIR / "config" / "certs" / "jarvis.crt"
 
         if use_ssl:
-            asyncio.create_task(self._serve_alias())
-
-        cfg = uvicorn.Config(
-            self.app, host="0.0.0.0", port=PORT, log_level="warning",
-            **({"ssl_keyfile": str(ssl_key), "ssl_certfile": str(ssl_cert)} if use_ssl else {}),
-        )
+            # The HTTPS alias port needs the same firewall treatment.
+            asyncio.get_event_loop().run_in_executor(None, _ensure_network_access, PORT + 1)
 
         proto = "https" if use_ssl else "http"
         print(f"[Dashboard] {proto}://{self._ip}:{PORT}")
         print("[Dashboard] Press 'Remote Control' in JARVIS UI to get the QR code.")
-        await uvicorn.Server(cfg).serve()
+        if use_ssl:
+            print(f"[Dashboard] Manual entry: {self._ip}:{PORT + 1} "
+                  "(type in browser, accept cert once)")
+        # Hold references so request_shutdown() can actually stop the servers.
+        # Previously there was no handle at all, and main.py called a
+        # `.shutdown()` method that does not exist — the AttributeError was
+        # swallowed, so uvicorn was never signalled and only died with the
+        # process. Any in-process restart would have left the port bound.
+        self._servers = [
+            uvicorn.Server(uvicorn.Config(
+                self.app, host="0.0.0.0", port=PORT, log_level="warning",
+                **({"ssl_keyfile": str(ssl_key), "ssl_certfile": str(ssl_cert)} if use_ssl else {}),
+            ))
+        ]
+        if use_ssl:
+            self._servers.append(uvicorn.Server(uvicorn.Config(
+                self.app, host="0.0.0.0", port=PORT + 1, log_level="warning",
+                ssl_keyfile=str(ssl_key), ssl_certfile=str(ssl_cert),
+            )))
+        try:
+            for srv in self._servers:
+                await srv.serve()
+        finally:
+            self._servers = []
+
+    def request_shutdown(self) -> None:
+        """Ask every uvicorn server to exit. Safe to call when not serving.
+
+        Thread-safe and idempotent: uvicorn.Server.should_exit is a plain flag
+        that the server's main loop polls, so setting it from the Qt shutdown
+        path is sufficient and non-blocking.
+        """
+        servers = getattr(self, "_servers", None) or []
+        for srv in servers:
+            try:
+                srv.should_exit = True
+            except Exception:
+                pass
