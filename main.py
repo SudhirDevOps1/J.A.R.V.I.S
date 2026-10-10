@@ -60,16 +60,20 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-import sounddevice as sd
+try:
+    import sounddevice as sd
+except (ImportError, OSError):
+    sd = None
 import numpy as np
 
 # Safe runtime guard for NumPy 2.5 shape setter deprecation in sounddevice callbacks
-try:
-    def _patched_sd_array(buffer, channels, dtype):
-        return np.frombuffer(buffer, dtype=dtype).reshape(-1, channels)
-    sd._array = _patched_sd_array
-except Exception:
-    pass
+if sd is not None:
+    try:
+        def _patched_sd_array(buffer, channels, dtype):
+            return np.frombuffer(buffer, dtype=dtype).reshape(-1, channels)
+        sd._array = _patched_sd_array
+    except Exception:
+        pass
 
 from google import genai
 from google.genai import types

@@ -19,7 +19,9 @@ except ImportError:
 _PROTECTED_PROCESSES = {
     "system", "system idle process", "registry", "smss.exe", "csrss.exe",
     "wininit.exe", "services.exe", "lsass.exe", "svchost.exe", "winlogon.exe",
-    "explorer.exe", "spoolsv.exe", "dwm.exe", "taskhostw.exe", "sihost.exe"
+    "explorer.exe", "spoolsv.exe", "dwm.exe", "taskhostw.exe", "sihost.exe",
+    "smss", "csrss", "wininit", "services", "lsass", "svchost", "winlogon",
+    "explorer", "spoolsv", "dwm", "taskhostw", "sihost", "systemd", "init"
 }
 
 
@@ -56,13 +58,11 @@ def _kill_user_process(process_name: str) -> Dict[str, Any]:
         return {"ok": False, "msg": "psutil library available nahi hai."}
 
     clean_name = process_name.lower().strip()
-    if not clean_name.endswith(".exe") and os.name == "nt":
-        clean_target = clean_name + ".exe"
-    else:
-        clean_target = clean_name
+    base_name = clean_name[:-4] if clean_name.endswith(".exe") else clean_name
+    clean_target = base_name + ".exe"
 
     # Check protected list
-    if clean_target in _PROTECTED_PROCESSES or clean_name in _PROTECTED_PROCESSES:
+    if base_name in _PROTECTED_PROCESSES or clean_target in _PROTECTED_PROCESSES or clean_name in _PROTECTED_PROCESSES:
         return {
             "ok": False,
             "msg": f"Security Guard: '{process_name}' Windows ka core system process hai aur ise band karna allowed nahi hai."

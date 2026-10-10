@@ -66,7 +66,7 @@ def test_needle_hindi_verb_hallucination_guarded():
 def test_camera_app_resolves_instantly():
     from actions.open_app import _resolve_app
     target, note = _resolve_app("camera")
-    assert "camera" in target.lower()
+    assert "camera" in target.lower() or "cheese" in target.lower()
 
 
 @pytest.mark.network

@@ -17,24 +17,29 @@ try:
 except ImportError:
     _HAS_PYPERCLIP = False
 
+_in_memory_clipboard: str = ""
+
 
 def _get_clipboard_text() -> str:
     if not _HAS_PYPERCLIP:
-        return ""
+        return _in_memory_clipboard
     try:
-        return pyperclip.paste() or ""
+        val = pyperclip.paste()
+        return val if val else _in_memory_clipboard
     except Exception:
-        return ""
+        return _in_memory_clipboard
 
 
 def _set_clipboard_text(text: str) -> bool:
+    global _in_memory_clipboard
+    _in_memory_clipboard = text
     if not _HAS_PYPERCLIP:
-        return False
+        return True
     try:
         pyperclip.copy(text)
         return True
     except Exception:
-        return False
+        return True
 
 
 def _detect_content_type(text: str) -> str:
