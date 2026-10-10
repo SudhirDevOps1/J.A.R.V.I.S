@@ -11,10 +11,12 @@ Install deps:  pip install fastapi "uvicorn[standard]" cryptography
 import asyncio
 import base64
 import hashlib
+import os
 import re
 import secrets
 import socket
 import string
+import subprocess
 import time
 from pathlib import Path
 

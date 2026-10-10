@@ -1,5 +1,9 @@
 # Stark SFX Engine
-import os, threading, wave, numpy as np, sounddevice as sd
+import os, threading, wave, numpy as np
+try:
+    import sounddevice as sd
+except (ImportError, OSError):
+    sd = None
 
 SFX_DIR = os.path.join(os.path.dirname(__file__), 'assets', 'sfx')
 os.makedirs(SFX_DIR, exist_ok=True)
@@ -119,10 +123,11 @@ def play_sfx(name: str) -> None:
                             _CACHE[name] = (d, sr)
                     except Exception:
                         return
-            try:
-                sd.play(d, sr)
-            except Exception:
-                pass
+            if sd is not None:
+                try:
+                    sd.play(d, sr)
+                except Exception:
+                    pass
     threading.Thread(target=_run, daemon=True).start()
 
 _ensure()

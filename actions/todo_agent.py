@@ -18,6 +18,7 @@ from typing import Callable, Optional
 
 _tasks_lock = threading.Lock()
 _active_tasks: dict[str, dict] = {}
+TODOS_FILE = Path(__file__).resolve().parent.parent / "config" / "todos.json"
 
 
 # ── Step artifact verification (anti-fake layer) ─────────────────────────────
@@ -104,22 +105,14 @@ def _get_active_task_summary() -> str:
 
     # ADDITIVE: RAM is empty (possibly after restart). Check todos.json for last entry.
     try:
-        from pathlib import Path as _P
-        import json as _j
-        _tdb = _P(__file__).resolve().parent.parent / "config" / "todos.json"
+        _tdb = TODOS_FILE
         if _tdb.exists():
-            _all = _j.loads(_tdb.read_text(encoding="utf-8"))
+            _all = json.loads(_tdb.read_text(encoding="utf-8"))
             if isinstance(_all, list) and _all:
                 last = _all[-1]
                 goal = last.get("goal", "")[:80]
                 st   = last.get("status", "unknown").upper()
                 num_steps = len(last.get("steps", []))
-                # Check if files actually exist on disk
-                import os
-                desktop = str(_P.home() / "Desktop")
-                possible_paths = [
-                    _P.home() / "Desktop" / f"{_j.loads(_tdb.read_text())[-1].get('goal', '')[:20]}.md",
-                ]
                 return (f"Last task: '{goal}' — Status: {st} ({num_steps} steps). "
                         f"Session restarted; run the task again if files are missing from Desktop.")
     except Exception:
@@ -620,8 +613,7 @@ def _execute_plan_worker(task_id: str, goal: str, steps: list[str], player=None,
     # ADDITIVE: todos.json progress sync (RAM-only tha, restart par gayab).
     # create_task wala persist untouched, yah status/results update karta hai.
     try:
-        from pathlib import Path as _P
-        _tdb = _P(__file__).resolve().parent.parent / "config" / "todos.json"
+        _tdb = TODOS_FILE
         if _tdb.exists():
             import json as _j
             _all = _j.loads(_tdb.read_text(encoding="utf-8"))
@@ -735,7 +727,7 @@ def create_task(goal: str, subtasks_raw: str | list[str], player=None, speak=Non
 
     # Additive persist: todos.json me save (RAM flow hataya nahi, restart-restore ke liye)
     try:
-        _tdb = Path(__file__).resolve().parent.parent / "config" / "todos.json"
+        _tdb = TODOS_FILE
         _tdb.parent.mkdir(parents=True, exist_ok=True)
         _all = []
         try:

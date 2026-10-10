@@ -68,13 +68,6 @@ if not notified:
     except Exception:
         pass
 
-if not notified:
-    try:
-        import subprocess
-        subprocess.run(["msg", "*", "/TIME:30", message], check=False)
-    except Exception:
-        pass
-
 try:
     import winsound
     for freq in [800, 1000, 1200]:
@@ -357,6 +350,42 @@ def _parse_target_datetime(date_str: str, time_str: str, message: str) -> tuple[
     return None, ""
 
 
+def purge_all_reminders() -> str:
+    """Purge all scheduled system tasks and clear active timers from app state."""
+    cleared_app = 0
+    try:
+        from core.timer_manager import clear_all_timers
+        cleared_app = clear_all_timers()
+    except Exception:
+        pass
+
+    cleared_sys = 0
+    if _get_os() == "windows":
+        try:
+            res = subprocess.run(
+                ["schtasks", "/query", "/fo", "LIST"],
+                capture_output=True, text=True, **_CNW
+            )
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    if "JARVISReminder" in line:
+                        parts = line.split(":", 1)
+                        if len(parts) == 2:
+                            t_name = parts[1].strip()
+                            subprocess.run(["schtasks", "/delete", "/tn", t_name, "/f"], **_CNW)
+                            cleared_sys += 1
+        except Exception:
+            pass
+
+    try:
+        shutil.rmtree(_scripts_dir(), ignore_errors=True)
+        _scripts_dir().mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    return f"✅ Saare reminders aur timers successfully band kar diye gaye hain ({cleared_app} active, {cleared_sys} system tasks cleared)."
+
+
 def reminder(
     parameters: dict,
     response=None,
@@ -366,7 +395,13 @@ def reminder(
     params = parameters or {}
     date_str = str(params.get("date") or "").strip()
     time_str = str(params.get("time") or "").strip()
-    message  = str(params.get("message") or params.get("text") or params.get("task") or "Reminder").strip()
+    message  = str(params.get("message") or params.get("text") or params.get("task") or "").strip()
+    action   = str(params.get("action") or "").strip().lower()
+
+    # Cancel / Clear / Band karo intent detection
+    full_prompt = f"{action} {time_str} {message}".lower()
+    if any(w in full_prompt for w in ("cancel", "clear", "band", "hatao", "stop", "delete", "purge")):
+        return purge_all_reminders()
 
     if not time_str and not date_str and not message:
         return "Reminder ya alarm ke liye time batao (e.g., '5 min ka alarm', 'kal shaam 6 baje')."

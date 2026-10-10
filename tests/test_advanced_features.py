@@ -126,9 +126,11 @@ def test_youtube_video_vs_audio_routing():
     assert res_rescan[1]["action"] == "rescan"
 
 
-def test_todo_agent_real_tool_dispatch():
+def test_todo_agent_real_tool_dispatch(monkeypatch):
     """Verify todo_agent dispatches real actions without simulated dummy sleep."""
     from actions.todo_agent import _dispatch_step_to_tool
+    import actions.reminder
+    monkeypatch.setattr(actions.reminder, "_schedule_windows", lambda *args, **kwargs: "mock_job_id")
     
     # Test travel transit dispatch
     out_transit = _dispatch_step_to_tool("travel_transit: Delhi to Patna trains", goal="trip to Patna")
@@ -137,12 +139,22 @@ def test_todo_agent_real_tool_dispatch():
     # Test reminder dispatch
     out_reminder = _dispatch_step_to_tool("reminder: pack clothes", goal="trip checklist")
     assert "reminder" in out_reminder.lower() or "set" in out_reminder.lower() or "checklist" in out_reminder.lower()
+    
+    # Ensure test reminder is cleared from memory
+    actions.reminder.purge_all_reminders()
 
 
-def test_agent_mode_and_todo_deduplication():
+def test_agent_mode_and_todo_deduplication(monkeypatch, tmp_path):
     """Verify duplicate goals in agent_mode and todo_agent are detected and prevent duplicate threads."""
     from actions.agent_mode import agent_mode
     from actions.todo_agent import create_task, _active_tasks, _tasks_lock
+    import actions.todo_agent
+    import actions.reminder
+
+    monkeypatch.setattr(actions.reminder, "_schedule_windows", lambda *args, **kwargs: "mock_job_id")
+    test_todos_file = tmp_path / "todos.json"
+    test_todos_file.write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(actions.todo_agent, "TODOS_FILE", test_todos_file)
 
     unique_goal = "Autonomous Test Trip Planning Unique"
     res1 = create_task(unique_goal, ["travel_transit: routes", "reminder: pack"])
@@ -158,6 +170,7 @@ def test_agent_mode_and_todo_deduplication():
             if _active_tasks[tid].get("goal") == unique_goal:
                 _active_tasks[tid]["abort"] = True
                 _active_tasks[tid]["status"] = "cancelled"
+    actions.reminder.purge_all_reminders()
 
 
 def test_edge_router_telegram_messaging():
