@@ -126,6 +126,15 @@ def _compress(img_bytes: bytes, source_format: str = "PNG") -> tuple[bytes, str]
 
 
 def _capture_screen() -> tuple[bytes, str]:
+    # Privacy guard — FAIL CLOSED.
+    # The previous shape was:
+    #     try:
+    #         ...guard...
+    #         if not allowed: return shield
+    #     except Exception:
+    #         pass          # <-- capture proceeds
+    # Any ImportError, typo, or internal bug in the guard therefore DISABLED
+    # the shield silently. A security control must fail closed, not open.
     try:
         from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
         allowed, reason = is_screen_capture_allowed(is_stream=False)
@@ -133,7 +142,16 @@ def _capture_screen() -> tuple[bytes, str]:
             print(f"[Vision] 🛡️  Screen capture shielded: {reason}")
             return generate_shield_frame(reason)
     except Exception as _p_err:
-        pass
+        print(f"[Vision] 🛡️  Privacy guard unavailable ({_p_err}) — blocking capture.")
+        try:
+            from core.privacy_guard import generate_shield_frame
+            return generate_shield_frame("PRIVACY GUARD UNAVAILABLE - CAPTURE BLOCKED")
+        except Exception:
+            # Last resort: refuse rather than leak the screen.
+            raise RuntimeError(
+                "Privacy guard unavailable and shield rendering failed — "
+                "screen capture blocked to protect your privacy."
+            ) from _p_err
 
     if not _MSS:
         raise RuntimeError("mss is not installed. Run: pip install mss")

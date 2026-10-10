@@ -82,14 +82,32 @@ def get_native_process_list() -> List[str]:
 
 
 def is_native_process_running(process_name: str) -> bool:
-    """Check if process is active via native Windows tasklist filter."""
+    """Check if process is active via native Windows tasklist filter.
+
+    SECURITY: this used to be
+        cmd = f'tasklist /FI "IMAGENAME eq {clean}.exe" /NH'
+        subprocess.check_output(cmd, shell=True, ...)
+    `clean` is derived from a model-supplied process name with only
+    `.replace(".exe","")` applied, so a name containing `&`, `|` or `"` escaped
+    the quoted filter and executed arbitrary commands. Now argv is a list and the
+    filter is additionally restricted to a conservative character set.
+    """
     if _OS != "Windows":
         return process_name.lower() in [p.lower() for p in get_native_process_list()]
 
     clean = process_name.lower().replace(".exe", "").strip()
+    # tasklist accepts an image-name filter, so anything outside a plain
+    # name/dot/dash/underscore is not a real process name. Reject early rather
+    # than sanitising into something that could still be interpreted.
+    if not clean or not re.fullmatch(r"[a-z0-9._\-]{1,64}", clean):
+        return False
     try:
-        cmd = f'tasklist /FI "IMAGENAME eq {clean}.exe" /NH'
-        out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(
+            ["tasklist", "/FI", f"IMAGENAME eq {clean}.exe", "/NH"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
         return clean in out.lower()
     except Exception:
         return False

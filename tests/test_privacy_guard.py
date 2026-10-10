@@ -124,38 +124,82 @@ def test_privacy_ctl_action():
     assert "STOP" in stream_off
 
 
+def _authorized_client():
+    """A TestClient carrying a valid bearer token.
+
+    The screen/privacy endpoints used to be reachable with NO authentication
+    while the server binds 0.0.0.0 and opens the Windows Firewall, which meant
+    anyone on the LAN could pull a live image of the user's screen. These tests
+    now assert both halves of the contract: unauthenticated requests are
+    refused, and authenticated ones still work.
+    """
+    from fastapi.testclient import TestClient
+    from dashboard.server import DashboardServer
+
+    srv = DashboardServer()
+    # Mint a session exactly the way /login does.
+    key = srv.new_key(expiry_secs=600)
+    srv._tokens.add("test-token-abc")
+    srv._token_keys["test-token-abc"] = key
+    import time as _t
+    srv._token_created["test-token-abc"] = _t.time()
+
+    client = TestClient(srv.app)
+    client.headers.update({"Authorization": "Bearer test-token-abc"})
+    return srv, client
+
+
 def test_dashboard_privacy_endpoints():
-    """Verify FastAPI dashboard privacy status and stream toggle endpoints."""
+    """Verify dashboard privacy/stream endpoints REQUIRE authentication.
+
+    Regression test for four endpoints that previously had no _auth() call:
+    /api/screen-frame, /api/screen-stream.mjpg, /api/screen-stream/toggle and
+    /api/privacy/status.
+    """
     try:
         from fastapi.testclient import TestClient
         from dashboard.server import DashboardServer
-        srv = DashboardServer()
-        client = TestClient(srv.app)
-
-        # 1. Privacy status
-        resp_status = client.get("/api/privacy/status")
-        assert resp_status.status_code == 200
-        data = resp_status.json()
-        assert "privacy_mode" in data
-        assert "stream_allowed" in data
-
-        # 2. Stream toggle
-        resp_toggle = client.post("/api/screen-stream/toggle", json={"allowed": True})
-        assert resp_toggle.status_code == 200
-        assert resp_toggle.json().get("stream_allowed") is True
-
-        # Toggle back off
-        resp_toggle_off = client.post("/api/screen-stream/toggle", json={"allowed": False})
-        assert resp_toggle_off.status_code == 200
-        assert resp_toggle_off.json().get("stream_allowed") is False
-
-        # 3. Screen frame while stream disabled returns Privacy Shield frame
-        resp_frame = client.get("/api/screen-frame")
-        assert resp_frame.status_code == 200
-        assert resp_frame.headers.get("content-type") == "image/jpeg"
-        assert len(resp_frame.content) > 500
     except ImportError:
         pytest.skip("FastAPI / TestClient dependencies not available")
+
+    # --- Part 1: unauthenticated callers must be refused ---
+    anon = TestClient(DashboardServer().app)
+    for method, url in [
+        ("GET",  "/api/privacy/status"),
+        ("GET",  "/api/screen-frame"),
+        ("GET",  "/api/screen-stream.mjpg"),
+        ("POST", "/api/screen-stream/toggle"),
+    ]:
+        r = anon.request(method, url, json={"allowed": True})
+        assert r.status_code == 401, f"{method} {url} must require auth, got {r.status_code}"
+
+    # --- Part 2: authenticated caller gets the real behaviour ---
+    srv, client = _authorized_client()
+
+    resp_status = client.get("/api/privacy/status")
+    assert resp_status.status_code == 200
+    data = resp_status.json()
+    assert "privacy_mode" in data
+    assert "stream_allowed" in data
+
+    resp_toggle = client.post("/api/screen-stream/toggle", json={"allowed": True})
+    assert resp_toggle.status_code == 200
+    assert resp_toggle.json().get("stream_allowed") is True
+
+    resp_toggle_off = client.post("/api/screen-stream/toggle", json={"allowed": False})
+    assert resp_toggle_off.status_code == 200
+    assert resp_toggle_off.json().get("stream_allowed") is False
+
+    # Screen frame while stream disabled still returns the Privacy Shield frame.
+    resp_frame = client.get("/api/screen-frame")
+    assert resp_frame.status_code == 200
+    assert resp_frame.headers.get("content-type") == "image/jpeg"
+    assert len(resp_frame.content) > 500
+
+    # --- Part 3: plaintext command payloads must be refused ---
+    r = client.post("/api/command", json={"text": "delete everything"})
+    assert r.status_code == 400, "plaintext /api/command must be refused"
+    assert "enc" in r.json().get("error", "").lower()
 
 
 def test_edge_router_privacy_reflexes():

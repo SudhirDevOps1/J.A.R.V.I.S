@@ -45,26 +45,45 @@ def test_computer_control_visual_actions():
 
 
 def test_dashboard_screen_endpoints():
-    """Verify FastAPI dashboard provides /api/screen-frame and /api/screen-stream.mjpg."""
+    """Verify the screen endpoints exist AND require authentication.
+
+    These routes return a live image of the user's entire screen, and the server
+    binds 0.0.0.0 (plus opens the Windows firewall). They previously had no
+    _auth() call, so any host on the LAN could pull them. Both halves of the
+    contract are asserted here.
+    """
     try:
         from fastapi.testclient import TestClient
-        from dashboard.server import DashboardServer
-        srv = DashboardServer()
-        client = TestClient(srv.app)
-
-        # Test single frame snapshot
-        resp = client.get("/api/screen-frame")
-        assert resp.status_code == 200
-        assert "image/" in resp.headers.get("content-type", "")
-        assert len(resp.content) > 100
     except ImportError:
-        # If starlette/httpx not configured for testclient, verify routes exist in app
+        # Fall back to route presence if testclient isn't configured.
         from dashboard.server import DashboardServer
         srv = DashboardServer()
         routes = [r.path for r in srv.app.routes]
         assert "/api/screen-frame" in routes
         assert "/api/screen-stream.mjpg" in routes
         assert "/ws/screen-stream" in routes
+        return
+
+    import time as _t
+    from dashboard.server import DashboardServer
+
+    # --- Unauthenticated must be refused ---
+    anon = TestClient(DashboardServer().app)
+    assert anon.get("/api/screen-frame").status_code == 401
+    assert anon.get("/api/screen-stream.mjpg").status_code == 401
+
+    # --- Authenticated still serves a frame ---
+    srv = DashboardServer()
+    srv._tokens.add("test-token-xyz")
+    srv._token_keys["test-token-xyz"] = srv.new_key(expiry_secs=600)
+    srv._token_created["test-token-xyz"] = _t.time()
+    client = TestClient(srv.app)
+    client.headers.update({"Authorization": "Bearer test-token-xyz"})
+
+    resp = client.get("/api/screen-frame")
+    assert resp.status_code == 200
+    assert "image/" in resp.headers.get("content-type", "")
+    assert len(resp.content) > 100
 
 
 def test_edge_router_visual_reflex():

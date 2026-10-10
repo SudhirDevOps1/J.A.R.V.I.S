@@ -38,11 +38,23 @@ def _get_base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 def _get_api_key() -> str:
+    """Read the Gemini key through the shared loader.
+
+    This read config/api_keys.json RAW, so once the secret vault encrypted the
+    config this returned the literal 'ENC(...)' ciphertext and every LLM-backed
+    computer_settings feature failed with an opaque auth error. It also skipped
+    load_api_keys() entirely, unlike the other nine modules that do this.
+    """
+    try:
+        from memory.config_manager import load_api_keys
+        return (load_api_keys().get("gemini_api_key") or "").strip()
+    except Exception:
+        pass
     try:
         path = _get_base_dir() / "config" / "api_keys.json"
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f).get("gemini_api_key", "").strip()
+                return str(json.load(f).get("gemini_api_key") or "").strip()
     except Exception:
         pass
     return ""

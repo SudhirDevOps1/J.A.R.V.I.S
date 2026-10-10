@@ -113,14 +113,19 @@ def record_snapshot(
     """
     Record a timeline snapshot to SQLite FTS5.
     Respects privacy guard and privacy blacklist.
+
+    Privacy guard is FAIL CLOSED: previously an exception inside the guard
+    fell through to `pass` and the snapshot was still recorded, so any bug or
+    missing dependency silently disabled timeline privacy.
     """
     try:
         from core.privacy_guard import is_screen_capture_allowed
         allowed, reason = is_screen_capture_allowed(is_stream=False)
         if not allowed:
             return False
-    except Exception:
-        pass
+    except Exception as _p_err:
+        print(f"[Timeline] 🛡️  Privacy guard unavailable ({_p_err}) — snapshot skipped.")
+        return False
 
     if not window_title or not app_name:
         cur_title, cur_app = get_active_window_info()

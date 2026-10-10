@@ -460,8 +460,51 @@ class DashboardServer:
         app = FastAPI(docs_url=None, redoc_url=None)
 
         def _auth(req: Request) -> bool:
+            """Bearer-token check for HTTP routes.
+
+            Uses secrets.compare_digest against the full token set so that token
+            comparison is constant-time; a plain `in` on a set leaks timing
+            information and is also the wrong tool for a growing token set.
+
+            Also runs the TTL sweep. The sweep used to live only inside the
+            /login handler, which meant that if nobody re-logged-in, tokens
+            minted by /auto-login and /api/device-login were valid FOREVER —
+            the 24h expiry was documented but never actually enforced for them.
+            """
+            _sweep_expired_tokens()
             tok = req.headers.get("authorization", "").removeprefix("Bearer ").strip()
-            return bool(tok) and tok in self._tokens
+            if not tok:
+                return False
+            return any(secrets.compare_digest(tok, known) for known in self._tokens)
+
+        def _sweep_expired_tokens() -> None:
+            """Drop bearer tokens older than 24h. Cheap: called on every auth
+            check, but the token set is a handful of entries in practice."""
+            now = time.time()
+            for t in [t for t, ts in self._token_created.items() if now - ts > 86400]:
+                self._tokens.discard(t)
+                self._token_keys.pop(t, None)
+                self._token_created.pop(t, None)
+            # _aes_cache is keyed by session_key, NOT by bearer token, so the
+            # previous `self._aes_cache.pop(t, None)` could never match and the
+            # cache grew without bound. Evict by looking up each live token's
+            # session key instead.
+            live_keys = {self._token_keys.get(t) for t in self._tokens}
+            live_keys.discard(None)
+            for sk in [k for k in self._aes_cache if k not in live_keys]:
+                self._aes_cache.pop(sk, None)
+
+        def _auth_token(tok: str) -> bool:
+            """Same check for WebSocket / query-string callers that carry the
+            token as a value rather than an Authorization header."""
+            _sweep_expired_tokens()
+            tok = (tok or "").strip()
+            if not tok:
+                return False
+            return any(secrets.compare_digest(tok, known) for known in self._tokens)
+
+        def _unauthorized() -> JSONResponse:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
 
         # serve CryptoJS from local cache, fallback to CDN redirect
         @app.get("/static/crypto.js")
@@ -501,16 +544,9 @@ class DashboardServer:
                 self._login_attempts[_ip] = _hits[-10:]
             except Exception:
                 pass
-            # Additive TTL sweep: 24h se purane bearer tokens safai (active untouched)
-            try:
-                _old = [t for t, ts in list(self._token_created.items()) if now - ts > 86400]
-                for t in _old:
-                    self._tokens.discard(t)
-                    self._token_keys.pop(t, None)
-                    self._token_created.pop(t, None)
-                    self._aes_cache.pop(t, None)
-            except Exception:
-                pass
+            # Additive TTL sweep now lives in _sweep_expired_tokens(), which every
+            # auth check invokes (not just this handler).
+            _sweep_expired_tokens()
             if entered in self._pending_keys and self._pending_keys[entered] > now:
                 del self._pending_keys[entered]          # one-time use
                 tok = secrets.token_urlsafe(32)
@@ -611,17 +647,34 @@ class DashboardServer:
 
         @app.post("/api/command")
         async def command(req: Request):
+            """Queue a text command for the live session.
+
+            SECURITY FIX: `enc` was optional — omitting it made the server accept
+            plaintext, which silently bypassed the AES-256-CBC transport design
+            documented at the top of this module. Anyone holding a valid token
+            could (and a network observer could read) every command in the clear.
+            Plaintext is now refused; only encrypted payloads are accepted.
+            """
             if not _auth(req):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
-            body  = await req.json()
+            try:
+                body = await req.json()
+            except Exception:
+                return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+            if not isinstance(body, dict):
+                return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
             token = req.headers.get("authorization", "").removeprefix("Bearer ").strip()
-            enc   = body.get("enc", "")
-            if enc:
-                text = self._decrypt(token, enc)
-                if text is None:
-                    return JSONResponse({"error": "Decryption failed"}, status_code=400)
-            else:
-                text = (body.get("text") or "").strip()
+            enc   = body.get("enc") or ""
+            if not enc:
+                return JSONResponse(
+                    {"error": "Encrypted payload required ('enc' field missing). "
+                              "Plaintext commands are refused."},
+                    status_code=400,
+                )
+            text = self._decrypt(token, enc)
+            if text is None:
+                return JSONResponse({"error": "Decryption failed"}, status_code=400)
+            text = text.strip()
             if text:
                 await self._command_queue.put(text)
                 if self._wake_callback:
@@ -640,11 +693,11 @@ class DashboardServer:
 
         @app.websocket("/ws/phone-audio")
         async def phone_audio_ws(websocket: WebSocket, token: str = ""):
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            if not _auth_token(token):
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
+            tok = token.strip()
             asyncio.create_task(self.broadcast(
                 {"type": "sys", "text": "Phone microphone live."}
             ))
@@ -668,12 +721,19 @@ class DashboardServer:
 
         @app.websocket("/ws/screen-stream")
         async def screen_stream_ws(websocket: WebSocket, token: str = "", fps: int = 5):
-            """Stream real-time compressed screen frames over WebSocket to clients with Privacy Guard."""
-            tok = token.strip()
-            if tok and tok not in self._tokens:
+            """Stream real-time compressed screen frames over WebSocket to clients with Privacy Guard.
+
+            SECURITY FIX: the guard read `if tok and tok not in self._tokens`.
+            An empty token short-circuits that condition to False, so the
+            connection was accepted with NO token at all — an unauthenticated
+            live screen stream. The two sibling WebSocket handlers already used
+            the correct `if not tok or ...` form. Now normalised via _auth_token.
+            """
+            if not _auth_token(token):
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
+            tok = token.strip()
             fps = max(1, min(15, fps or 5))
             interval = 1.0 / fps
             client_ip = websocket.client.host if websocket.client else "127.0.0.1"
@@ -708,7 +768,16 @@ class DashboardServer:
 
         @app.get("/api/screen-frame")
         async def screen_frame_ep(req: Request):
-            """Return current single screen snapshot or Privacy Shield frame as image/jpeg."""
+            """Return current single screen snapshot or Privacy Shield frame as image/jpeg.
+
+            SECURITY: this endpoint returns a live image of the user's entire
+            screen (banking sessions, password managers, private chats). It used
+            to be reachable with NO authentication by anyone who could reach the
+            port. The server binds 0.0.0.0 and opens the Windows Firewall, so
+            "anyone who could reach the port" means the whole LAN.
+            """
+            if not _auth(req):
+                return _unauthorized()
             try:
                 client_ip = req.client.host if req.client else "127.0.0.1"
                 from core.privacy_guard import is_screen_capture_allowed, generate_shield_frame
@@ -725,7 +794,13 @@ class DashboardServer:
 
         @app.get("/api/screen-stream.mjpg")
         async def screen_stream_mjpg(req: Request, fps: int = 5):
-            """Motion-JPEG stream compatible with standard <img> tag, protected by Zero-Trust Privacy Shield."""
+            """Motion-JPEG stream compatible with standard <img> tag, protected by Zero-Trust Privacy Shield.
+
+            SECURITY: was unauthenticated — a continuous, caller-paced (up to 15
+            fps) live feed of the user's screen. Now requires a bearer token.
+            """
+            if not _auth(req):
+                return _unauthorized()
             client_ip = req.client.host if req.client else "127.0.0.1"
             fps = max(1, min(15, fps or 5))
             interval = 1.0 / fps
@@ -757,7 +832,15 @@ class DashboardServer:
 
         @app.post("/api/screen-stream/toggle")
         async def toggle_screen_stream(req: Request):
-            """Toggle screen stream authorization on/off."""
+            """Toggle screen stream authorization on/off.
+
+            SECURITY: was unauthenticated AND CSRF-reachable. A simple cross-site
+            POST (no preflight) could disable the Privacy Shield, after which the
+            (also unauthenticated) frame endpoints would serve the raw screen.
+            Now requires a bearer token.
+            """
+            if not _auth(req):
+                return _unauthorized()
             from core.privacy_guard import is_stream_allowed, set_stream_allowed
             target = None
             try:
@@ -773,7 +856,15 @@ class DashboardServer:
 
         @app.get("/api/privacy/status")
         async def get_privacy_status(req: Request):
-            """Return current privacy guard configuration and sensitive window status."""
+            """Return current privacy guard configuration and sensitive window status.
+
+            SECURITY: was unauthenticated. It leaked the privacy configuration AND,
+            via detect_sensitive_window(), the title of the user's foreground
+            window — an information-disclosure primitive telling any caller which
+            app the victim was looking at. Now requires a bearer token.
+            """
+            if not _auth(req):
+                return _unauthorized()
             from core.privacy_guard import load_privacy_settings, detect_sensitive_window
             cfg = load_privacy_settings()
             is_sens, sens_desc = detect_sensitive_window()
@@ -874,22 +965,32 @@ class DashboardServer:
         @app.get("/uploads/{filename}")
         async def download_file(filename: str, token: str = ""):
             # Auth via query param — browser <a download> can't send custom headers
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            if not _auth_token(token):
                 return JSONResponse({"error": "Unauthorized"}, status_code=401)
-            safe = re.sub(r'[/\\]', '', filename)
-            path = self._uploads_dir / safe
+            # Containment by construction rather than by separator-stripping:
+            # resolve the candidate and require it to stay inside UPLOADS_DIR.
+            # The previous `re.sub(r'[/\\]', '', filename)` only removed
+            # separators, so a ".." segment could still be supplied (Starlette's
+            # single-segment converter limited it, but the guarantee was
+            # incidental, not designed).
+            try:
+                uploads_root = self._uploads_dir.resolve()
+                path = (uploads_root / filename).resolve()
+                if not path.is_relative_to(uploads_root):
+                    return JSONResponse({"error": "Not found"}, status_code=404)
+            except Exception:
+                return JSONResponse({"error": "Not found"}, status_code=404)
             if not path.exists() or not path.is_file():
                 return JSONResponse({"error": "Not found"}, status_code=404)
-            return FileResponse(str(path), filename=safe)
+            return FileResponse(str(path), filename=path.name)
 
         @app.websocket("/ws")
         async def ws_ep(websocket: WebSocket, token: str = ""):
-            tok = token.strip()
-            if not tok or tok not in self._tokens:
+            if not _auth_token(token):
                 await websocket.close(code=4001)
                 return
             await websocket.accept()
+            tok = token.strip()
             self._clients.add(websocket)
             for entry in self._history[-50:]:
                 try:
@@ -900,10 +1001,14 @@ class DashboardServer:
                 while True:
                     data = await websocket.receive_json()
                     if data.get("type") == "command":
-                        enc = data.get("enc", "")
-                        t   = self._decrypt(tok, enc) if enc else (data.get("text") or "").strip()
-                        if t:
-                            await self._command_queue.put(t)
+                        # Same rule as POST /api/command: enc is mandatory so the
+                        # encrypted transport cannot be bypassed with plaintext.
+                        enc = data.get("enc") or ""
+                        if not enc:
+                            continue
+                        t = self._decrypt(tok, enc)
+                        if t and t.strip():
+                            await self._command_queue.put(t.strip())
                             if self._wake_callback:
                                 self._wake_callback()
             except WebSocketDisconnect:

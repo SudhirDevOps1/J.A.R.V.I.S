@@ -214,6 +214,18 @@ def _click_first_profile_by_screenshot() -> bool:
             return False
 
         wx, wy, ww, wh = win
+        # Consistency: every other screen-capture site goes through the privacy
+        # shield. This one captures a Steam window region locally (no upload),
+        # but leaving it unguarded meant Privacy Mode did not apply uniformly.
+        try:
+            from core.privacy_guard import is_screen_capture_allowed
+            _ok, _why = is_screen_capture_allowed(is_stream=False)
+            if not _ok:
+                print(f"[GameUpdater] 🛡️  blocked by Privacy Shield: {_why}")
+                return False
+        except Exception as _p_err:
+            print(f"[GameUpdater] 🛡️  Privacy guard unavailable ({_p_err}) — capture blocked.")
+            return False
         screenshot = pyautogui.screenshot(region=(wx, wy, ww, wh))
         img        = np.array(screenshot)
         h, w       = img.shape[:2]

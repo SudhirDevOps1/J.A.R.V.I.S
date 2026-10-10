@@ -48,21 +48,72 @@ def _get_api_key() -> str:
     return ""
 
 
+_SECRET_HEADER_NAMES = {
+    "authorization", "cookie", "set-cookie", "x-api-key", "x-auth-token",
+    "x-csrf-token", "x-xsrf-token", "proxy-authorization", "x-access-token",
+    "x-session-token", "x-amz-security-token", "api-key", "apikey", "token",
+}
+_REDACTED = "«redacted-by-jarvis»"
+
+
+def _redact_headers(headers: Dict[str, str]) -> Dict[str, str]:
+    """Strip live credentials from captured request headers.
+
+    The sniffer used to copy `authorization`, `x-api-key` and `cookie` straight
+    out of the real browser session and serialise them into a Gemini prompt.
+    That shipped the user's live session cookies and bearer tokens to a cloud
+    model with no redaction step, no warning, and no audit entry.
+
+    The header NAMES are still captured — they are exactly what makes the
+    reverse-engineered script informative ("this endpoint needs a Bearer
+    header") — but the VALUES are replaced. The generated script must obtain
+    credentials from the environment, not from the sniff.
+    """
+    out: Dict[str, str] = {}
+    for k, v in (headers or {}).items():
+        if k.lower() in _SECRET_HEADER_NAMES:
+            out[k] = _REDACTED
+        else:
+            out[k] = v
+    return out
+
+
+def _redact_traffic(captured: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Apply header redaction to every captured request, defensively."""
+    safe: List[Dict[str, Any]] = []
+    for item in (captured or [])[:15]:
+        if not isinstance(item, dict):
+            continue
+        item = dict(item)
+        if isinstance(item.get("headers"), dict):
+            item["headers"] = _redact_headers(item["headers"])
+        safe.append(item)
+    return safe
+
+
 def _llm_reverse_engineer(captured_traffic: List[Dict[str, Any]], target_url: str, goal: str = "") -> str:
-    """Uses Gemini 2.5 Flash to inspect intercepted network requests and write a clean standalone Python script."""
+    """Uses Gemini 2.5 Flash to inspect intercepted network requests and write a clean standalone Python script.
+
+    Credentials are redacted before the prompt is built — see _redact_headers.
+    The generated script is expected to read tokens from the environment.
+    """
     api_k = _get_api_key()
-    traffic_summary = json.dumps(captured_traffic[:15], indent=2)
+    traffic_summary = json.dumps(_redact_traffic(captured_traffic), indent=2)
 
     prompt = f"""You are an expert reverse-engineering and API analysis agent for J.A.R.V.I.S.
 The user inspected the website: {target_url}
 Goal: {goal or 'Extract clean JSON/tabular data directly without opening browser'}
 
-Here is the intercepted XHR/Fetch network traffic from the page session:
+Here is the intercepted XHR/Fetch network traffic from the page session.
+SECURITY: live credential VALUES have already been redacted and appear as
+«redacted-by-jarvis». Never hardcode a credential; read it from an environment
+variable instead (e.g. os.environ["TARGET_API_KEY"]).
+
 {traffic_summary}
 
 Please analyze the traffic:
-1. Identify the primary internal data API endpoints (URLs, query parameters, headers, authorization).
-2. Write a clean, self-contained Python script using requests that replicates the call and prints the structured data.
+1. Identify the primary internal data API endpoints (URLs, query parameters, header NAMES).
+2. Write a clean, self-contained Python script using requests that replicates the call and prints the structured data. Read any credential from os.environ — do not embed one.
 3. Provide a concise 2-line explanation in Hinglish of how the API works and what was extracted.
 """
     try:
@@ -144,7 +195,10 @@ def sniff_web_api(
                             "url": r_url,
                             "method": req.method,
                             "status": response.status,
-                            "headers": {k: v for k, v in req.headers.items() if k.lower() in ("authorization", "x-api-key", "cookie", "accept", "content-type")},
+                            # Redacted at capture time, not just before the LLM
+                            # call, so an unredacted token never even exists in
+                            # the in-memory `captured` list.
+                            "headers": _redact_headers(req.headers),
                             "post_data": req.post_data,
                             "sample_response": body,
                         })

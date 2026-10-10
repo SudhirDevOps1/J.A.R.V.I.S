@@ -55,7 +55,21 @@ def _get_os() -> str:
 
 
 def _get_api_key() -> str:
-    return _load_config().get("gemini_api_key", "")
+    """Read the Gemini key the same way the rest of the app does.
+
+    This used to read config/api_keys.json RAW, bypassing memory.config_manager
+    .load_api_keys(). Once the secret vault is active the raw value is an
+    'ENC(...)' Fernet blob, so genai.Client(api_key=...) received ciphertext and
+    every LLM feature in this module failed with an opaque auth error.
+    """
+    try:
+        from memory.config_manager import load_api_keys
+        return (load_api_keys().get("gemini_api_key") or "").strip()
+    except Exception:
+        try:
+            return str(_load_config().get("gemini_api_key") or "").strip()
+        except Exception:
+            return ""
 
 _SAFE_SCREENSHOT_ROOTS = (
     Path.home(),
@@ -239,8 +253,27 @@ def _clipboard_paste(text: str) -> str:
     return "pyperclip not available"
 
 
+def _privacy_allows_capture(is_stream: bool = False):
+    """(allowed, reason) from the Zero-Trust privacy shield, FAIL CLOSED.
+
+    This module captures the whole screen and — in _screen_find — uploads it to
+    a cloud model. It previously had NO privacy check at all, so the shield that
+    protects screen_processor / screen_timeline / screen_troubleshooter did not
+    apply here. If the guard itself errors we deny, never allow.
+    """
+    try:
+        from core.privacy_guard import is_screen_capture_allowed
+        return is_screen_capture_allowed(is_stream=is_stream)
+    except Exception as e:
+        return False, f"Privacy guard unavailable ({e})"
+
+
 def _screenshot(save_path: str | None = None) -> str:
     _require_pyautogui()
+    allowed, reason = _privacy_allows_capture()
+    if not allowed:
+        return (f"🛡️ Screenshot blocked by Privacy Shield — {reason}. "
+                "Say 'privacy mode off' if you really want this.")
     path = _safe_screenshot_path(save_path)
     img  = pyautogui.screenshot()
     img.save(str(path))
@@ -311,6 +344,15 @@ def _focus_window(title: str) -> str:
     return f"focus_window: unknown OS '{os_name}'"
 
 def _screen_find(description: str) -> tuple[int, int] | None:
+    # Privacy shield BEFORE anything else: this function captures the entire
+    # screen and uploads it to a cloud model. It had no guard at all, so banking
+    # / password-manager / private-chat screens were being sent off-device even
+    # while Privacy Mode was ON.
+    _ok, _why = _privacy_allows_capture()
+    if not _ok:
+        print(f"[ComputerControl] 🛡️  screen_find blocked: {_why}")
+        return None
+
     api_key = _get_api_key()
     if not api_key:
         print("[ComputerControl] ⚠️ No API key for screen_find")

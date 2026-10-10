@@ -18,6 +18,17 @@ from typing import Any, Dict, List, Optional
 _WATCH_JOBS: Dict[str, Dict[str, Any]] = {}
 _LAST_ERROR_DIAGNOSIS: Optional[str] = None
 
+def _audit(action: str, detail: str = "", confirmed: bool = False) -> None:
+    """Audit hook. Mirrors actions/run_command._audit so sentinel decisions are
+    recorded in the same audit log. Never raises — an audit failure must not
+    break the action, but it is reported rather than silently discarded."""
+    try:
+        from core.audit import log_event as _ae
+        _ae(action, detail, confirmed)
+    except Exception as e:
+        print(f"[DevOpsSentinel] audit write failed ({action}): {e}")
+
+
 _COMMON_ERROR_PATTERNS = [
     (r"ModuleNotFoundError:\s*No module named '([^']+)'", r"Python dependency missing: 'pip install \1' karein."),
     (r"ImportError:\s*cannot import name '([^']+)'", r"Circular import ya library version mismatch: '\1' nahi mila."),
@@ -79,10 +90,18 @@ def _run_sentinel_worker(job_id: str, command: str, cwd: Optional[str], player=N
 
         stdout_chunks: List[str] = []
         stderr_chunks: List[str] = []
+        # Cap retained output. These lists grew without bound until the process
+        # exited, so a chatty command (`npm install`, a long build) could hold
+        # hundreds of MB in RAM for the full 300s window. Keep a rolling tail:
+        # the diagnostics only ever use the last ~2000 chars anyway.
+        _MAX_CHUNK_CHARS = 200_000
 
         def read_pipe(pipe, chunk_list):
             for line in iter(pipe.readline, ''):
                 chunk_list.append(line)
+                if sum(len(c) for c in chunk_list) > _MAX_CHUNK_CHARS:
+                    # Collapse to a tail rather than growing without bound.
+                    chunk_list[:] = ["".join(chunk_list)[-_MAX_CHUNK_CHARS:]]
             pipe.close()
 
         t_out = threading.Thread(target=read_pipe, args=(proc.stdout, stdout_chunks), daemon=True)
@@ -130,8 +149,80 @@ def _run_sentinel_worker(job_id: str, command: str, cwd: Optional[str], player=N
             player.write_log(f"🚨 [Sentinel] Execution error on '{command}': {e}")
 
 
+def _sentinel_gate(command: str, cwd: Optional[str], player=None) -> Optional[str]:
+    """Apply run_command's safety model to a sentinel command.
+
+    SECURITY: this module used to hand the command straight to
+    subprocess.Popen(..., shell=True) with NO allowlist, NO blocklist and NO
+    confirmation gate — while run_command.py implemented all three carefully.
+    Worse, core/edge_router.py routes plain spoken text ("watch command ...")
+    straight into this action, so the shell was reachable by voice with no
+    model in the loop at all. The only limit was a 300s timeout.
+
+    Now the command is classified with run_command's own predicates:
+      * blocked pattern            -> refused outright, audited
+      * allowlisted (no shell ops)  -> runs in background, audited
+      * anything else              -> requires HUD confirmation, audited
+      * gate unavailable           -> REFUSED (fail closed, never open)
+
+    Returns None to proceed, or a user-facing refusal string to stop.
+    """
+    cmd = (command or "").strip()
+    if not cmd:
+        return "Koi command di nahi gayi."
+    if len(cmd) > 500:
+        return "Command bahut lamba hai (max 500 chars)."
+
+    try:
+        from actions.run_command import _is_blocked, _is_allowed
+    except Exception as e:
+        return (f"Safety gate unavailable ({e}). Sentinel refuse karta hai — "
+                "sirf allowlist commands chala sakta hu.")
+
+    blocked = _is_blocked(cmd)
+    if blocked:
+        _audit("sentinel_blocked", cmd)
+        return f"Ye command dangerous hai ('{blocked}') — main ise nahi chalaunga."
+
+    if _is_allowed(cmd):
+        _audit("sentinel_allowed", cmd)
+        return None
+
+    # Unknown / risky -> HUD confirmation gate, exactly like run_command.
+    try:
+        from core import confirm as _cg
+        if _cg.pending_title():
+            return ("Ek confirmation pehle se pending hai. Pehle CONFIRM/CANCEL karo, "
+                    "phir ye command dobara bolo.")
+        _audit("sentinel_asked", cmd)
+
+        def _do() -> str:
+            _audit("sentinel_confirmed", cmd)
+            _launch(cmd, cwd, player)
+            return f"Sirf background me chal raha hai: {cmd}"
+
+        return _cg.request(
+            "devops_sentinel",
+            f"Sentinel: {cmd[:60]}",
+            f"Command chalega: {cmd}\nCWD: {cwd or 'current'}\n"
+            f"Timeout: 5 min. CONFIRM dabane par chalega.",
+            _do,
+        )
+    except Exception as e:
+        # FAIL CLOSED — same rule as run_command.py. macro.py has the opposite
+        # bug (fails open on a gate error); do not repeat it here.
+        return f"Confirm gate unavailable: {e}. Sentinel refuse karta hai."
+
+
 def watch_command(command: str, cwd: Optional[str] = None, player=None, speak=None) -> str:
-    """Launch a non-blocking background command watch."""
+    """Launch a non-blocking background command watch (after the safety gate)."""
+    verdict = _sentinel_gate(command, cwd, player)
+    if verdict is not None:
+        return verdict
+    return _launch(command, cwd, player)
+
+
+def _launch(command: str, cwd: Optional[str], player=None) -> str:
     job_id = f"job_{int(time.time())}_{len(_WATCH_JOBS) + 1}"
     _WATCH_JOBS[job_id] = {
         "id": job_id,
@@ -144,7 +235,7 @@ def watch_command(command: str, cwd: Optional[str] = None, player=None, speak=No
 
     t = threading.Thread(
         target=_run_sentinel_worker,
-        args=(job_id, command, cwd, player, speak),
+        args=(job_id, command, cwd, player, None),
         daemon=True
     )
     t.start()
