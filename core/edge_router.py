@@ -291,6 +291,45 @@ class NeedleToolRouter:
         if re.search(r"\b(brightness\s*(?:kam|down|low|ghatao)|roshni\s*kam)\b", clean):
             return _dispatch("computer_settings", {"action": "brightness_down"})
 
+        # -- Superpowers: Clipboard Copilot (<0.1ms) -------------------------
+        if re.search(r"\b(?:clipboard|clip\s*board)\b", clean):
+            if re.search(r"\b(explain|error|diagnose|fix|solve|samjhao)\b", clean):
+                return _dispatch("clipboard_copilot", {"action": "explain_error"})
+            elif re.search(r"\b(format|beautify|json)\b", clean):
+                return _dispatch("clipboard_copilot", {"action": "format_json"})
+            elif re.search(r"\b(clean|saaf|normalize)\b", clean):
+                return _dispatch("clipboard_copilot", {"action": "clean"})
+            elif re.search(r"\b(read|padho|kya\s*hai|dekho)\b", clean):
+                return _dispatch("clipboard_copilot", {"action": "analyze"})
+            return _dispatch("clipboard_copilot", {"action": "analyze"})
+
+        # -- Superpowers: Network & Wi-Fi Diagnostics (<0.1ms) ---------------
+        if re.search(r"\b(ping\s*(?:kaisa|kitna|check)|internet\s*ping|latency\s*check|wifi\s*signal|wifi\s*status|dns\s*flush)\b", clean):
+            if "dns" in clean and "flush" in clean:
+                return _dispatch("network_diagnostics", {"action": "flush_dns"})
+            elif "wifi" in clean or "wi-fi" in clean:
+                return _dispatch("network_diagnostics", {"action": "wifi"})
+            elif "ping" in clean:
+                return _dispatch("network_diagnostics", {"action": "ping"})
+            return _dispatch("network_diagnostics", {"action": "status"})
+
+        # -- Superpowers: Process & Resource Manager (<0.1ms) ----------------
+        if re.search(r"\b(top\s*(?:cpu|ram|processes?)|heavy\s*processes?|sabse\s*zyada\s*(?:ram|cpu)|kill\s*process|process\s*kill)\b", clean):
+            kill_m = re.search(r"\b(?:kill\s*process|process\s*kill|kill)\s+([a-zA-Z0-9_\-\.]+)\b", clean)
+            if kill_m:
+                return _dispatch("process_manager", {"action": "kill", "process_name": kill_m.group(1)})
+            if "cpu" in clean:
+                return _dispatch("process_manager", {"action": "top_cpu"})
+            return _dispatch("process_manager", {"action": "top_ram"})
+
+        # -- Superpowers: Quick Notes & Thought Journal (<0.1ms) -------------
+        if re.search(r"\b(?:note\s*likho|quick\s*note|note\s*karo|save\s*note)\b", clean):
+            note_content = re.sub(r"^(?:note\s*likho|quick\s*note|note\s*karo|save\s*note)[:\s]*", "", clean).strip()
+            return _dispatch("quick_notes", {"action": "add", "text": note_content or clean})
+        if re.search(r"\b(?:notes\s*search|search\s*notes|notes\s*dhoondho|purane\s*notes)\b", clean):
+            q_text = re.sub(r"^(?:notes\s*search|search\s*notes|notes\s*dhoondho|purane\s*notes)[:\s]*", "", clean).strip()
+            return _dispatch("quick_notes", {"action": "search" if q_text else "list", "query": q_text})
+
         # ADDITIVE KG: relationship/2-hop sawal graph se (fast <5ms, safe).
         # "mummy ko kya pasand", "mummy ke rishte dikhao", "mummy se ayesha tak".
         # Graph me entity mili TABHI route — warna fall-through (tinydb/web/LLM untouched).

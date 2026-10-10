@@ -8,7 +8,7 @@
   [![CI/CD](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions/workflows/ci.yml/badge.svg)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
-  [![Local Tests](https://img.shields.io/badge/tests-131%20passed%20(100%25)-brightgreen.svg)](tests/)
+  [![Local Tests](https://img.shields.io/badge/tests-139%20passed%20(100%25)-brightgreen.svg)](tests/)
   [![Memory Engine](https://img.shields.io/badge/Memory-SQLite%20WAL%20%2B%20FTS5-00e5ff.svg)](core/unified_memory.py)
   [![Flake8 Clean](https://img.shields.io/badge/flake8-0%20errors-brightgreen.svg)](https://flake8.pycqa.org/)
 </div>
@@ -354,7 +354,7 @@ J.A.R.V.I.S./
 │   ├── confirm.py                # Irreversible-action UI gate
 │   ├── undo.py                   # Shared undo stack
 │   ├── plugin_loader.py          # Plugin discovery, validation, crash isolation
-│   ├── action_loader.py          # Built-in action discovery (51 actions)
+│   ├── action_loader.py          # Built-in action discovery (55 actions)
 │   ├── native_hacks.py           # OS-native notifications and API calls
 │   ├── installer.py              # Runtime dependency installer
 │   ├── version.py                # Project version constant

@@ -47,7 +47,7 @@ Config file: `config/api_keys.json` (example: `config/api_keys.example.json`).
 
 ### Tests
 ```powershell
-python -m pytest -q              # 131 tests, 100% pass rate
+python -m pytest -q              # 139 tests, 100% pass rate
 python -m flake8 --select E9,F63,F7,F82 actions core memory dashboard plugins tests main.py ui.py ui_icons.py
 ```
 

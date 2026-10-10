@@ -10,7 +10,7 @@
 ## 🎯 Executive Overview
 
 J.A.R.V.I.S. ships with:
-- **51 bundled actions** in `actions/` (including Chrome DevTools MCP action, Windows UIA controller, private local screen memory timeline, safe opt-in local LLM bridge, autonomous DevOps sentinel, privacy shield controller, visual agent, multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
+- **55 bundled actions** in `actions/` (including Clipboard Copilot, Network Diagnostics, Process Manager, Quick Notes, Chrome DevTools MCP action, Windows UIA controller, private local screen memory timeline, safe opt-in local LLM bridge, autonomous DevOps sentinel, privacy shield controller, visual agent, multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
 - **10 built-in plugins** in `plugins/` (Spotify, Pomodoro, Stock Quotes, Notion, Gmail, Calendar, Drive, GitHub, Slack, Smart Home)
 - **Zero-Bloat Local Matrix** (`core/edge_router.py`, `core/intent_classifier.py`) — Fast Python reflex (<0.1ms, <10KB RAM) → Unified SQLite FTS5 Memory → Gemini Live & Cloud
 - **Unified Embedded Memory** (`core/unified_memory.py`) — SQLite WAL + FTS5 full-text BM25 index with 0 MB idle RAM
@@ -23,7 +23,7 @@ J.A.R.V.I.S. ships with:
 - **22+ free LLM providers** with round-robin key rotation and SQLite cache
 - **PyQt6 Cyberpunk HUD & PiP Companion** with 4 avatar modes, emotional expression badges, and live theming
 - **EdgeTTS & Gemini Live Realtime Neural Voice** stack with customizable pitch and tones
-- **Native Python Git hooks** — zero Node.js overhead, 131/131 passing tests
+- **Native Python Git hooks** — zero Node.js overhead, 139/139 passing tests
 - **Telegram Direct Protocol & Obsidian Brain** — zero-typo direct chat links, dual Local REST & filesystem note vault
 - **Subagent swarm orchestrator** (`core/subagent_swarm.py`) — Researcher, ReverseEngineer, SelfHealer, Reporter agents
 

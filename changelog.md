@@ -15,10 +15,12 @@ All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R
 3. **Pure Python JSON-RPC 2.0 MCP Host (`core/mcp_host.py`) & Chrome DevTools Action (`actions/mcp_chrome.py`)**:
    - On-demand stdio MCP client host with Windows `CREATE_NO_WINDOW` protection (zero background window popups).
    - Chrome DevTools MCP action tool providing headless DOM navigation, CSS clicking, form typing, and screenshot capture.
-4. **Security & Vulnerability Hardening**:
-   - Command injection chaining operator bypasses strictly blocked in `actions/run_command.py`.
-   - Destructive command guardrail added to `SelfHealerAgent` in `core/subagent_swarm.py`.
-   - Fallback error handling added to `actions/screen_processor.py` (headless GDI) and `actions/scheduler.py` (missing SQLAlchemy).
+5. **Four Zero-Bloat Practical Superpowers Added (`actions/`, `core/`)**:
+   - **Intelligent Clipboard Copilot (`actions/clipboard_copilot.py`)**: Auto-detects code error tracebacks, JSON, URLs, cleans/formats whitespace, and explains exceptions with zero latency.
+   - **Network & Wi-Fi Health Diagnostics (`actions/network_diagnostics.py`)**: Sub-second ping latency to DNS, native `netsh wlan` signal strength/SSID telemetry, and Windows DNS cache flush without browser overhead.
+   - **Smart Process & Resource Manager (`actions/process_manager.py`)**: Inspects top CPU/RAM consuming user processes and safely terminates heavy/hung tasks with strict protection for core Windows processes.
+   - **Voice Quick-Notes & FTS5 Thought Journal (`actions/quick_notes.py`)**: Dictates fleeting thoughts and recalls past memos via SQLite FTS5 BM25 search (<0.5ms).
+   - Instant edge reflex patterns added to `core/edge_router.py` and `core/intent_classifier.py` for all 4 tools. Total active actions increased to **55**.
 
 ### 🎨 Brand-New Quantum Holographic Arc Reactor Icon (`config/`, `scripts/`)
 1. **Master Holographic AI Core Icon**:

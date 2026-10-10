@@ -125,6 +125,26 @@ _TRAINING_DATA = [
     ("local llm band karo", "local_llm_control"),
     ("window elements dikhao", "uia_controller"),
     ("click button save in notepad", "uia_controller"),
+
+    # 6. Next-Gen Superpowers (Clipboard Copilot, Network Diagnostics, Process Manager, Quick Notes)
+    ("clipboard explain karo", "clipboard_copilot"),
+    ("clipboard ka error dekho", "clipboard_copilot"),
+    ("clipboard format karo", "clipboard_copilot"),
+    ("clipboard me kya hai", "clipboard_copilot"),
+    ("clipboard clean karo", "clipboard_copilot"),
+    ("ping kaisa hai", "network_diagnostics"),
+    ("internet ping check karo", "network_diagnostics"),
+    ("wifi signal strength kitna hai", "network_diagnostics"),
+    ("wifi status dikhao", "network_diagnostics"),
+    ("dns flush karo", "network_diagnostics"),
+    ("top heavy processes dikhao", "process_manager"),
+    ("kaunsa app sabse zyada ram le raha hai", "process_manager"),
+    ("top cpu process dikhao", "process_manager"),
+    ("kill process chrome", "process_manager"),
+    ("note likho kal meeting hai", "quick_notes"),
+    ("quick note save karo", "quick_notes"),
+    ("notes search karo meeting", "quick_notes"),
+    ("purane notes dikhao", "quick_notes"),
 ]
 
 
