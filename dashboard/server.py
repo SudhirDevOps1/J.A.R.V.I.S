@@ -329,6 +329,124 @@ def _ensure_crypto_js() -> None:
 _ensure_crypto_js()
 
 
+# ── TLS provisioning ─────────────────────────────────────────────────────────
+
+def _ensure_self_signed_cert() -> bool:
+    """Generate a self-signed cert for the dashboard's LAN address.
+
+    WHY: the dashboard serves a bearer token that authorises full remote control
+    of the machine. Over plain HTTP that token crosses the LAN in cleartext, so
+    anything on the same Wi-Fi could capture it and drive the assistant. TLS used
+    to be opt-in and required the user to produce certificates by hand, which
+    almost nobody does — so in practice the dashboard ran unencrypted on a port
+    the app itself opened in the Windows firewall.
+
+    Generating a self-signed certificate locally fixes the transport. It is not
+    trusted by browsers (the user accepts the warning once), which is the same
+    trade-off the existing HTTPS alias port already made, just without requiring
+    manual setup.
+
+    Uses only the standard library plus `cryptography`, which is already a
+    declared dependency (core/secret_vault.py uses Fernet). An openssl fallback
+    covers environments where that import fails.
+
+    Returns True when a usable key+cert pair exists afterwards.
+    """
+    cert_dir = BASE_DIR / "config" / "certs"
+    key_p = cert_dir / "jarvis.key"
+    crt_p = cert_dir / "jarvis.crt"
+    if key_p.exists() and crt_p.exists():
+        return True
+
+    try:
+        cert_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"[Dashboard] Could not create certs dir: {e}")
+        return False
+
+    ip = _local_ip()
+    san = [x for x in (ip, "localhost", "127.0.0.1") if x]
+
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.x509.oid import NameOID
+        import datetime
+        import ipaddress
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "J.A.R.V.I.S. Local Dashboard"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "J.A.R.V.I.S."),
+        ])
+        now = datetime.datetime.now(datetime.timezone.utc)
+        alt_names = []
+        for entry in san:
+            try:
+                alt_names.append(x509.IPAddress(ipaddress.ip_address(entry)))
+            except ValueError:
+                alt_names.append(x509.DNSName(entry))
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - datetime.timedelta(days=1))
+            .not_valid_after(now + datetime.timedelta(days=730))
+            .add_extension(x509.SubjectAlternativeName(alt_names), critical=False)
+            .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+            .sign(key, hashes.SHA256())
+        )
+        key_p.write_bytes(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
+        crt_p.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+        try:
+            os.chmod(key_p, 0o600)      # private key must not be world-readable
+        except Exception:
+            pass
+        print(f"[Dashboard] Self-signed certificate generated for {ip} "
+              "(browser will warn once — accept it).")
+        return True
+
+    except Exception:
+        # Fallback: openssl where available (Linux/macOS, Git-for-Windows on Win).
+        try:
+            conf = ""
+            for entry in san:
+                try:
+                    import ipaddress
+                    ipaddress.ip_address(entry)
+                    kind = "IP"
+                except ValueError:
+                    kind = "DNS"
+                conf += ("," if conf else "") + f"{kind}:{entry}"
+            r = subprocess.run(
+                ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                 "-keyout", str(key_p), "-out", str(crt_p), "-days", "730",
+                 "-subj", "/CN=J.A.R.V.I.S. Local Dashboard",
+                 "-addext", f"subjectAltName={conf}"],
+                capture_output=True, timeout=60,
+            )
+            if r.returncode == 0 and key_p.exists() and crt_p.exists():
+                try:
+                    os.chmod(key_p, 0o600)
+                except Exception:
+                    pass
+                print("[Dashboard] Self-signed certificate generated via openssl.")
+                return True
+        except Exception:
+            pass
+
+    print("[Dashboard] TLS unavailable — dashboard will run over plain HTTP. "
+          "Use it only on a network you trust.")
+    return False
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _local_ip() -> str:
@@ -1031,6 +1149,12 @@ class DashboardServer:
         # no waiting for UAC dialogs or subprocess timeouts.
         asyncio.get_event_loop().run_in_executor(None, _ensure_network_access, PORT)
 
+        # Auto-provision TLS so the bearer token never crosses the LAN in
+        # cleartext. If the user already has certs they are respected; if not,
+        # a self-signed cert is generated (browser will warn once — accept it).
+        # If TLS truly cannot be provided, we fall back to plain HTTP with a
+        # loud warning so the user knows the transport is unencrypted.
+        _ensure_self_signed_cert()
         use_ssl  = self._ssl_enabled()
         ssl_key  = BASE_DIR / "config" / "certs" / "jarvis.key"
         ssl_cert = BASE_DIR / "config" / "certs" / "jarvis.crt"
