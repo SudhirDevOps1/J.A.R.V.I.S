@@ -34,6 +34,14 @@ memory/obsidian_vault/
 memory/*.db
 memory/*.sqlite*
 memory/*.jsonl
+# SQLite in WAL mode creates sidecar files next to the database. `*.db` above
+# does not match these, so they were getting committed.
+*.db-shm
+*.db-wal
+*.sqlite-shm
+*.sqlite-wal
+*-shm
+*-wal
 memory/contacts.json
 memory/corrections.json
 memory/feedback.json
