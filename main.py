@@ -903,8 +903,8 @@ class JarvisLive:
                     t_name, t_args = routing["tool"]
                     if self._action_registry.has(t_name):
                         if routing.get("ear_normalized"):
-                            self.ui.write_log(f"⚡ [LFM2.5 Ear]: '{text}' -> '{routing['ear_normalized']}'")
-                        self.ui.write_log(f"⚡ [Needle 2 Reflex (28MB)]: {t_name} {t_args}")
+                            self.ui.write_log(f"⚡ [Ear Normalizer]: '{text}' -> '{routing['ear_normalized']}'")
+                        self.ui.write_log(f"⚡ [Fast Local Reflex]: {t_name} {t_args}")
                         _ctx = {"player": self.ui, "speak": self.speak, "response": None, "session_memory": None}
                         t_res = self._action_registry.run(t_name, t_args, _ctx)
                         if t_res:
@@ -917,7 +917,7 @@ class JarvisLive:
                     from core.persona_manager import build_persona_system_prompt
                     lfm_ans = dispatcher.lfm.generate(text, system_prompt=build_persona_system_prompt(self._asst_name))
                     if lfm_ans:
-                        self.ui.write_log(f"⚡ [LFM2.5-230M (Offline)]: {lfm_ans}")
+                        self.ui.write_log(f"⚡ [Local Offline Reply]: {lfm_ans}")
                         self.speak(lfm_ans)
                         self.ui.set_state("LISTENING")
                         return

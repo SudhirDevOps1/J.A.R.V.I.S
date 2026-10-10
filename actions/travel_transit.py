@@ -112,33 +112,12 @@ def _get_user_default_city() -> str:
 
 
 def _find_trains(origin: str, dest: str, dist_km: float) -> list[dict]:
-    """Find known or grounded train options for this city pair."""
+    """Find verified offline train options for known corridors without generating fake data."""
     pair = (origin.lower().strip(), dest.lower().strip())
     if pair in _KNOWN_CORRIDORS:
         return _KNOWN_CORRIDORS[pair]
-
-    # Dynamically compute realistic trains based on track distance
-    vande_dur_h = max(2.5, round(dist_km / 80.0, 1))
-    sf_dur_h = max(3.5, round(dist_km / 60.0, 1))
-
-    return [
-        {
-            "name": f"{origin.capitalize()} - {dest.capitalize()} Vande Bharat Express",
-            "dep": "06:00",
-            "arr": f"{int((6 + vande_dur_h) % 24):02d}:30",
-            "dur": f"{int(vande_dur_h)}h {int((vande_dur_h % 1) * 60)}m",
-            "classes": "CC, EC",
-            "type": "Semi-High Speed",
-        },
-        {
-            "name": f"{origin.capitalize()} - {dest.capitalize()} Superfast Express",
-            "dep": "17:15",
-            "arr": f"{int((17 + sf_dur_h) % 24):02d}:45",
-            "dur": f"{int(sf_dur_h)}h {int((sf_dur_h % 1) * 60)}m",
-            "classes": "1A, 2A, 3A, SL",
-            "type": "Superfast Express",
-        },
-    ]
+    # For pairs not in verified cache, return empty list to avoid fabricating fake schedules
+    return []
 
 
 def _format_transit_card(
@@ -152,15 +131,38 @@ def _format_transit_card(
     gmaps_url: str,
 ) -> str:
     """Format an authentic Cyber-HUD HTML card for the player content panel."""
-    train_rows = ""
-    for t in trains:
-        train_rows += f"""
-        <tr style="border-bottom: 1px solid rgba(0, 220, 255, 0.15);">
-            <td style="padding: 6px; color: #ffffff; font-weight: bold;">🚆 {t['name']}</td>
-            <td style="padding: 6px; color: #00dcff;">{t['dep']} → {t['arr']}</td>
-            <td style="padding: 6px; color: #00ff88;">{t['dur']}</td>
-            <td style="padding: 6px; color: #a0aec0;">{t['classes']} ({t['type']})</td>
-        </tr>
+    if trains:
+        train_rows = ""
+        for t in trains:
+            train_rows += f"""
+            <tr style="border-bottom: 1px solid rgba(0, 220, 255, 0.15);">
+                <td style="padding: 6px; color: #ffffff; font-weight: bold;">🚆 {t['name']}</td>
+                <td style="padding: 6px; color: #00dcff;">{t['dep']} → {t['arr']}</td>
+                <td style="padding: 6px; color: #00ff88;">{t['dur']}</td>
+                <td style="padding: 6px; color: #a0aec0;">{t['classes']} ({t['type']})</td>
+            </tr>
+            """
+        train_section = f"""
+        <div style="color: #00dcff; font-size: 11px; font-weight: bold; margin-bottom: 6px;">🚆 KEY TRAIN SCHEDULES (IRCTC):</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 10px;">
+            <thead>
+                <tr style="background: #001f33; color: #00dcff; text-align: left;">
+                    <th style="padding: 6px;">Train</th>
+                    <th style="padding: 6px;">Timings</th>
+                    <th style="padding: 6px;">Duration</th>
+                    <th style="padding: 6px;">Classes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {train_rows}
+            </tbody>
+        </table>
+        """
+    else:
+        train_section = f"""
+        <div style="background: #001726; border: 1px dashed rgba(0, 220, 255, 0.3); border-radius: 4px; padding: 8px; font-size: 10px; color: #a0aec0; margin-bottom: 10px;">
+            ℹ️ <b>Railway Telemetry:</b> Is specific sector ke train schedules offline cache me nahi hain. Live IRCTC portal par verified trains check karein.
+        </div>
         """
 
     return f"""
@@ -188,20 +190,7 @@ def _format_transit_card(
             </div>
         </div>
 
-        <div style="color: #00dcff; font-size: 11px; font-weight: bold; margin-bottom: 6px;">🚆 KEY TRAIN SCHEDULES (IRCTC):</div>
-        <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 10px;">
-            <thead>
-                <tr style="background: #001f33; color: #00dcff; text-align: left;">
-                    <th style="padding: 6px;">Train</th>
-                    <th style="padding: 6px;">Timings</th>
-                    <th style="padding: 6px;">Duration</th>
-                    <th style="padding: 6px;">Classes</th>
-                </tr>
-            </thead>
-            <tbody>
-                {train_rows}
-            </tbody>
-        </table>
+        {train_section}
 
         <div style="font-size: 10px; color: #a0aec0; border-top: 1px solid rgba(0, 220, 255, 0.2); padding-top: 6px;">
             📍 <b>Map Navigation:</b> <a href="{gmaps_url}" style="color: #00dcff; text-decoration: underline;">Open Google Maps Directions</a> | <b>Booking:</b> IRCTC (Trains) • RedBus (Buses)

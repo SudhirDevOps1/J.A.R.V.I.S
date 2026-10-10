@@ -105,7 +105,7 @@ if "%~1"=="-u" goto :auto_update_all_pip
 
 :: 4. Check and Auto-Install Python Dependencies on First Run
 echo [*] Checking libraries and system dependencies...
-"%PYTHON_EXE%" -c "import PyQt6, google.genai, requests, sounddevice, edge_tts, PIL, cv2, psutil, tinydb, rank_bm25, thefuzz, keyboard, sklearn, fastapi, uvicorn, cryptography, win32api, comtypes, pycaw" >nul 2>&1
+"%PYTHON_EXE%" -c "import PyQt6, google.genai, requests, sounddevice, edge_tts, PIL, cv2, psutil, tinydb, rank_bm25, thefuzz, keyboard, fastapi, uvicorn, cryptography, win32api, comtypes, pycaw" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     :: Auto-check for package updates (checks PyPI and auto-upgrades when new releases appear)
     "%PYTHON_EXE%" scripts\auto_pip_updater.py
@@ -131,7 +131,7 @@ echo [*] Force checking PyPI and updating all Python dependencies...
 goto :dependencies_ready
 
 :dependencies_ready
-:: 5. Run Preflight Check (Auto-downloads models, LFM2.5, SFX, icons, sets up desktop shortcut)
+:: 5. Run Preflight Check (Auto-verifies SQLite memory, SFX, icons, sets up desktop shortcut)
 echo [*] Running automated pre-flight checks and asset verification...
 "%PYTHON_EXE%" scripts\preflight_check.py
 

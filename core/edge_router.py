@@ -1,12 +1,9 @@
 """
-Tri-Tier Edge AI Router for J.A.R.V.I.S.
-Integrates:
-  - Tier 1: Needle 2 (45M parameters, ~14MB disk, ~28MB RAM)
-            Ultra-fast on-device agentic tool-calling reflex (<15ms).
-  - Tier 2: LFM2.5-230M (230M parameters, ~150MB disk, ~180MB RAM)
-            On-device lightweight chat and offline summarization.
-  - Tier 3: Gemini Cloud (Live WebSocket / 2.5 Flash / Groq / Cerebras)
-            Deep multi-step reasoning, multimodal vision, and complex code.
+Fast Local Command & Reflex Router for J.A.R.V.I.S.
+Routes commands locally:
+  - Fast Local Reflex: Sub-millisecond OS tool and action dispatcher
+  - Local Offline Engine: Local conversational replies & offline summaries
+  - Cloud LLM Tier: Deep multi-step reasoning, vision, and complex dialogue
 """
 from __future__ import annotations
 
@@ -21,14 +18,6 @@ try:
     _REQUESTS_AVAILABLE = True
 except ImportError:
     _REQUESTS_AVAILABLE = False
-
-# Check if cactus-needle is available
-_NEEDLE_AVAILABLE = False
-try:
-    import needle
-    _NEEDLE_AVAILABLE = True
-except ImportError:
-    _NEEDLE_AVAILABLE = False
 
 
 def _get_user_location() -> str:
@@ -84,45 +73,11 @@ _OBS_JUNK_TOKENS = {
 
 
 class NeedleToolRouter:
-    """Tier 1: Needle 2 Reflex Engine.
-    Runs in ~28 MB RAM. Converts spoken or typed natural language commands
-    into structured JARVIS tool calls in 5-15 milliseconds without cloud round-trips.
-    """
+    """Fast Local OS Tool & Command Reflex Dispatcher (<10ms)."""
 
     def __init__(self):
         self._enabled = True
-        self._needle_loaded = False
-        self._needle_instance = None
         self._last_tool_call: Optional[Tuple[str, Dict[str, Any]]] = None
-
-        if _NEEDLE_AVAILABLE:
-            try:
-                from needle import Needle
-
-                def open_app(name: str):
-                    """Open an application by name."""
-                    return json.dumps({"tool": "open_app", "args": {"action": "open", "name": name}})
-
-                def file_controller(action: str, path: str = "C:"):
-                    """Disk storage and directory file controller."""
-                    return json.dumps({"tool": "file_controller", "args": {"action": action, "path": path}})
-
-                def computer_settings(action: str, value: str = ""):
-                    """System settings like volume, brightness."""
-                    return json.dumps({"tool": "computer_settings", "args": {"action": action, "value": value}})
-
-                def computer_control(action: str):
-                    """Computer controls like screenshot."""
-                    return json.dumps({"tool": "computer_control", "args": {"action": action}})
-
-                def system_status():
-                    """Hardware system telemetry and status."""
-                    return json.dumps({"tool": "system_status", "args": {}})
-
-                self._needle_instance = Needle(tools=[open_app, file_controller, computer_settings, computer_control, system_status])
-                self._needle_loaded = True
-            except Exception as e:
-                print(f"[Needle2] Engine init note: {e}")
 
     def is_active(self) -> bool:
         return self._enabled
@@ -1192,53 +1147,7 @@ class NeedleToolRouter:
             else:
                 return _dispatch("obsidian_brain", {"action": "status"})
 
-        # -- Neural Needle 2 Engine Fallback (foundation model tool extraction) --
-
-        if self._needle_loaded and self._needle_instance is not None:
-            try:
-                res = self._needle_instance.run(text)
-                if res and isinstance(res, dict) and res.get("success"):
-                    conf = res.get("confidence") or 0.0
-                    if conf >= 0.30:
-                        _HINDI_STOP_WORDS = {
-                            "ho", "hai", "hain", "kya", "kaun", "mera", "meri", "mere", "tum", "aap",
-                            "kaise", "nahi", "tha", "the", "thi", "hoga", "hogi", "honge", "hona",
-                            "karo", "kar", "karna", "karke", "karenge", "kare", "karoge", "karu",
-                            "batao", "bata", "batana", "bolo", "bol", "bolna", "kaho", "kahna", "samjhao",
-                            "kyu", "kyun", "kab", "kaha", "kahan", "zara", "bhai", "yaar", "hero", "babu", "jaan",
-                            # Dekhna family
-                            "dekhna", "dekh", "dekho", "dikhna", "dikhao", "dikhana", "dekhoge", "dekhe", "dekhu",
-                            # Sunna family
-                            "sunna", "sun", "suno", "sunao", "sunana", "sunoge", "sune", "sunu",
-                            # Chalna family
-                            "chalna", "chal", "chalo", "chalao", "chalana", "chalu", "chaloge", "chale",
-                            # Likhna & Bhejna family
-                            "likhna", "likh", "likho", "likhe", "bhejna", "bhej", "bhejo", "bheje", "send",
-                            # Action & State particles
-                            "rokna", "rok", "roko", "band", "shuru", "kholna", "khol", "kholo", "hatao", "hata",
-                            "kuch", "kuchh", "baat", "cheez", "kaam", "abhi", "raha", "rahe", "rahi"
-                        }
-                        for r in res.get("results", []):
-                            if isinstance(r, str) and r.startswith("{"):
-                                try:
-                                    parsed = json.loads(r)
-                                    tool_name = parsed.get("tool")
-                                    tool_args = parsed.get("args", {})
-                                    app_nm = str(tool_args.get("name", "")).lower().strip()
-                                    if app_nm in _HINDI_STOP_WORDS or any(w in app_nm.split() for w in _HINDI_STOP_WORDS):
-                                        continue
-                                    if tool_name == "open_app":
-                                        from actions.open_app import _is_app_installed, _APP_ALIASES
-                                        if app_nm not in _APP_ALIASES and not _is_app_installed(app_nm):
-                                            continue
-                                    if tool_name:
-                                        return (tool_name, tool_args)
-                                except Exception:
-                                    pass
-            except Exception:
-                pass
-
-        # -- Scikit-Learn Micro Naive Bayes Classifier (<0.3ms probabilistic fallback) --
+        # -- Fast Micro Intent Classifier (<0.3ms probabilistic fallback) --
         try:
             from core.intent_classifier import get_micro_intent_classifier
             nb = get_micro_intent_classifier()
@@ -1648,15 +1557,15 @@ class LFMChatEngine:
 
         # Identity & Creator
         if any(w in clean for w in ("tum kaun ho", "who are you", "tera naam kya hai", "apna parichay do")):
-            return "Main J.A.R.V.I.S. hoon — aapka ultra-fast personal AI assistant. Needle 2 aur LFM2.5 ke sath poora on-device control mere pas hai, sir."
+            return "Main J.A.R.V.I.S. hoon — aapka fast personal AI assistant. Poora on-device control mere paas hai, sir."
         if any(w in clean for w in ("tumhe kisne banaya", "who created you", "who made you", "tera malik kaun", "creator")):
             return "Mujhe mere boss (Aapne) banaya hai — ek powerful, intelligent aur fully automated personal desktop assistant ke roop me!"
         if any(w in clean for w in ("version kya hai", "which version", "tumhara version")):
-            return "Main J.A.R.V.I.S. (Needle 2 + LFM2.5 Tri-Tier Edge Edition) par chal raha hoon."
+            return "Main J.A.R.V.I.S. Desktop AI Assistant par chal raha hoon."
 
         # Status & Feelings
         if any(w in clean for w in ("kya haal hai", "kaise ho", "how are you", "sab theek hai")):
-            return "Main bilkul shandar hoon, sir! Saare edge neural systems active hain aur aapke aadesh ke intezar me hain."
+            return "Main bilkul shandar hoon, sir! Saare local control systems active hain aur aapke aadesh ke intezar me hain."
         if any(w in clean for w in ("thak gaye kya", "are you tired")):
             return "AI kabhi nahi thakta, sir! 24/7 aapki seva ke liye 100% ready hoon."
 
@@ -1668,7 +1577,7 @@ class LFMChatEngine:
 
         # Offline & Connection Status
         if any(w in clean for w in ("offline ho kya", "internet nahi hai", "is internet working", "net chal raha", "internet chal raha", "wifi chal raha", "net connect hai")):
-            return "Internet connection active hai aur saare network services operational hain. Needle 2 aur LFM2.5 ke sahare saare local OS actions kaam kar rahe hain."
+            return "Internet connection active hai aur saare network services operational hain. Saare local OS actions offline bhi kaam kar rahe hain."
 
         # Humor & Fun (Sunna)
         if any(w in clean for w in ("joke", "chutkula", "hasao", "kuch hasao", "chutkula sunao")):
@@ -1693,7 +1602,7 @@ class LFMChatEngine:
             except Exception:
                 pass
 
-        return f"J.A.R.V.I.S. (LFM2.5 Edge Mode): Aapka aadesh samajh gaya hoon — '{prompt}'."
+        return f"J.A.R.V.I.S. (Offline Mode): Aapka aadesh samajh gaya hoon — '{prompt}'."
 
 
 class TriTierDispatcher:

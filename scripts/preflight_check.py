@@ -21,8 +21,6 @@ def check_directories():
         os.path.join(PROJECT_ROOT, 'memory', 'obsidian_vault'),
         os.path.join(PROJECT_ROOT, 'core', 'assets', 'sfx'),
         os.path.join(PROJECT_ROOT, 'core', 'assets', 'avatar'),
-        # NOTE: core/models/piper removed with the Piper engine (Edge + Gemini Live only).
-        os.path.join(PROJECT_ROOT, 'models', 'lfm'),
     ]
     for d in dirs:
         os.makedirs(d, exist_ok=True)
@@ -141,50 +139,20 @@ def check_sfx(verbose=True):
         if verbose:
             print(f'  [!] SFX generation note: {e}')
 
-def check_lfm_model(verbose=True):
-    """Verify local Liquid Foundation Model (LFM2.5-230M) GGUF exists; download if missing."""
-    lfm_dir = os.path.join(PROJECT_ROOT, 'models', 'lfm')
-    os.makedirs(lfm_dir, exist_ok=True)
-    lfm_path = os.path.join(lfm_dir, 'LFM2.5-230M-Q4_K_M.gguf')
-    
-    if os.path.exists(lfm_path) and os.path.getsize(lfm_path) > 50 * 1024 * 1024:
-        if verbose:
-            size_mb = os.path.getsize(lfm_path) / (1024 * 1024)
-            print(f'  [OK] LFM2.5-230M Semantic Neural Model: Ready ({size_mb:.1f} MB GGUF Cached)')
-        return
-
-    if verbose:
-        print('  [*] LFM2.5-230M GGUF model missing. Auto-downloading (~146 MB, one-time setup)...')
-    url = 'https://huggingface.co/oamazonasgabriel/lfm2.5-230m/resolve/main/LFM2.5-230M-Q4_K_M.gguf'
-    temp = lfm_path + '.tmp'
+def check_unified_memory(verbose=True):
+    """Verify SQLite WAL + FTS5 Unified Memory store is operational."""
     try:
-        import requests
-        curr = os.path.getsize(temp) if os.path.exists(temp) else 0
-        headers = {'Range': f'bytes={curr}-'} if curr > 0 else {}
-        with requests.get(url, headers=headers, stream=True, timeout=60) as r:
-            if r.status_code in (200, 206):
-                mode = 'ab' if curr > 0 and r.status_code == 206 else 'wb'
-                total = int(r.headers.get('content-length', 0)) + curr
-                downloaded = curr
-                with open(temp, mode) as f:
-                    for chunk in r.iter_content(chunk_size=1024 * 1024):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-        if os.path.exists(temp) and os.path.getsize(temp) > 50 * 1024 * 1024:
-            if os.path.exists(lfm_path):
-                os.remove(lfm_path)
-            os.rename(temp, lfm_path)
-            if verbose:
-                print('  [OK] LFM2.5-230M Semantic Neural Model: Downloaded successfully')
-        else:
-            if verbose:
-                print('  [--] LFM2.5 download deferred (Ollama/Cloud fallback active)')
+        from core.unified_memory import get_db
+        conn = get_db()
+        cur1 = conn.execute("SELECT COUNT(*) FROM memories;")
+        mem_cnt = cur1.fetchone()[0]
+        cur2 = conn.execute("SELECT COUNT(*) FROM tasks;")
+        task_cnt = cur2.fetchone()[0]
+        if verbose:
+            print(f'  [OK] Unified SQLite FTS5 Memory: Ready ({mem_cnt} memories, {task_cnt} tasks in config/jarvis_memory.db)')
     except Exception as e:
         if verbose:
-            print(f'  [!] LFM2.5 model setup note: {e}')
-    # NOTE: Piper Hindi download block removed with the Piper engine
-    # (Edge TTS + Gemini Live only) — it used to fetch ~60 MB of dead models here.
+            print(f'  [!] Unified Memory note: {e}')
 
 def check_wakeword(verbose=True):
     try:
@@ -306,7 +274,6 @@ def check_python_packages(verbose=True):
         ('rank_bm25', 'rank-bm25'),
         ('thefuzz', 'thefuzz'),
         ('keyboard', 'keyboard'),
-        ('sklearn', 'scikit-learn'),
         ('fastapi', 'fastapi'),
         ('uvicorn', 'uvicorn'),
         ('cryptography', 'cryptography'),
@@ -399,7 +366,7 @@ def run_preflight(verbose=True):
     check_config_init(verbose=verbose)
     check_icon(verbose=verbose)
     check_sfx(verbose=verbose)
-    check_lfm_model(verbose=verbose)
+    check_unified_memory(verbose=verbose)
     check_wakeword(verbose=verbose)
     check_desktop_shortcut(verbose=verbose)
     check_browser_engine(verbose=verbose)

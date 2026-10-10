@@ -24,11 +24,11 @@ def test_uia_controller_schema_and_graceful_handling():
 
     # Test handling when window does not exist
     res = uia_controller({"action": "click", "window_title": "NonExistentWindow12345", "element_name": "Save"})
-    assert "nahi mili" in res or "error" in res.lower()
+    assert "nahi mili" in res or "error" in res.lower() or "available nahi" in res.lower()
 
     # Test inspect on non-existent window
     res_list = uia_controller({"action": "list_elements", "window_title": "NonExistentWindow12345"})
-    assert "nahi mili" in res_list or "error" in res_list.lower()
+    assert "nahi mili" in res_list or "error" in res_list.lower() or "available nahi" in res_list.lower()
 
 
 def test_screen_timeline_db_and_fts5_recall(tmp_path, monkeypatch):

@@ -52,7 +52,10 @@ def _is_blocked(cmd: str) -> str | None:
 
 def _is_allowed(cmd: str) -> bool:
     low = cmd.lower().strip()
-    return any(low == a or low.startswith(a + " ") or low.startswith(a + ";") for a in _ALLOW_PREFIX)
+    # Security: If command has chaining/redirection operators, do not treat as instantly allowed
+    if any(op in low for op in ("&", "|", ";", ">", "<", "`", "$(", "\n", "\r")):
+        return False
+    return any(low == a or low.startswith(a + " ") for a in _ALLOW_PREFIX)
 
 
 def _exec(cmd: str, timeout: int = 25) -> str:

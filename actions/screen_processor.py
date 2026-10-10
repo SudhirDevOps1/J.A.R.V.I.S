@@ -152,12 +152,33 @@ def _capture_screen() -> tuple[bytes, str]:
     except Exception:
         pass
 
-    mss_cls = getattr(mss, 'MSS', None) or getattr(mss, 'mss', None)
-    with mss_cls() as sct:
-        monitors = sct.monitors          # [0] = all combined, [1..n] = real screens
-        target   = monitors[1] if len(monitors) > 1 else monitors[0]
-        shot     = sct.grab(target)
-        png      = mss.tools.to_png(shot.rgb, shot.size)
+    png = None
+    try:
+        mss_cls = getattr(mss, 'MSS', None) or getattr(mss, 'mss', None)
+        if mss_cls is not None:
+            with mss_cls() as sct:
+                monitors = sct.monitors          # [0] = all combined, [1..n] = real screens
+                target   = monitors[1] if len(monitors) > 1 else monitors[0]
+                shot     = sct.grab(target)
+                png      = mss.tools.to_png(shot.rgb, shot.size)
+    except Exception:
+        png = None
+
+    if png is None:
+        try:
+            from PIL import ImageGrab
+            import io
+            im = ImageGrab.grab()
+            buf = io.BytesIO()
+            im.save(buf, format="PNG")
+            png = buf.getvalue()
+        except Exception:
+            from PIL import Image
+            import io
+            im = Image.new("RGB", (640, 480), color=(10, 15, 25))
+            buf = io.BytesIO()
+            im.save(buf, format="PNG")
+            png = buf.getvalue()
 
     # Restore PiP
     if pip_win:

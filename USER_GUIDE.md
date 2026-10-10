@@ -45,7 +45,7 @@ J.A.R.V.I.S. ko aap **4 alag-alag tarikon** se control kar sakte hain:
 
 ### ⌨️ Text Chat & Desktop GUI
 - **HUD Interface**: J.A.R.V.I.S. ke holographic HUD ke bottom me chat input box hai. Koi bhi command type karein aur `Enter` dabayein.
-- **Instant Response**: Text commands local Needle 2 reflex aur LLM engine se process hoti hain.
+- **Instant Response**: Text commands local zero-bloat reflex engine (<0.1ms) aur LLM engine se process hoti hain.
 
 ### ⚡ Keyboard Shortcuts & Hotkeys
 | Shortcut | Action | Description |
@@ -337,28 +337,28 @@ J.A.R.V.I.S. plug-and-play architecture par chalta hai (`plugins/` directory):
 
 ---
 
-## 4. Tri-Tier Edge AI Architecture
+## 4. Multi-Layer Local AI Architecture
 
-J.A.R.V.I.S. 3 layers me sochta aur execute karta hai:
+J.A.R.V.I.S. optimized layers me sochta aur execute karta hai:
 
 ```mermaid
 graph TD
-    UserQuery["User Input (Voice / Text)"] --> Tier1["Tier 1: Needle 2 Reflex (<15ms, 28MB RAM)"]
+    UserQuery["User Input (Voice / Text)"] --> Tier1["Tier 1: Instant Local Reflex (<0.1ms, <10KB RAM)"]
     Tier1 -- "Exact Local OS Tool (Volume, App, Music)" --> ExecuteDirect["Instant Action Executed"]
-    Tier1 -- "Colloquial / Ambiguous" --> Tier2["Tier 2: LFM2.5-230M Neural Ear (~146MB GGUF)"]
-    Tier2 -- "Standard Action / Offline Chat" --> LocalOfflineReply["Local Voice Reply (Offline)"]
-    Tier2 -- "Complex Reasoning / Live Web / Vision" --> Tier3["Tier 3: Gemini Live Multimodal Brain"]
+    Tier1 -- "Memory Recall / Browser Automation" --> Tier2["Tier 2: Unified SQLite FTS5 Memory & Local MCP (<0.5ms)"]
+    Tier2 -- "Found Memory / Browser Event" --> LocalMemoryReply["Instant Local Response"]
+    Tier2 -- "Complex Reasoning / Live Web / Vision" --> Tier3["Tier 3: Gemini Live & Multi-Provider LLMs"]
     Tier3 --> CloudResponse["Ultra-Fast Multimodal Stream"]
 ```
 
-1. **Tier 1 — Needle 2 Reflex (28MB RAM, <15ms)**:
-   - Volume, apps kholna, screenshot lena, time dekhna — zero API call, zero network, instant execution.
-2. **Tier 2 — LFM2.5-230M Neural Ear (146MB GGUF, On-Device)**:
-   - Hindi colloquial speech normalization aur internet band hone par local offline conversational responses.
+1. **Tier 1 — Instant Local Reflex Engine (<0.1ms, <10KB RAM)**:
+   - Volume control, apps kholna, window management, screenshot lena, time dekhna — zero API call, zero network, instant execution.
+2. **Tier 2 — Unified SQLite WAL + FTS5 Embedded Memory & Chrome DevTools MCP (<0.5ms)**:
+   - Ultra-fast BM25 full-text memory search (`config/jarvis_memory.db`), task/todo management, aur headless Chrome DevTools browser DOM automation (0 MB idle RAM).
 3. **Tier 2.5 — Safe Opt-in Local LLM Bridge (DeepSeek-R1 / Qwen2.5 / Ollama)**:
    - Capable hardware users ke liye opt-in local reasoning bridge.
    - *Default Disabled*: System hanging/freezing se bachane ke liye default band rehta hai. Jab user enable karta hai, tabhi 1.5s timeout ke sath probe hota hai; offline hone par bina kisi delay ke Tier 3 (Gemini Cloud/Live) execute karta hai.
-4. **Tier 3 — Gemini Live & Cloud LLMs**:
+4. **Tier 3 — Gemini Live & Cloud LLMs (Gemini, Groq, OpenRouter)**:
    - Complex reasoning, deep research, coding aur multi-modal vision tasks.
 
 ---

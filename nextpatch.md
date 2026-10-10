@@ -10,9 +10,11 @@
 ## 🎯 Executive Overview
 
 J.A.R.V.I.S. ships with:
-- **50 bundled actions** in `actions/` (including Windows UIA controller, private local screen memory timeline, safe opt-in local LLM bridge, autonomous DevOps sentinel, privacy shield controller, visual agent, multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
+- **51 bundled actions** in `actions/` (including Chrome DevTools MCP action, Windows UIA controller, private local screen memory timeline, safe opt-in local LLM bridge, autonomous DevOps sentinel, privacy shield controller, visual agent, multi-modal transit & maps, universal drive music indexer, headless weather, eCommerce price comparison, flight finder, browser control, obsidian brain, swarm, and more)
 - **10 built-in plugins** in `plugins/` (Spotify, Pomodoro, Stock Quotes, Notion, Gmail, Calendar, Drive, GitHub, Slack, Smart Home)
-- **Tri-Tier Edge AI Router** (`core/edge_router.py`) — Needle 2 Reflex (<15ms, 28MB) → LFM 2.5 offline → Gemini Live Cloud
+- **Zero-Bloat Local Matrix** (`core/edge_router.py`, `core/intent_classifier.py`) — Fast Python reflex (<0.1ms, <10KB RAM) → Unified SQLite FTS5 Memory → Gemini Live & Cloud
+- **Unified Embedded Memory** (`core/unified_memory.py`) — SQLite WAL + FTS5 full-text BM25 index with 0 MB idle RAM
+- **Native MCP Host** (`core/mcp_host.py`) — Pure Python JSON-RPC 2.0 stdio MCP client
 - **Synchronized Assistant Persona Modes** — Teacher & Guru, DevOps Beast, Companion & GF, and J.A.R.V.I.S Tactical AI
 - **Headless Smart Services & Transit** — Live weather telemetry, background music playback & controls, multi-modal travel & transit routes, and eCommerce deal comparison with 0 browser popups
 - **Zero-Trust Screen Privacy Shield & Web Stream Security** (`core/privacy_guard.py`) — Default-OFF stream authorization, localhost-only Wi-Fi lock, real-time banking/password/incognito auto-blackout, and voice kill-switch
@@ -21,7 +23,7 @@ J.A.R.V.I.S. ships with:
 - **22+ free LLM providers** with round-robin key rotation and SQLite cache
 - **PyQt6 Cyberpunk HUD & PiP Companion** with 4 avatar modes, emotional expression badges, and live theming
 - **EdgeTTS & Gemini Live Realtime Neural Voice** stack with customizable pitch and tones
-- **Native Python Git hooks** — zero Node.js overhead, 100/100 passing tests
+- **Native Python Git hooks** — zero Node.js overhead, 131/131 passing tests
 - **Telegram Direct Protocol & Obsidian Brain** — zero-typo direct chat links, dual Local REST & filesystem note vault
 - **Subagent swarm orchestrator** (`core/subagent_swarm.py`) — Researcher, ReverseEngineer, SelfHealer, Reporter agents
 

@@ -81,10 +81,14 @@ def _get_sched():
             return _sched
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
-            from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-            _sched = BackgroundScheduler(
-                jobstores={"default": SQLAlchemyJobStore(url=f"sqlite:///{_SQLITE}")},
-                daemon=True)
+            try:
+                from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+                _sched = BackgroundScheduler(
+                    jobstores={"default": SQLAlchemyJobStore(url=f"sqlite:///{_SQLITE}")},
+                    daemon=True)
+            except Exception:
+                # Fallback to standard in-memory BackgroundScheduler if SQLAlchemy is not installed
+                _sched = BackgroundScheduler(daemon=True)
             _sched.start()
         except Exception as e:
             print(f"[scheduler] APScheduler unavailable: {e}")

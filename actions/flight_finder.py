@@ -65,7 +65,11 @@ def _parse_date(raw: str) -> str:
 
     relative = {
         "today": today,
+        "aaj": today,
         "tomorrow": today + timedelta(days=1),
+        "kal": today + timedelta(days=1),
+        "day after tomorrow": today + timedelta(days=2),
+        "parso": today + timedelta(days=2),
     }
     for key, val in relative.items():
         if key in lower:

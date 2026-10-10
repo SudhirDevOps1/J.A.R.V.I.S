@@ -9,13 +9,7 @@ from __future__ import annotations
 import time
 from typing import Optional, Tuple
 
-try:
-    from sklearn.feature_extraction.text import CountVectorizer
-    from sklearn.naive_bayes import MultinomialNB
-    from sklearn.pipeline import make_pipeline
-    _SKLEARN_AVAILABLE = True
-except ImportError:
-    _SKLEARN_AVAILABLE = False
+_SKLEARN_AVAILABLE = False
 
 
 # Seed training dataset for core J.A.R.V.I.S. voice reflex categories (Dekhna, Sunna, Bolna, Chalna, Karna)
@@ -134,47 +128,72 @@ _TRAINING_DATA = [
 ]
 
 
-class MicroIntentClassifier:
-    """Zero-overhead probabilistic edge intent router (<200KB RAM)."""
-    def __init__(self):
-        self.model = None
-        self._is_trained = False
-        if _SKLEARN_AVAILABLE:
-            self._train()
+_CONVERSATIONAL_EXCLUSIONS = {
+    "aur", "aur batao", "aur kya", "aur sunao", "aur kuch", "aur kuchh",
+    "aage", "aage batao", "aage bolo", "phir", "fir", "phir kya", "fir kya",
+    "kuch aur", "kuchh aur", "bolo", "batao", "suno", "sunao",
+    "main kya kr raha hu", "main kya kar raha hoon", "main kya kar raha hu",
+}
 
-    def _train(self):
-        try:
-            texts = [item[0] for item in _TRAINING_DATA]
-            labels = [item[1] for item in _TRAINING_DATA]
-            self.model = make_pipeline(
-                CountVectorizer(ngram_range=(1, 2), lowercase=True),
-                MultinomialNB(alpha=0.5)
-            )
-            self.model.fit(texts, labels)
-            self._is_trained = True
-        except Exception as e:
-            print(f"[NaiveBayes] Training note: {e}")
-            self._is_trained = False
+_STOPWORDS = {
+    "main", "hum", "me", "kya", "kar", "raha", "rahe", "rahi", "hoon", "hu", "hai",
+    "hain", "ho", "tha", "the", "thi", "aur", "to", "bhi", "se", "par", "ko", "ka",
+    "ki", "ke", "karo", "do", "zara", "please", "sir", "bhai", "yaar"
+}
+
+
+class MicroIntentClassifier:
+    """Zero-dependency edge intent router (pure Python, <10KB RAM).
+    Eliminates heavy scikit-learn/scipy bloat and prevents false-positive intent captures.
+    """
+    def __init__(self):
+        self._intents: list[tuple[set[str], str, str]] = []
+        self._init_patterns()
+
+    def _init_patterns(self):
+        for phrase, intent in _TRAINING_DATA:
+            tokens = set(w for w in phrase.lower().split() if w not in _STOPWORDS and len(w) > 1)
+            self._intents.append((tokens, phrase.lower(), intent))
 
     def predict_intent(self, text: str, min_confidence: float = 0.55) -> Optional[Tuple[str, float]]:
-        """
-        Predicts intent label in < 0.3 ms.
-        Returns (intent_label, confidence_score) or None.
-        """
-        if not self._is_trained or not self.model or not text.strip():
+        clean = (text or "").lower().strip()
+        if not clean:
             return None
 
-        try:
-            probas = self.model.predict_proba([text])[0]
-            max_idx = probas.argmax()
-            confidence = float(probas[max_idx])
-            intent = self.model.classes_[max_idx]
+        # 1. Exact phrase match fast path (takes priority for registered actions)
+        for tokens, phrase, intent in self._intents:
+            if clean == phrase:
+                return intent, 1.0
 
-            if confidence >= min_confidence:
-                return intent, confidence
+        if clean in _CONVERSATIONAL_EXCLUSIONS:
             return None
-        except Exception:
+
+        # Guard conversational starts
+        if clean.startswith("aur ") or clean.startswith("aage ") or clean.startswith("main kya "):
             return None
+
+        # 2. Token overlap scoring with stopword discounting
+        q_tokens = set(w for w in clean.split() if w not in _STOPWORDS and len(w) > 1)
+        if not q_tokens:
+            return None
+
+        best_intent = None
+        best_score = 0.0
+
+        for tokens, phrase, intent in self._intents:
+            if not tokens:
+                continue
+            common = q_tokens & tokens
+            if common:
+                score = len(common) / max(len(tokens), len(q_tokens))
+                if score > best_score:
+                    best_score = score
+                    best_intent = intent
+
+        if best_intent and best_score >= min_confidence:
+            return best_intent, round(best_score, 2)
+
+        return None
 
 
 _CLASSIFIER: Optional[MicroIntentClassifier] = None

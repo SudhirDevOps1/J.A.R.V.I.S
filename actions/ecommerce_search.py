@@ -170,7 +170,8 @@ def ecommerce_action(
         "",
         f"  ANALYSIS     : {verdict}",
         "",
-        "  [Headless Telemetry Active — 0 Browser Overhead]",
+        f"  Amazon       : https://www.amazon.in/s?k={quote_plus(query)}",
+        f"  Flipkart     : https://www.flipkart.com/search?q={quote_plus(query)}",
     ]
     card_text = "\n".join(card_lines)
 

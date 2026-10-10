@@ -124,25 +124,36 @@ def draw_futuristic_ai_core(size=1024) -> Image.Image:
 
 def build_assets():
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # 1. Safely remove old icons if present
-    for old_file in (ICO_PATH, PNG_PATH):
-        if old_file.exists():
-            try:
-                old_file.unlink()
-                print(f"  [-] Deleted old icon: {old_file.name}")
-            except Exception as e:
-                print(f"  [!] Note removing {old_file.name}: {e}")
+    master_jpg = CONFIG_DIR / "jarvis_master.jpg"
 
-    print("[*] Generating Brand-New Custom J.A.R.V.I.S. AI Core master (1024x1024)...")
-    master = draw_futuristic_ai_core(1024)
+    if master_jpg.exists():
+        print(f"[*] Loading master high-definition asset: {master_jpg}")
+        img = Image.open(master_jpg).convert("RGBA")
+        cx, cy, r = 511, 502, 456
+        scale = 4
+        mask = Image.new("L", (1024 * scale, 1024 * scale), 0)
+        d = ImageDraw.Draw(mask)
+        d.ellipse([
+            (cx - r) * scale,
+            (cy - r) * scale,
+            (cx + r) * scale,
+            (cy + r) * scale
+        ], fill=255)
+        mask = mask.resize((1024, 1024), Image.LANCZOS)
+        out = img.copy()
+        out.putalpha(mask)
+        bbox = (cx - r - 4, cy - r - 4, cx + r + 4, cy + r + 4)
+        master = out.crop(bbox)
+    else:
+        print("[*] Generating procedural J.A.R.V.I.S. AI Core master (1024x1024)...")
+        master = draw_futuristic_ai_core(1024)
 
-    # 2. Master 512x512 PNG
+    # 1. Master 512x512 PNG
     png_img = master.resize((512, 512), Image.LANCZOS)
     png_img.save(PNG_PATH, format="PNG")
     print(f"  [OK] Generated high-res PNG: {PNG_PATH}")
 
-    # 3. Multi-resolution Windows .ico (256, 128, 64, 48, 32, 16)
+    # 2. Multi-resolution Windows .ico (256, 128, 64, 48, 32, 16)
     sizes = [256, 128, 64, 48, 32, 16]
     frames = [master.resize((s, s), Image.LANCZOS) for s in sizes]
 

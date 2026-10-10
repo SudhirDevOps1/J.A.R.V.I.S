@@ -122,7 +122,12 @@ class SelfHealerAgent:
         current_code = code
         log = []
 
+        _DANGEROUS = ("rmdir", "format ", "rm -rf", "shutil.rmtree", "os.remove", "os.unlink", "del /f", "reg delete", "mkfs")
         for attempt in range(max_retries + 1):
+            if any(p in current_code.lower() for p in _DANGEROUS):
+                log.append("Security Guard: AI-generated code execution blocked due to dangerous system calls.")
+                return False, current_code, "\n".join(log)
+
             temp_file = SWARM_OUTPUT_DIR / f"swarm_runner_{int(time.time())}.py"
             temp_file.write_text(current_code, encoding="utf-8")
 

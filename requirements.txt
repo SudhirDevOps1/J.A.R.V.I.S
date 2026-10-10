@@ -36,7 +36,6 @@ tinydb
 rank-bm25
 thefuzz
 keyboard
-scikit-learn
 
 # ── Automation: macros, scheduler, file triggers (installed, progress me jode) ─
 pynput
