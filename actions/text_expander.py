@@ -8,10 +8,14 @@ import json
 from pathlib import Path
 
 _EXP_FILE = Path(__file__).resolve().parent.parent / "config" / "expansions.json"
+# Neutral seeds. These used to ship the maintainer's name and email address, so
+# every install expanded ";sign" into somebody else's signature until the user
+# happened to edit config/expansions.json. Kept deliberately generic: they are
+# a starting point, not the right answer for anyone.
 _DEFAULTS = {
-    ";mail": "sudhir@example.com",
-    ";addr": "India",
-    ";sign": "Thanks,\nSudhir",
+    ";mail": "you@example.com",
+    ";addr": "",
+    ";sign": "Thanks,\n",
 }
 _HOOKS: dict = {}
 _ENABLED = False

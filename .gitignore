@@ -47,6 +47,11 @@ memory/corrections.json
 memory/feedback.json
 memory/learned_intents.json
 memory/tinydb_store.json
+# Learned graph of the user's own people and relationships. Personal by
+# nature, and regenerated on demand: memory/knowledge_graph.py._load() returns
+# an empty graph when the file is absent and _save() recreates it, so a fresh
+# clone starts blank and builds its own. See knowledge_graph.example.json.
+config/knowledge_graph.json
 config/weather_cache.json
 config/installed_apps.json
 config/music_library.json

@@ -114,8 +114,18 @@ def get_assistant_name() -> str:
 
 
 def get_app_name() -> str:
-    """Return the configured app name, or 'SudhirDevOps1 AI' if not set."""
-    return load_api_keys().get("app_name", "SudhirDevOps1 AI") or "SudhirDevOps1 AI"
+    """Return the configured app name, or a neutral default if not set.
+
+    The fallback used to be "SudhirDevOps1 AI", so a fresh clone installed
+    itself named after one person and a fork shipped that name to its users.
+    Existing installs that already have app_name set are unaffected — only the
+    default changed.
+    """
+    try:
+        from core.app_identity import DEFAULT_APP_NAME
+    except Exception:
+        DEFAULT_APP_NAME = "J.A.R.V.I.S"
+    return load_api_keys().get("app_name", DEFAULT_APP_NAME) or DEFAULT_APP_NAME
 
 
 def get_protocol_name() -> str:

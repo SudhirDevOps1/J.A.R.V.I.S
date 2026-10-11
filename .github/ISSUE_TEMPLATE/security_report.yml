@@ -1,0 +1,30 @@
+name: Security report
+description: Report a vulnerability privately, without opening a public issue
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Please do not submit a security report through this form
+
+        This form creates a **public** issue. Public security reports tell
+        everyone about the problem before it is fixed.
+
+        If you have found a vulnerability, report it privately instead:
+
+        - Use GitHub's private reporting: **Security → Report a vulnerability**
+          on this repository's page, or
+        - Follow the process in [SECURITY.md](../SECURITY.md)
+
+        This form exists only so that searching for "security" finds the right
+        instructions before someone pastes an exploit into a public thread.
+
+  - type: textarea
+    id: confirm
+    attributes:
+      label: Please confirm you have read the above
+      value: |
+        I understand this form is public and I will use private reporting
+        instead.
+    validations:
+      required: true

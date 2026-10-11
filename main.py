@@ -81,13 +81,15 @@ from google.genai import types
 from memory.config_manager import get_app_name
 APP_VERSION = get_app_name()
 
-# Windows AppUserModelID registration (Taskbar Icon)
-if sys.platform == "win32":
-    try:
-        import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI")
-    except Exception:
-        pass
+# Windows AppUserModelID registration (Taskbar Icon).
+# Derived from the configured app name, not hardcoded. This used to be the
+# literal "SudhirDevOps1.JARVIS.AI", so every fork and every install grouped
+# itself under the upstream author's Windows account with no way to change it.
+try:
+    from core.app_identity import set_app_user_model_id
+    set_app_user_model_id()
+except Exception:
+    pass
 
 # Ensure critical assets (icons, SFX, models) are ready
 try:

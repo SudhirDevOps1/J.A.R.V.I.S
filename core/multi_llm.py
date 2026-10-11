@@ -76,6 +76,53 @@ def get_base_dir() -> Path:
 BASE_DIR = get_base_dir()
 CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
+# Where the project lives. Used for the OpenRouter HTTP-Referer / X-Title
+# identity headers. These used to be hardcoded to the upstream author's
+# account, so every fork announced itself to OpenRouter as the upstream
+# project. Both are overridable via api_keys.json:
+#     "project_url": "https://github.com/you/J.A.R.V.I.S"
+#     "project_title": "My Assistant"
+_DEFAULT_PROJECT_URL = "https://github.com/SudhirDevOps1/J.A.R.V.I.S"
+
+
+def _project_url() -> str:
+    try:
+        import json as _json
+        if CONFIG_PATH.exists():
+            raw = _json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            val = raw.get("project_url") if isinstance(raw, dict) else None
+            if val and str(val).strip():
+                return str(val).strip()
+    except Exception:
+        pass
+    return _DEFAULT_PROJECT_URL
+
+
+def _project_title() -> str:
+    """Human-readable app name for outbound identity headers."""
+    try:
+        from memory.config_manager import get_app_name
+        name = (get_app_name() or "").strip()
+        if name:
+            return name
+    except Exception:
+        pass
+    try:
+        from core.app_identity import DEFAULT_APP_NAME
+        return DEFAULT_APP_NAME
+    except Exception:
+        return "J.A.R.V.I.S"
+
+
+def _openrouter_headers(api_key: str) -> dict:
+    """Auth plus identity headers, as OpenRouter expects."""
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": _project_url(),
+        "X-Title": _project_title(),
+        "Content-Type": "application/json",
+    }
+
 
 class LLMResponse:
     def __init__(self, text: str):
@@ -699,12 +746,7 @@ class MultiLLMClient:
             try:
                 res = requests.post(
                     "https://openrouter.ai/api/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.openrouter_key}",
-                        "HTTP-Referer": "https://github.com/SudhirDevOps1",
-                        "X-Title": "SudhirDevOps1 AI",
-                        "Content-Type": "application/json",
-                    },
+                    headers=_openrouter_headers(self.openrouter_key),
                     json={
                         "model": model,
                         "messages": [{"role": "user", "content": prompt}],
@@ -984,8 +1026,10 @@ def test_llm_provider(
             if key:
                 headers["Authorization"] = f"Bearer {key}"
             if prov == "openrouter":
-                headers["HTTP-Referer"] = "https://github.com/SudhirDevOps1"
-                headers["X-Title"] = "SudhirDevOps1 AI"
+                # Identity headers, config-derived so a fork does not report
+                # itself to OpenRouter as the upstream project.
+                headers["HTTP-Referer"] = _project_url()
+                headers["X-Title"] = _project_title()
 
             try:
                 resp = requests.get(models_url, headers=headers, timeout=5.0)

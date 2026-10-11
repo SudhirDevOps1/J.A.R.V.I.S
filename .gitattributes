@@ -1,0 +1,54 @@
+# Normalise line endings so a Windows contributor and a Linux CI runner agree.
+#
+# Without this, core.autocrlf=true on Windows checks files out with CRLF while
+# CI checks out LF. The result is a diff that appears on every file touched and
+# a test run that is not running against the same bytes as the commit.
+
+* text=auto eol=lf
+
+# Windows launchers must keep CRLF or the shell misreads them.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Python sources are LF everywhere, including on Windows.
+*.py text eol=lf
+*.pyw text eol=lf
+
+# Data files.
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+
+# Binary — never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.ttf binary
+*.otf binary
+*.onnx binary
+*.bin binary
+*.sqlite binary
+*.db binary
+*.exe binary
+*.zip binary
+*.whl binary
+*.safetensors binary
+
+# No JS lock files today (this repository has no package.json). These rules
+# are here so that adding one later does not produce a whole-file diff.
+package-lock.json -diff
+yarn.lock -diff

@@ -1,0 +1,65 @@
+name: Feature request
+description: Suggest something J.A.R.V.I.S should be able to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: |
+        Describe the situation, not the implementation. "I want to ask it to
+        rename a folder and have it ask me first if anything looks wrong" is
+        useful. "Add a tool called rename_folder" is not, on its own.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would this look like?
+      description: How you would phrase the request, and what JARVIS should do.
+      placeholder: |
+        I'd say: "..."
+        It should: ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of change is this?
+      description: |
+        Tool = a new capability. Plugin = something third parties could also
+        write. Both are welcome; a plugin is easier to review.
+      options:
+        - New tool (in actions/)
+        - New plugin (in plugins/)
+        - UI / UX improvement
+        - Offline / performance
+        - Developer experience
+        - Not sure
+
+  - type: textarea
+    id: offline
+    attributes:
+      label: Must this work offline?
+      description: |
+        J.A.R.V.I.S is meant to stay useful with no network. If your feature
+        only works online, say so.
+      value: " "
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried?
+      description: Including existing tools, plugins, or workarounds.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this.
+          required: true
+        - label: I understand this runs on my own machine and I am not asking for it to phone home.
+          required: true

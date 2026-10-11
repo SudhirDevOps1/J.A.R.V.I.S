@@ -6677,8 +6677,10 @@ class MainWindow(QMainWindow):
             QApplication.setWindowIcon(app_icon)
         if sys.platform == "win32":
             try:
-                import ctypes
-                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI")
+                # Config-derived id, not the hardcoded maintainer's account.
+                # See core/app_identity.py for why this is not a literal.
+                from core.app_identity import set_app_user_model_id
+                set_app_user_model_id()
             except Exception:
                 pass
         self.setMinimumSize(_MIN_W, _MIN_H)
@@ -8586,6 +8588,31 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _footer_credit(self) -> str:
+        """Attribution line for the footer.
+
+        Derived from configuration rather than hardcoded, so a fork or a
+        private build is not stamped with the upstream author's handle on
+        every screen.
+        """
+        try:
+            from core.version import __version__
+        except Exception:
+            __version__ = ""
+        try:
+            from memory.config_manager import get_app_name
+            name = (get_app_name() or "").strip()
+        except Exception:
+            name = ""
+        if not name:
+            try:
+                from core.app_identity import DEFAULT_APP_NAME
+                name = DEFAULT_APP_NAME
+            except Exception:
+                name = "J.A.R.V.I.S"
+        v = f" v{__version__}" if __version__ else ""
+        return f"{name}{v} - open source, GPL-3.0"
+
     def _build_footer(self) -> QWidget:
         w = QWidget()
         w.setFixedHeight(22)
@@ -8609,7 +8636,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._news_lbl)
 
         lay.addStretch()
-        lay.addWidget(_fl("By SudhirDevOps1", C.PRI_DIM))
+        lay.addWidget(_fl(self._footer_credit(), C.PRI_DIM))
         return w
 
     def _on_file_selected(self, path: str):

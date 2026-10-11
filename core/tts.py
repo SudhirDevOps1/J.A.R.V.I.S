@@ -666,7 +666,7 @@ def test_tts_voice(engine_name: str, voice_name: str = "", text: Optional[str] =
                 return False, f"EdgeTTS Network/DNS error ({e_net}). Check internet connection."
 
         elif engine_id == "kokoro":
-            sample = text or "Hello Sudhir Sir, this is Kokoro neural voice."
+            sample = text or "Hello, this is the Kokoro neural voice."
             try:
                 engine = KokoroTTSEngine(voice=voice_name or "af_heart")
                 engine.speak(sample)

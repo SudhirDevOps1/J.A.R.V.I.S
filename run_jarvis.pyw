@@ -16,10 +16,12 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 # 2. Register Windows AppUserModelID so Taskbar displays the Custom Arc Reactor Icon
+# Derived from the configured app name rather than hardcoded, so a fork does not
+# register itself under the upstream author's Windows account.
 if sys.platform == "win32":
     try:
-        import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SudhirDevOps1.JARVIS.AI")
+        from core.app_identity import set_app_user_model_id
+        set_app_user_model_id()
     except Exception:
         pass
 

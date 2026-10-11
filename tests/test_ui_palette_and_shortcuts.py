@@ -1,4 +1,4 @@
-﻿"""
+"""
 tests/test_ui_palette_and_shortcuts.py â€” Tests for the new UI layer.
 
 The fuzzy matcher is tested directly without a QApplication. That is

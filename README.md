@@ -6,9 +6,9 @@
   <p><i>Built by <a href="https://github.com/SudhirDevOps1">SudhirDevOps1</a></i></p>
 
   [![CI/CD](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions/workflows/ci.yml/badge.svg)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
   [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
-  [![Local Tests](https://img.shields.io/badge/tests-139%20passed%20(100%25)-brightgreen.svg)](tests/)
+  [![Local Tests](https://img.shields.io/badge/tests-487%20passed-brightgreen.svg)](tests/)
   [![Memory Engine](https://img.shields.io/badge/Memory-SQLite%20WAL%20%2B%20FTS5-00e5ff.svg)](core/unified_memory.py)
   [![Flake8 Clean](https://img.shields.io/badge/flake8-0%20errors-brightgreen.svg)](https://flake8.pycqa.org/)
 </div>
@@ -71,7 +71,7 @@ Adding a new skill is one file dropped into `actions/` or `plugins/` — no core
 | Feature | What It Does |
 |---------|-------------|
 | **Stark Arc Reactor HUD** | 4 avatar modes: `reactor`, `celestial`, `orb`, `matrix` — ambient idling hum, rotating coils, vibrating core glow, real-time voice amplitude |
-| **PiP Always-On-Top Mini Companion** | Draggable frameless companion with dedicated header drag handle (`✥`), mini countdown badge (`⏳ MM:SS`), ⚡ EDGE reflex badge, live chat history, screen troubleshoot eye, and expandable panel (`pip_mode.py`) |
+| **PiP Always-On-Top Mini Companion** | Draggable frameless companion with dedicated header drag handle (`✥`), mini countdown badge (`⏳ MM:SS`), ⚡ EDGE reflex badge, live chat history, screen troubleshoot eye, and expandable panel (`ui.py` - `PipWindow`) |
 | **Live Countdown Watch & Telemetry** | Real-time countdown badge (`⏳ MM:SS`) in HUD header watch + dedicated `◈ TIMERS & TASKS` card with dual-color cyber progress bar and completion voice alert (`timer_manager.py`) |
 | **Cyber-HUD Content Display** | Dynamic split panel below the Arc Reactor supporting rich HTML/Markdown telemetry cards, price comparison tables, and weather cards |
 | **Live Theming & Vibe Presets** | Instant hue recoloring + 4 presets: GF Soulmate, Stark Tactical, DevOps Beast, Mentor & Guru |
@@ -190,7 +190,7 @@ Adding a new skill is one file dropped into `actions/` or `plugins/` — no core
 | Feature | What It Does |
 |---------|-------------|
 | **Git Secret Shield** | `.gitignore` seals `api_keys.json`, `gemini_cookies.json`, `llm_cache.db`, and all memory — safe to commit and share |
-| **Native Python Git Hooks** | `pre-commit`: syntax check, `py_compile`, `compileall`, secret leak guard, flake8. `pre-push`: smoke tests before every GitHub push |
+| **Real Git Hooks** | `python scripts/install_git_hooks.py` installs `pre-commit` (syntax check on staged files, whole-tree parse, credential scan, flake8) and `pre-push` (whole-tree syntax, critical-import probe, fast test run). The credential scanner redacts what it matches and understands a `scanner-self-exempt` marker so test fixtures do not block their own commits. |
 | **Offline Mic Gate** | While sleeping with wake word active, mic audio is processed only on-device — nothing sent to cloud until "Hey Jarvis" |
 | **UI Confirmation Gate** | Shutdown, restart, WiFi require physical button press — token issued by UI, not by the model |
 | **FIFO Confirm Queue** | Stacked confirmations queue (max 5) instead of overwriting — expired ones logged and skipped |
@@ -289,7 +289,7 @@ Runs silently, logs to `logs/jarvis_runtime.log`, shows Arc Reactor icon in Wind
 ```
 J.A.R.V.I.S./
 ├── start_jarvis.bat              # 1-Click Windows launcher (auto-Python, auto-pip, preflight)
-├── run_jarvis.bat                # Minimal Windows run shortcut
+├── run_jarvis.pyw               # Silent background launcher
 ├── run_jarvis.pyw                # Silent background launcher — Arc Reactor taskbar icon
 ├── run.sh                        # Linux / macOS launcher
 ├── launch_silent.vbs             # VBScript for invisible Windows background launch
@@ -394,13 +394,55 @@ J.A.R.V.I.S./
 | **Intelligence** | Wake word · instant acknowledgment · self-describing action/plugin architecture |
 | **Offline Lab** | Whisper STT · Stark SFX · zero-token drive gauges · Open-Meteo weather |
 | **Edge AI** | Tri-Tier Router · Needle 2 Reflex (28MB / <15ms) · LFM 2.5 offline · Gemini Cloud |
-| **CI/CD** | Native Python Git hooks · flake8 clean · GitHub Actions · smoke test pre-push |
+| **CI/CD** | GitHub Actions (SHA-pinned actions, 2x2 OS/Python matrix, headless Qt) · local git hooks · flake8 on the same error classes CI gates · `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` |
 
 ---
 
+
+---
+
+## Contributing
+
+Pull requests are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for how
+to run it, what makes a good change here, and how to add a tool or a plugin.
+
+Short version:
+
+```bash
+pip install -r requirements.txt
+python -m pytest -q -m "not network"      # the suite
+python scripts/install_git_hooks.py       # install the local hooks
+```
+
+A tool is one file in `actions/`. A plugin is one file in `plugins/` — copy
+`plugins/_template.py` and you are done.
+
+## Security
+
+This assistant controls a real machine: it runs shell commands, moves files,
+captures the screen, and holds API keys. Please treat vulnerabilities
+accordingly.
+
+**Report security issues privately — not as a public issue.** See
+**[SECURITY.md](SECURITY.md)** for the reporting process and for a map of the
+security controls that exist (confirmation gate, audit log, undo stack, secret
+vault, dashboard auth, HTML sanitiser, credential scanner).
+
+Participation is governed by
+**[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)**.
+
 ## ⚖️ License
 
-Licensed under the **[MIT License](LICENSE)**. Open-source and free for all developers.
+Licensed under the **[GNU GPL v3.0](LICENSE)**. Free and open source for everyone.
+
+GPL-3.0 rather than MIT is a deliberate, verified choice: the GUI is
+built on PyQt6, which Riverbank distributes as **GPL-3.0-only**
+(confirmed against the PyPI metadata for PyQt6 6.11.0). An MIT licence
+over a GPL-only dependency would not be enforceable - linking PyQt6
+makes the combined work GPL-3.0 regardless of what the root file says.
+Keeping the whole project under GPL-3.0 matches reality and keeps it
+fully open source. If you want to embed J.A.R.V.I.S in a closed-source
+product you will need a commercial PyQt6 licence from Riverbank.
 
 ---
 

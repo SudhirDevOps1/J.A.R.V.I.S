@@ -1,0 +1,49 @@
+# Keeps GitHub's dependency updates coming.
+#
+# Without this, a dependency bump is something someone has to remember to do,
+# and for a project whose users run it locally against their own machine, an
+# unnoticed vulnerable transitive dependency is a real risk.
+
+version: 2
+
+updates:
+  # Python dependencies, including indirect ones.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: "deps"
+    groups:
+      # Security fixes for one package should not be buried in a 30-package
+      # weekly bump, so they are split out into their own PR.
+      pip-security:
+        applies-to: security-updates
+      # Everything else weekly is easier to review as one batch.
+      pip-minor:
+        update-types:
+          - minor
+          - patch
+
+  # Keeps the GitHub Actions themselves current. These are SHA-pinned in the
+  # workflow files, so dependabot updates the digests too.
+  #
+  # There is deliberately no npm block: this repository has no package.json.
+  # A dependabot entry for an ecosystem the project does not use is a config
+  # error, not a safety net.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "ci"
