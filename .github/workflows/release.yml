@@ -1,17 +1,23 @@
 name: Release & Publish J.A.R.V.I.S.
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v0.1.0)'
+        required: false
+        default: 'v0.1.0'
+      force:
+        description: 'Force release even if 20-commit threshold is not reached'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   build-and-release:
-    name: Build, Package & Publish Release (${{ github.ref_name }})
+    name: Build, Package & Publish Release
     runs-on: ubuntu-latest
 
     steps:
@@ -25,6 +31,15 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+
+      - name: 🏷️ Verify Release Readiness (20-Commit Threshold Rule)
+        shell: bash
+        run: |
+          if [ "${{ inputs.force }}" = "true" ]; then
+            python scripts/check_release_readiness.py --force
+          else
+            python scripts/check_release_readiness.py --check
+          fi
 
       - name: 📦 Install Packaging Dependencies
         run: |
@@ -55,9 +70,9 @@ jobs:
       - name: 📦 Package Release Distribution
         shell: bash
         run: |
-          VERSION_TAG="${{ github.ref_name }}"
-          if [ -z "$VERSION_TAG" ] || [ "$VERSION_TAG" = "main" ]; then
-            VERSION_TAG="v1.0.0"
+          VERSION_TAG="${{ inputs.version }}"
+          if [ -z "$VERSION_TAG" ]; then
+            VERSION_TAG="v0.1.0"
           fi
           echo "Packaging distribution for ${VERSION_TAG}..."
           mkdir -p dist

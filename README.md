@@ -1,23 +1,24 @@
 <div align="center">
   <img src="config/jarvis.png" width="160" height="160" alt="J.A.R.V.I.S. Arc Reactor Logo" />
   <h1>⚙️ J.A.R.V.I.S.</h1>
-  <p><b>Production-Ready Personal AI Assistant — Engineered for Real Developers</b></p>
-  <p><i>High-Performance Architecture: Zero-Bloat Local Reflex Engine (<0.1ms) ➔ Embedded SQLite FTS5 Memory ➔ Gemini Live & Multi-Provider LLMs</i></p>
+  <p><b>India's Premier Autonomous Hinglish AI Companion & Desktop Interface</b></p>
+  <p><i>High-Performance Hybrid Architecture: Fast Local Reflex (<10ms) ➔ Embedded SQLite FTS5 Memory ➔ Gemini Live Multimodal Streaming</i></p>
   <p><i>Built by <a href="https://github.com/SudhirDevOps1">SudhirDevOps1</a></i></p>
 
   [![CI/CD](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions/workflows/ci.yml/badge.svg)](https://github.com/SudhirDevOps1/J.A.R.V.I.S/actions)
+  [![Development Status](https://img.shields.io/badge/status-v0.1.0--dev%20(active%20development)-orange.svg)](docs/release_rules.md)
   [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
   [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
-  [![Local Tests](https://img.shields.io/badge/tests-487%20passed-brightgreen.svg)](tests/)
+  [![Local Tests](https://img.shields.io/badge/tests-664%20passed-brightgreen.svg)](tests/)
   [![Memory Engine](https://img.shields.io/badge/Memory-SQLite%20WAL%20%2B%20FTS5-00e5ff.svg)](core/unified_memory.py)
   [![Flake8 Clean](https://img.shields.io/badge/flake8-0%20errors-brightgreen.svg)](https://flake8.pycqa.org/)
 </div>
 
 ---
 
-A real-time, production-grade voice AI that can **hear, see, understand, and control your computer** — on Windows, macOS, and Linux. Engineered with a **Zero-Bloat, High-Performance Local Matrix** that runs system operations fully offline, supports 22+ free LLM providers, integrates embedded SQLite FTS5 memory and Chrome DevTools MCP, and requires zero paid subscriptions to get started.
+A real-time, production-grade voice AI that can **hear, see, understand, and control your computer** — on Windows, macOS, and Linux. Built with a **Zero-Bloat, High-Performance Local Matrix** that runs system operations fully offline, supports free Gemini Live streaming, integrates embedded SQLite FTS5 memory, and requires zero paid subscriptions to get started.
 
-> 📖 **Full Command & Control Guide:** Read the [Complete User Control & Feature Manual (USER_GUIDE.md)](USER_GUIDE.md) for detailed Hindi, Hinglish, and English voice/text commands across all categories.
+> 📚 **Documentation Hub:** Explore the [Master Documentation Hub (docs/)](docs/index.md) | [User Manual](docs/user_guide.md) | [System Architecture](docs/architecture.md) | [Runbook](docs/runbook.md) | [Release Rules](docs/release_rules.md)
 
 ---
 
@@ -29,9 +30,9 @@ Under the hood, every request is intelligently routed:
 
 | Tier | Engine | RAM Overhead | Latency | Role |
 |------|--------|--------------|---------|------|
-| **Tier 1** | Local Reflex Engine | < 10 KB | < 0.1 ms | Instant on-device OS tool calling, window management & system commands — zero network, zero tokens |
-| **Tier 2** | Embedded SQLite FTS5 & MCP Host | 0 MB (Idle) | < 0.5 ms | Full-text indexed memory recall, task management, and on-demand Chrome DevTools MCP browser automation |
-| **Tier 3** | Gemini Live & Cloud / Local Ollama | Streaming | Real-time | Deep reasoning, natural multi-turn dialogue, coding, vision, and web research |
+| **Tier 1** | Local Reflex Engine | < 10 KB | < 10 ms | Instant on-device OS tool calling, window management & system commands — zero network, zero tokens |
+| **Tier 2** | Embedded SQLite FTS5 & MCP Host | 0 MB (Idle) | < 5 ms | Full-text indexed memory recall, task management, and on-demand Chrome DevTools MCP browser automation |
+| **Tier 3** | Gemini Live & Cloud LLMs | Streaming | Real-time | Deep reasoning, natural multi-turn dialogue, coding, vision, and web research |
 
 Adding a new skill is one file dropped into `actions/` or `plugins/` — no core edits required.
 
@@ -247,34 +248,37 @@ Adding a new skill is one file dropped into `actions/` or `plugins/` — no core
 
 ## ⚡ Quick Start
 
-### Option 1 — 1-Click Windows Launch *(Recommended)*
-Double-click **`start_jarvis.bat`**:
-- Auto-detects Python 3.10 / 3.11 / 3.12 / 3.13
-- Activates `.venv` / `venv` if present
-- Auto-installs missing dependencies
-- Runs preflight diagnostics and launches the HUD
+### 🚀 1-Click Direct Launch *(Recommended)*
+Simply double-click **`start_jarvis.bat`** (or run `run.bat`):
+- **First-Time Auto-Setup:** Auto-detects Python (3.10-3.13), creates an isolated `.venv`, installs required dependencies, and launches the friendly **India Hinglish Onboarding Wizard** to save your free Gemini API key into `config/api_keys.json`.
+- **Fast Daily Launch:** Subsequent clicks launch directly in **< 1 second** without blocking network checks or slowing down startup.
+- **On-Demand Updates:** Run `start_jarvis.bat --update` or `scripts/update_deps.bat` whenever you wish to safely upgrade dependencies.
 
-### Option 2 — Preflight Diagnostic Self-Test
-```bash
-python scripts/preflight_check.py
-```
-Verifies all directories, SFX files, icons, Edge model configs, and API key templates before booting.
-
-### Option 3 — Cross-Platform (Windows / macOS / Linux)
+### 🐧 Cross-Platform (macOS / Linux)
 ```bash
 git clone https://github.com/SudhirDevOps1/J.A.R.V.I.S.git
 cd J.A.R.V.I.S
-python setup.py        # OS-aware installer — skips wrong-OS packages automatically
+./scripts/update_deps.sh    # Prepares environment & dependencies safely
 python main.py
 ```
 
-### Option 4 — Background Launch with Arc Reactor Taskbar Icon *(Windows)*
-```bash
-pythonw run_jarvis.pyw
-```
-Runs silently, logs to `logs/jarvis_runtime.log`, shows Arc Reactor icon in Windows taskbar.
+### 🔑 Getting a Free Gemini API Key
+1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey) (100% Free, no credit card required).
+2. Generate an API Key and paste it into the onboarding prompt or add it to `config/api_keys.json`.
+3. J.A.R.V.I.S. supports a multi-key pool (`gemini_api_keys: ["key1", "key2", "key3"]`) for automatic 429 quota failover!
 
-> **API Key:** Free Gemini API key from [Google AI Studio](https://aistudio.google.com/) (no credit card) is the fastest way to start. The built-in Gemini Web Proxy (`core/gemini_free_proxy.py`) works even without any key.
+### 🔄 Universal Defensive Auto-Updater
+To update Python, Node, and system dependencies safely with automatic rollback protection:
+```bash
+# Windows
+scripts\update_deps.bat
+
+# Linux / macOS
+./scripts/update_deps.sh
+
+# Dry-run check
+python scripts/auto_update.py --check
+```
 
 ---
 
@@ -295,8 +299,7 @@ Runs silently, logs to `logs/jarvis_runtime.log`, shows Arc Reactor icon in Wind
 
 ```
 J.A.R.V.I.S./
-├── start_jarvis.bat              # 1-Click Windows launcher (auto-Python, auto-pip, preflight)
-├── run_jarvis.pyw               # Silent background launcher
+├── start_jarvis.bat              # 1-Click Windows launcher (auto-setup, zero blocking update lag)
 ├── run_jarvis.pyw                # Silent background launcher — Arc Reactor taskbar icon
 ├── run.sh                        # Linux / macOS launcher
 ├── launch_silent.vbs             # VBScript for invisible Windows background launch
@@ -304,12 +307,25 @@ J.A.R.V.I.S./
 ├── ui.py                         # PyQt6 HUD — waveform, log panel, settings drawer, camera
 ├── setup.py                      # OS-aware dependency installer
 │
+├── docs/                         # Comprehensive documentation hub
+│   ├── index.md                  # Master documentation index
+│   ├── user_guide.md             # Complete user control & voice commands manual
+│   ├── runbook.md                # Maintenance, setup, and recovery playbooks
+│   ├── architecture.md           # Dual-engine architecture & reflex pipeline
+│   ├── release_rules.md          # 20-commit milestone threshold & release policy
+│   └── nextpatch.md              # Technical backlog and feature roadmap
+│
 ├── scripts/
+│   ├── auto_setup_onboarding.py  # First-time interactive API key wizard (Hinglish)
+│   ├── auto_update.py            # Universal defensive auto-updater (Python/Node/Cargo)
+│   ├── update_deps.bat           # Windows updater wrapper
+│   ├── update_deps.sh            # Unix updater wrapper
+│   ├── check_release_readiness.py# 20-commit milestone verification engine
 │   ├── preflight_check.py        # Diagnostics: dirs, SFX, icons, models, API key template
 │   └── generate_icon.py          # Arc Reactor icon generator (ICO + PNG, multi-resolution)
 │
-├── actions/                      # Bundled skills (TOOL dict + handler, auto-discovered)
-│   ├── web_search.py             # Gemini Grounded + DDG search
+├── actions/                      # Bundled skills (57 TOOL actions, auto-discovered)
+│   ├── web_search.py             # Gemini Grounded + DDG search + Live RSS news
 │   ├── browser_control.py        # Playwright browser automation
 │   ├── computer_control.py       # Keyboard, mouse, OS-level control
 │   ├── computer_settings.py      # Volume, brightness, WiFi, dark mode — 56 actions
@@ -317,31 +333,16 @@ J.A.R.V.I.S./
 │   ├── file_processor.py         # Read and analyse local documents
 │   ├── open_app.py               # Launch installed applications by voice
 │   ├── screen_processor.py       # Screen and webcam capture for vision
-│   ├── background_monitor.py     # Daily topic watching and alerts
-│   ├── proactive.py              # Time/context-aware proactive check-ins
-│   ├── send_message.py           # WhatsApp Web and Telegram
-│   ├── weather_report.py         # Open-Meteo live weather (free, no key)
-│   ├── flight_finder.py          # Real-time flight price search
-│   ├── youtube_video.py          # YouTube playback control
-│   ├── game_updater.py           # Steam and Epic Games updates
-│   ├── code_helper.py            # Code review, debug, generation
-│   ├── dev_agent.py              # Multi-step developer task agent
-│   ├── reminder.py               # OS-native scheduled reminders
-│   ├── desktop.py                # Taskbar and window management
-│   ├── todo_agent.py             # Task list management
-│   ├── obsidian_brain.py         # Obsidian vault REST + Markdown sync
-│   ├── system_monitor.py         # CPU, RAM, GPU, temperature telemetry
-│   ├── bm25_search.py            # Local BM25 full-text search
-│   ├── api_sniffer.py            # Network API discovery
-│   ├── tinydb_memory.py          # TinyDB structured memory
-│   ├── mcp_chrome.py             # Chrome DevTools MCP action tool (navigation, clicks, screenshots)
-│   └── subagent_swarm.py         # Multi-agent swarm interface
+│   ├── weather_report.py         # Open-Meteo live weather with IP geo-fallback
+│   └── ...                       # Additional specialized system & AI actions
 │
-├── plugins/
-│   └── _template.py              # Copy this → new plugin in one file, no core edits
+├── plugins/                      # Built-in plugins (10 active plugins)
+│   ├── spotify_control.py        # Media playback and queue controls
+│   ├── stock_price.py            # Market ticker quotes
+│   └── _template.py              # Single-file plugin template
 │
 ├── core/
-│   ├── edge_router.py            # Local fast reflex router & tool dispatcher (<0.1ms)
+│   ├── edge_router.py            # Local fast reflex router & tool dispatcher (<10ms)
 │   ├── unified_memory.py         # Unified SQLite WAL + FTS5 full-text search & task memory
 │   ├── mcp_host.py               # Pure Python JSON-RPC 2.0 stdio MCP client host
 │   ├── multi_llm.py              # 22+ provider LLM engine with key rotation

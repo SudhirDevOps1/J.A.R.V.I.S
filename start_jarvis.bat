@@ -107,8 +107,7 @@ if "%~1"=="-u" goto :auto_update_all_pip
 echo [*] Checking libraries and system dependencies...
 "%PYTHON_EXE%" -c "import PyQt6, google.genai, requests, sounddevice, edge_tts, PIL, cv2, psutil, tinydb, rank_bm25, thefuzz, keyboard, fastapi, uvicorn, cryptography, win32api, comtypes, pycaw" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    :: Auto-check for package updates (checks PyPI and auto-upgrades when new releases appear)
-    "%PYTHON_EXE%" scripts\auto_pip_updater.py
+    :: Instant launch path: libraries already verified, launch directly without blocking network checks
     goto :dependencies_ready
 )
 
@@ -126,12 +125,19 @@ if %ERRORLEVEL% NEQ 0 (
 goto :dependencies_ready
 
 :auto_update_all_pip
-echo [*] Force checking PyPI and updating all Python dependencies...
-"%PYTHON_EXE%" scripts\auto_pip_updater.py --force
+echo [*] Running Universal Defensive Auto-Updater for all dependencies...
+if exist "scripts\auto_update.py" (
+    "%PYTHON_EXE%" scripts\auto_update.py
+) else (
+    "%PYTHON_EXE%" scripts\auto_pip_updater.py --force
+)
 goto :dependencies_ready
 
 :dependencies_ready
-:: 5. Run Preflight Check (Auto-verifies SQLite memory, SFX, icons, sets up desktop shortcut)
+:: 5. First-Time Quick Onboarding Wizard (India Edition API Key Setup)
+"%PYTHON_EXE%" scripts\auto_setup_onboarding.py
+
+:: 6. Run Preflight Check (Auto-verifies SQLite memory, SFX, icons, sets up desktop shortcut)
 echo [*] Running automated pre-flight checks and asset verification...
 "%PYTHON_EXE%" scripts\preflight_check.py
 
