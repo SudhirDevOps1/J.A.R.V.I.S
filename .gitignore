@@ -53,6 +53,12 @@ memory/tinydb_store.json
 # clone starts blank and builds its own. See knowledge_graph.example.json.
 config/knowledge_graph.json
 config/weather_cache.json
+# Per-user runtime config: their own routines, and the keywords their privacy
+# shield watches for. Both are written by normal use, both describe the person
+# running it rather than the software, and neither is needed for a fresh clone
+# to work. See routines.example.json and privacy_settings.example.json.
+config/routines.json
+config/privacy_settings.json
 config/installed_apps.json
 config/music_library.json
 config/todos.json

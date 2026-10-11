@@ -70,6 +70,13 @@ Adding a new skill is one file dropped into `actions/` or `plugins/` — no core
 
 | Feature | What It Does |
 |---------|-------------|
+| **Command Palette (Ctrl+K)** | Fuzzy search over every tool, plugin and UI command, built from the live registries so it cannot go stale. Typing `ntp` finds notepad. |
+| **Keyboard-First Control** | Declared shortcut registry rendered into a reference sheet (Ctrl+/), so the help can never drift from what is bound. Duplicate bindings are detected rather than silently dropped. |
+| **Conversation History (Ctrl+H)** | Browse and re-run past turns. Recovers the drafts it should never have kept. |
+| **System Tray & Close-to-Tray** | Closing the window hides it instead of killing the assistant, with a separate Quit action. The tray mirrors Ctrl+K, Ctrl+/ and Ctrl+H so closing the window never locks you out. |
+| **Input History** | Up/Down recall in the command box with shell semantics: duplicate collapsing, draft preservation, bounded length. |
+| **Non-Scrolling Readback** | Auto-scroll follows the stream only while the viewport is at the bottom. Scroll up to re-read an earlier reply and it stays where you left it. |
+| **Safe Rich Output** | Allowlist HTML sanitiser for everything rendered with `setHtml`, so a search result containing markup renders as text. |
 | **Stark Arc Reactor HUD** | 4 avatar modes: `reactor`, `celestial`, `orb`, `matrix` — ambient idling hum, rotating coils, vibrating core glow, real-time voice amplitude |
 | **PiP Always-On-Top Mini Companion** | Draggable frameless companion with dedicated header drag handle (`✥`), mini countdown badge (`⏳ MM:SS`), ⚡ EDGE reflex badge, live chat history, screen troubleshoot eye, and expandable panel (`ui.py` - `PipWindow`) |
 | **Live Countdown Watch & Telemetry** | Real-time countdown badge (`⏳ MM:SS`) in HUD header watch + dedicated `◈ TIMERS & TASKS` card with dual-color cyber progress bar and completion voice alert (`timer_manager.py`) |

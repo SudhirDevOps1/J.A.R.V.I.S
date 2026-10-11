@@ -20,6 +20,57 @@ except ImportError:
     _REQUESTS_AVAILABLE = False
 
 
+# -- Assistant mode & profile switching -------------------------------------
+# The router's dispatch helper is a closure, so it cannot be replaced from a
+# test. The mapping is the part worth pinning down anyway: it is data, and it
+# used to send "work mode" and "gaming mode" to persona names absent from
+# core.persona_manager.AVAILABLE_PERSONAS, so those phrases silently changed
+# nothing and the user had no way to tell.
+#
+# Every value here MUST be a key in AVAILABLE_PERSONAS.
+PERSONA_MODE_MAP = {
+    "professional": "professional",
+    "pro": "professional",
+    "serious": "professional",
+    "normal": "professional",
+    # "work mode" asks for the plain professional tone, not a separate persona.
+    "work": "professional",
+    "teacher": "teacher",
+    "guru": "teacher",
+    "mentor": "teacher",
+    "study": "teacher",
+    "devops": "devops",
+    "coding": "devops",
+    "hacker": "devops",
+    "companion": "companion",
+    "girlfriend": "companion",
+    "gf": "companion",
+    "soulmate": "companion",
+    # No gaming persona exists. Falling back to the tactical tone is honest;
+    # inventing a name that is not registered only produces a later no-op.
+    "gaming": "jarvis",
+    "game": "jarvis",
+    "jarvis": "jarvis",
+    "tactical": "jarvis",
+}
+
+PERSONA_KEYWORD_RE = re.compile(
+    r"\b(" + "|".join(sorted(PERSONA_MODE_MAP, key=len, reverse=True)) + r")"
+    r"\s*(?:mode|profile|vibe)\b"
+    r"|\b(?:mode|profile)\s*(?:badlo|change\s*karo|lagao|switch\s*karo)\b"
+)
+
+
+def map_profile_word(word: str) -> str:
+    """Resolve a spoken mode word to a registered persona name.
+
+    Unknown words fall back to 'jarvis'. Kept as a function so the table can be
+    checked against AVAILABLE_PERSONAS in a test, rather than discovered by a
+    user saying a phrase that quietly does nothing.
+    """
+    return PERSONA_MODE_MAP.get((word or "").strip().lower(), "jarvis")
+
+
 def _get_user_location() -> str:
     """Retrieve user city from long_term.json memory if available."""
     try:
@@ -259,21 +310,9 @@ class NeedleToolRouter:
 
         # -- Assistant Mode & Profile Switching Reflexes ----------------------
         # "teacher mode lagao" / "study profile" / "devops mode" / "jarvis mode" / "girlfriend mode"
-        m_prof = re.search(r"\b(teacher|guru|mentor|study|devops|coding|hacker|gaming|game|companion|girlfriend|gf|soulmate|jarvis|tactical|work)\s*(?:mode|profile|vibe)\b|\b(?:mode|profile)\s*(?:badlo|change\s*karo|lagao|switch\s*karo)\b", clean)
+        m_prof = PERSONA_KEYWORD_RE.search(clean)
         if m_prof:
-            matched_word = (m_prof.group(1) or "").lower()
-            if matched_word in ("teacher", "guru", "mentor", "study"):
-                target_p = "teacher"
-            elif matched_word in ("devops", "coding", "hacker"):
-                target_p = "devops"
-            elif matched_word in ("companion", "girlfriend", "gf", "soulmate"):
-                target_p = "companion"
-            elif matched_word in ("gaming", "game"):
-                target_p = "gaming"
-            elif matched_word in ("work",):
-                target_p = "work"
-            else:
-                target_p = "jarvis"
+            target_p = map_profile_word(m_prof.group(1) or "")
             return _dispatch("profile", {"name": target_p, "action": "apply"})
 
         # -- PiP (Picture-in-Picture Companion Window) Voice Controls ----------

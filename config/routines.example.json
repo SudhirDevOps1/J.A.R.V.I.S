@@ -1,0 +1,7 @@
+{
+ "_note": "Named routines: say 'dev routine chalao' to open everything in that group. Create one by voice with 'routine banao movie: brave, spotify'. Keys are the routine name, values are the app names to launch.",
+ "example": [
+  "brave",
+  "spotify"
+ ]
+}

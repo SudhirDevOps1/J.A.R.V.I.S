@@ -462,6 +462,27 @@ def reminder(
         player.write_log(f"[Reminder] ✅ {target_dt.strftime('%Y-%m-%d %H:%M')} — {safe_msg[:40]}")
 
     friendly_time = target_dt.strftime("%B %d at %I:%M %p")
+    short_when = desc or friendly_time
+
+    # Announce out loud that the timer is armed. Previously this produced only
+    # a log line, which is invisible when the window is closed - exactly when a
+    # timer matters most. The user has to be able to trust that "2 minute ka
+    # timer lagao" took, without looking at the HUD.
+    try:
+        from core.announcer import announce, timer_set_text
+        _speak = None
+        for _attr in ("speak", "request_say"):
+            _fn = getattr(player, _attr, None)
+            if callable(_fn):
+                _speak = _fn
+                break
+        announce(
+            timer_set_text(safe_msg, short_when),
+            speak=_speak,
+        )
+    except Exception as _ann_err:
+        print(f"[Reminder] announcement skipped: {_ann_err}")
+
     if desc:
         return f"✅ Reminder/Alarm set kar diya hai ({desc} baad — {friendly_time}): '{safe_msg}'"
     return f"✅ Reminder set for {friendly_time}: '{safe_msg}'"

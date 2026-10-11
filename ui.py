@@ -1971,6 +1971,20 @@ class LogWidget(QTextEdit):
         # without bound — keeps memory flat and every insert cheap. Oldest
         # lines drop off the top automatically.
         self.document().setMaximumBlockCount(600)
+
+        # Auto-scroll policy. Without this, every streamed token forced the
+        # view to the bottom, so anyone re-reading an earlier reply while the
+        # answer was still arriving was yanked away on the next character.
+        # See ui/chat_scroll.py.
+        try:
+            from ui.chat_scroll import FollowState
+            self._follow = FollowState()
+        except Exception:
+            self._follow = None
+        try:
+            self.verticalScrollBar().valueChanged.connect(self._on_user_scrolled)
+        except Exception:
+            pass
         self.setFont(QFont(FONT_MONO, 8))
         self.setStyleSheet(f"""
             QTextEdit {{
@@ -2031,7 +2045,7 @@ class LogWidget(QTextEdit):
                     fmt.setForeground(QBrush(col))
                     cur.insertText(rem + "\n", fmt)
                     self.setTextCursor(cur)
-                    self.ensureCursorVisible()
+                    self._scroll_to_end_if_following()
                 self._typing = False
                 self._text = ""
                 self._pos = 0
@@ -2046,7 +2060,7 @@ class LogWidget(QTextEdit):
                     _cur.movePosition(_cur.MoveOperation.End)
                     _cur.insertText("\n")
                     self.setTextCursor(_cur)
-                    self.ensureCursorVisible()
+                    self._scroll_to_end_if_following()
                     self._streaming_active = False
                     self._streaming_speaker = ""
                     self._streaming_has_content = False
@@ -2069,7 +2083,7 @@ class LogWidget(QTextEdit):
                 fmt.setForeground(QBrush(col))
                 cur.insertText(pfx, fmt)
                 self.setTextCursor(cur)
-                self.ensureCursorVisible()
+                self._scroll_to_end_if_following()
 
                 self._streaming_active = True
                 self._streaming_speaker = spk
@@ -2091,7 +2105,7 @@ class LogWidget(QTextEdit):
 
                 cur.insertText(clean_chunk, fmt)
                 self.setTextCursor(cur)
-                self.ensureCursorVisible()
+                self._scroll_to_end_if_following()
                 self._streaming_has_content = True
 
             # Finalize turn
@@ -2101,7 +2115,7 @@ class LogWidget(QTextEdit):
                     cur.movePosition(cur.MoveOperation.End)
                     cur.insertText("\n")
                     self.setTextCursor(cur)
-                    self.ensureCursorVisible()
+                    self._scroll_to_end_if_following()
                 self._streaming_active = False
                 self._streaming_speaker = ""
                 self._streaming_has_content = False
@@ -2169,7 +2183,7 @@ class LogWidget(QTextEdit):
             cur.movePosition(cur.MoveOperation.End)
             cur.insertText(ch, fmt)
             self.setTextCursor(cur)
-            self.ensureCursorVisible()
+            self._scroll_to_end_if_following()
             self._pos += 1
         else:
             self._tmr.stop()
@@ -2177,8 +2191,54 @@ class LogWidget(QTextEdit):
             cur.movePosition(cur.MoveOperation.End)
             cur.insertText("\n")
             self.setTextCursor(cur)
-            self.ensureCursorVisible()
+            self._scroll_to_end_if_following()
             QTimer.singleShot(20, self._next)
+
+    # ── scroll policy ───────────────────────────────────────────────────────
+
+    def _on_user_scrolled(self, value: int):
+        """Track whether the viewport is parked at the bottom.
+
+        Connected to the scrollbar so any manual scroll updates the state.
+        The auto-scroll this replaces also lands at the bottom, so it reports
+        `following` back and does not fight itself.
+        """
+        if self._follow is None:
+            return
+        try:
+            sb = self.verticalScrollBar()
+            self._follow.user_scrolled(value, sb.maximum())
+        except Exception:
+            pass
+
+    def _scroll_to_end_if_following(self):
+        """Replaces a bare ensureCursorVisible().
+
+        Only scrolls when the user was already following the stream. If they
+        scrolled up to read something, leave them where they are.
+        """
+        if self._follow is None:
+            try:
+                self.ensureCursorVisible()
+            except Exception:
+                pass
+            return
+        try:
+            if self._follow.content_appended():
+                self.ensureCursorVisible()
+        except Exception:
+            pass
+
+    def scroll_to_newest(self):
+        """Explicit "jump to newest", for the UI and for a Ctrl+End style key."""
+        if self._follow is not None:
+            self._follow.force_follow()
+        try:
+            sb = self.verticalScrollBar()
+            sb.setValue(sb.maximum())
+            self.ensureCursorVisible()
+        except Exception:
+            pass
 
 _FILE_ICONS = {
     "image":   ("🖼", "#00d4ff"), "video":   ("🎬", "#ff6b00"),
@@ -7776,11 +7836,21 @@ class MainWindow(QMainWindow):
                 except Exception:
                     pass
                 # Speak aloud via EdgeTTS
-                spk_text = f"Alert sir! {msg} ka time ho gaya hai."
-                if hasattr(self, "speak") and callable(self.speak):
-                    self.speak(spk_text)
-                elif hasattr(self, "request_say") and callable(self.request_say):
-                    self.request_say(spk_text)
+                # Was a hardcoded Hinglish string containing the literal
+                # word "sir": "Alert sir! X ka time ho gaya hai." It ignored
+                # the configured name, the configured gender and the chosen
+                # language. core/announcer owns these sentences now.
+                try:
+                    from core.announcer import announce, timer_done_text
+                    _speak = None
+                    for _attr in ("speak", "request_say"):
+                        _fn = getattr(self, _attr, None)
+                        if callable(_fn):
+                            _speak = _fn
+                            break
+                    announce(timer_done_text(msg), speak=_speak)
+                except Exception as _ann_err:
+                    print(f"[Timer] announcement skipped: {_ann_err}")
 
             # 2. Update live primary countdown badge and telemetry bar
             primary = get_primary_timer()
@@ -8319,6 +8389,16 @@ class MainWindow(QMainWindow):
     def _build_input_row(self) -> QHBoxLayout:
         row = QHBoxLayout(); row.setSpacing(5)
         self._input = QLineEdit()
+        # Up/Down recall. The box was a plain QLineEdit with no history, so
+        # re-running "mausam batao" to check the forecast meant retyping it -
+        # a surprising omission in something you talk to all day. See
+        # ui/chat_scroll.py for the shell-style semantics.
+        try:
+            from ui.chat_scroll import InputHistory
+            self._input_history = InputHistory()
+            self._input.installEventFilter(self)
+        except Exception:
+            self._input_history = None
         self._input.setPlaceholderText("Type a command or question…")
         self._input.setFont(QFont(FONT_UI, 9))
         self._input.setFixedHeight(34)
@@ -9396,6 +9476,11 @@ class MainWindow(QMainWindow):
         txt = self._input.text().strip()
         if not txt: return
         self._input.clear()
+        try:
+            if getattr(self, "_input_history", None) is not None:
+                self._input_history.record(txt)
+        except Exception:
+            pass
         self._log.append_log(f"You: {txt}")
         if self.on_text_command:
             threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
@@ -9577,6 +9662,31 @@ class MainWindow(QMainWindow):
                 self._shortcut_help.open()
         except Exception as e:
             print(f"[Shortcuts] help failed: {e}")
+
+    def eventFilter(self, obj, event):
+        """Route Up/Down in the command box to history recall.
+
+        A QLineEdit does not navigate a history that does not exist, and
+        installing a filter on the box we created is less invasive than
+        subclassing. Returns True only when the key was consumed, so every
+        other event passes through untouched.
+        """
+        try:
+            from PyQt6.QtCore import QEvent
+            if (obj is getattr(self, "_input", None)
+                    and event.type() == QEvent.Type.KeyPress):
+                key = event.key()
+                hist = getattr(self, "_input_history", None)
+                if hist is not None:
+                    if key in (Qt.Key.Key_Up, Qt.Key.Key_Up):
+                        self._input.setText(hist.previous(self._input.text()))
+                        return True
+                    if key in (Qt.Key.Key_Down, Qt.Key.Key_Down):
+                        self._input.setText(hist.next(self._input.text()))
+                        return True
+        except Exception as e:
+            print(f"[History] key handling failed: {e}")
+        return super().eventFilter(obj, event)
 
     def _clear_input(self):
         try:
