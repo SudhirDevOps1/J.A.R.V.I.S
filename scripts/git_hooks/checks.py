@@ -241,6 +241,30 @@ def _flake8_installed() -> bool:
         return False
 
 
+def _failure_lines(result, limit: int = 20) -> List[str]:
+    """Extract something readable from a failed subprocess.
+
+    Reads stderr as well as stdout. The first version only looked at stdout and
+    fell back to printing "?", which is exactly what happened the first time
+    the pre-push hook fired: pytest had exited with a usage error on stderr, so
+    the hook blocked the push and gave no reason at all. A blocking check that
+    cannot say why is indistinguishable from a broken check, and gets disabled.
+    """
+    out = (result.stdout or "").strip()
+    err = (result.stderr or "").strip()
+
+    # pytest writes its summary to stdout; a usage error goes to stderr.
+    if not out:
+        out = err
+    elif err and ("error:" in err or "Traceback" in err):
+        out = out + "\n" + err
+
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    if not lines:
+        return [f"exit code {result.returncode}, no output captured"]
+    return lines[-limit:]
+
+
 # ── entry points ────────────────────────────────────────────────────────────
 
 def run_pre_commit(root: Optional[Path] = None, *, quiet: bool = False) -> int:
@@ -316,26 +340,37 @@ def run_pre_push(root: Optional[Path] = None, *, quiet: bool = False,
     # 2. critical imports still resolve
     probe = (
         "import ui, main, core.action_loader, core.edge_router, "
-        "core.reflex_policy, core.learning_loop"
+        "core.reflex_policy, core.learning_loop, core.app_identity"
     )
     r = subprocess.run([sys.executable, "-c", probe],
                        capture_output=True, text=True, cwd=str(root))
     if r.returncode != 0:
         failed = True
         say("pre-push: critical imports failed:")
-        say("  " + (r.stderr.strip().splitlines() or ["?"])[-1])
+        for line in _failure_lines(r):
+            say("  " + line)
 
     # 3. fast tests
+    #
+    # The bound is applied with subprocess's own timeout rather than
+    # `--timeout=`. pytest-timeout is not a dependency of this project, and
+    # passing the flag without the plugin installed makes pytest exit 4 with a
+    # usage error written to stderr - which looked exactly like a test failure
+    # for a reason that had nothing to do with the tests.
     if not skip_tests:
-        r = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "-x", "-m", "not network",
-             "--timeout=300"],
-            capture_output=True, text=True, cwd=str(root),
-        )
-        if r.returncode != 0:
+        try:
+            r = subprocess.run(
+                [sys.executable, "-m", "pytest", "-q", "-x", "-m", "not network"],
+                capture_output=True, text=True, cwd=str(root), timeout=1800,
+            )
+        except subprocess.TimeoutExpired:
+            failed = True
+            say("pre-push: test suite exceeded 30 minutes and was killed.")
+            r = None
+        if r is not None and r.returncode != 0:
             failed = True
             say("pre-push: test suite failed:")
-            for line in (r.stdout.strip().splitlines() or ["?"])[-15:]:
+            for line in _failure_lines(r)[-20:]:
                 say("  " + line)
 
     if not failed:

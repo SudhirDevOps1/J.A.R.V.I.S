@@ -375,3 +375,59 @@ def test_check_passes_on_a_clean_tree():
     """
     from scripts.git_hooks.checks import run_pre_push
     assert run_pre_push(_ROOT, quiet=True, skip_tests=True) == 0
+
+
+# ── failure diagnostics ─────────────────────────────────────────────────────
+
+class _FakeResult:
+    def __init__(self, returncode=1, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def test_failure_lines_reads_stderr_when_stdout_is_empty():
+    """The bug this function exists to prevent.
+
+    The hook blocked a real push printing a bare "?" because pytest had exited
+    with a usage error on stderr. A blocking check that cannot say why is
+    indistinguishable from a broken one, and gets disabled.
+    """
+    from scripts.git_hooks.checks import _failure_lines
+    r = _FakeResult(4, stdout="", stderr="pytest: error: unrecognized arguments")
+    lines = _failure_lines(r)
+    assert any("unrecognized arguments" in ln for ln in lines)
+
+
+def test_failure_lines_never_returns_a_bare_placeholder():
+    """No output at all must still produce something informative."""
+    from scripts.git_hooks.checks import _failure_lines
+    lines = _failure_lines(_FakeResult(3, stdout="", stderr=""))
+    assert lines == ["exit code 3, no output captured"]
+
+
+def test_failure_lines_prefers_stdout_for_a_normal_test_failure():
+    from scripts.git_hooks.checks import _failure_lines
+    r = _FakeResult(1, stdout="FAILED tests/x.py::test_y\n1 failed", stderr="")
+    assert "1 failed" in " ".join(_failure_lines(r))
+
+
+def test_failure_lines_appends_a_traceback_from_stderr():
+    """A crash after partial output should show both, or the cause is hidden."""
+    from scripts.git_hooks.checks import _failure_lines
+    r = _FakeResult(1, stdout="1 failed", stderr="Traceback (most recent call last)")
+    out = " ".join(_failure_lines(r))
+    assert "1 failed" in out and "Traceback" in out
+
+
+def test_pre_push_does_not_pass_the_pytest_timeout_flag():
+    """pytest-timeout is not a dependency here.
+
+    Passing --timeout= without the plugin makes pytest exit 4 with a usage
+    error, which the hook then reports as a test failure, blocking pushes for
+    a reason unrelated to the tests.
+    """
+    from scripts.git_hooks import checks
+    src = Path(checks.__file__).read_text(encoding="utf-8-sig")
+    assert '"--timeout=' not in src
+    assert "timeout=1800" in src, "the bound should be applied via subprocess"
