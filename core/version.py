@@ -3,7 +3,7 @@ J.A.R.V.I.S. — Version and Release Metadata
 Maintained by SudhirDevOps1
 """
 
-__version__ = "1.4.0"
+__version__ = "0.2.0"
 __app_name__ = "J.A.R.V.I.S."
 __author__ = "SudhirDevOps1"
 __license__ = "MIT"
