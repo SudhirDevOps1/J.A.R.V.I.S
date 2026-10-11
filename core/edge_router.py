@@ -71,6 +71,58 @@ _OBS_JUNK_TOKENS = {
     "is", "us", "ye", "yeh", "wo", "woh", "isko", "ise", "use", "unhe", ""
 }
 
+# Words that can NEVER be an application name.
+#
+# The open/close app reflexes take a 1-2 word token run as the app name, which
+# is too permissive for natural Hinglish. "timers aur tasks band karo" matched
+# the close-app rule and produced app_name="aur tasks", so JARVIS announced it
+# was closing an app called "aur tasks". "main nahi kiya hu use band kro" gave
+# "hu use". These are conjunctions, pronouns and subject nouns, never app names.
+_NON_APP_WORDS = {
+    # conjunctions / function words
+    "aur", "or", "but", "phir", "fir", "ab", "phir", "bhi", "hi", "to",
+    "wo", "ye", "yeh", "woh", "je", "jab", "tab", "agar", "kyunki", "ki",
+    "ka", "ke", "ko", "se", "me", "mein", "par", "pe", "tak", "takki",
+    # pronouns / particles
+    "main", "mein", "hum", "tum", "tu", "aap", "apne", "mera", "meri", "mere",
+    "tera", "teri", "tere", "uska", "uski", "uske", "unka", "unki", "unke",
+    "kuch", "sab", "sabhi", "jaldi", "abhi", "phir", "baad", "waala", "wali",
+    # auxiliary / tense verbs that survive strip_action_verbs
+    "hu", "haim", "hai", "ho", "hun", "hoon", "raha", "rahi", "rahe",
+    "kiya", "ki", "kar", "karta", "karti", "karte", "karna", "karte",
+    "hu", "use", "usi", "un", "in", "is", "it", "tha", "thi", "the",
+    "gaya", "gayi", "gay", "chalo", "chala", "chali", "bolo", "bol",
+    "dono", "sabko", "mujhe", "tujhe", "tumhe", "aapko", "humko",
+    # interrogatives — "kya hain" re-parses into "kaun hai" after the verb is
+    # stripped, which then gets treated as an app name
+    "kya", "kaun", "kab", "kyun", "kahan", "kahan", "kitne", "kitna",
+    "kyun", "kisse", "kis", "kiski", "kiska", "hai", "hain", "hota", "hoti",
+    "matlab", "yaani", "jaise", "aise", "waise", "tada", "bas", "sirf",
+    # assistant self-reference (JARVIS addressing itself)
+    "jarvis", "friday", "assistant", "system",
+    # common non-app nouns that show up in requests
+    "timer", "timers", "task", "tasks", "file", "files", "folder", "note",
+    "notes", "app", "apps", "program", "programs", "window", "windows",
+    "tab", "tabs", "kuch", "sab", "hota", "hai", "hain", "raha", "rahi",
+}
+
+
+def _is_filler_phrase(text: str) -> bool:
+    """True when every word in `text` is a word that cannot be an app name.
+
+    Guards the open/close app reflexes against Hinglish that merely happens to
+    end in an app-ish verb. Returning True means "this is not a real app
+    target", so the caller must fall through to the rest of the router instead
+    of dispatching a nonsense action.
+    """
+    try:
+        words = re.findall(r"[a-zA-Z]+", (text or "").lower())
+        if not words:
+            return True
+        return all(w in _NON_APP_WORDS for w in words)
+    except Exception:
+        return False
+
 
 class NeedleToolRouter:
     """Fast Local OS Tool & Command Reflex Dispatcher (<10ms)."""
@@ -556,7 +608,7 @@ class NeedleToolRouter:
             if not any(k in app_target for k in _folder_words):
                 app_target = re.sub(r"\s+(karo|do|please|now)$", "", app_target).strip()
                 app_target = strip_action_verbs(app_target)  # ADDITIVE: "launch kro" -> "" (garbage guard)
-                if app_target:
+                if app_target and not _is_filler_phrase(app_target):
                     return _dispatch("open_app", {"action": "open", "name": app_target})
 
         # Matches: "close chrome", "kill notepad", "chrome band karo", "spotify band"
@@ -567,7 +619,7 @@ class NeedleToolRouter:
             if not any(k in app_target for k in ("storage", "camera", "window", "tab", "pc", "computer", "wifi", "internet")):
                 app_target = re.sub(r"\s+(karo|do|please|now)$", "", app_target).strip()
                 app_target = strip_action_verbs(app_target)  # ADDITIVE: verb leak guard
-                if app_target:
+                if app_target and not _is_filler_phrase(app_target):
                     return _dispatch("open_app", {"action": "close", "name": app_target})
 
         # -- Storage & Disk Analysis ------------------------------------------
