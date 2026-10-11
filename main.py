@@ -2203,9 +2203,17 @@ class JarvisLive:
                 _when  = "earlier today" if _delta == 0 else ("yesterday" if _delta == 1 else f"{_delta} days ago")
             except Exception:
                 _when = "last time"
-            session_clause = (
-                f" Also briefly and naturally mention that {_when}: {last['summary']}."
-            )
+            raw_sum = (last.get("summary") or "").strip()
+            # Do NOT recite robotic technical traces or tool actions
+            _is_robotic = any(w in raw_sum.lower() for w in [
+                "tool", "switch chalaya", "action perform", "input handle",
+                "summary mein yeh bataya", "execution", "function call"
+            ])
+            if raw_sum and not _is_robotic:
+                session_clause = (
+                    f" If natural, warmly reference what the user was working on {_when} (e.g. {raw_sum}). "
+                    f"Never read technical logs or say 'summary mein yeh bataya gaya hai'."
+                )
 
         if cur_persona == "companion":
             addr = f"'{u_name}'" if u_name else "'Jaan' or 'Suno na'"

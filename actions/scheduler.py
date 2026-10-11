@@ -57,7 +57,7 @@ def _save(jobs: list) -> None:
 
 
 def _fire(job: dict, player=None) -> None:
-    """Job fire: HUD log + speak + optional routine. Never raises."""
+    """Job fire: HUD log + speak + optional routine/file automation. Never raises."""
     try:
         msg = job.get("message", "Scheduled task.")
         _log(player, f"[scheduler] {job.get('name', 'job')}: {msg}")
@@ -68,6 +68,25 @@ def _fire(job: dict, player=None) -> None:
                 _oa({"action": "routine", "routine": routine})
             except Exception:
                 pass
+
+        # Real automated file update (e.g. daily news update)
+        target_file = job.get("target_file")
+        if target_file and job.get("auto_news"):
+            try:
+                from actions.file_controller import _resolve_path
+                from actions.web_search import web_search
+                f_path = _resolve_path(str(target_file))
+                topic = job.get("news_topic", "latest AI technology news India")
+                raw_news = web_search({"query": topic, "mode": "news"})
+                if raw_news and f_path.exists():
+                    now_str = time.strftime("%Y-%m-%d %I:%M %p")
+                    entry = f"\n\n<!-- J.A.R.V.I.S Daily Update: {now_str} -->\n<div class='daily-news-update'>\n<h3>📰 AI & Tech Trends ({now_str})</h3>\n<p>{raw_news[:2500]}</p>\n</div>\n"
+                    with open(f_path, "a", encoding="utf-8") as f:
+                        f.write(entry)
+                    _log(player, f"[scheduler] Daily news appended to {f_path.name}")
+            except Exception as e:
+                _log(player, f"[scheduler] File update error: {e}")
+
         _audit("scheduler_fire", job.get("name", ""))
     except Exception:
         pass
@@ -118,12 +137,13 @@ def _parse_natural(text: str) -> dict | None:
     return None
 
 
-def _add_time_job(name: str, message: str, spec: dict, routine: str, player=None) -> str:
+def _add_time_job(name: str, message: str, spec: dict, routine: str, player=None, target_file: str = "", auto_news: bool = False, news_topic: str = "") -> str:
     sched = _get_sched()
     if sched is None:
         return "Scheduler lib (apscheduler) install karo: pip install apscheduler."
     jobs = _load()
     job = {"name": name, "message": message, "routine": routine,
+           "target_file": target_file, "auto_news": auto_news, "news_topic": news_topic,
            "spec": spec, "at": time.strftime("%Y-%m-%d %I:%M %p")}
     try:
         from datetime import datetime as _dt, timedelta as _td
@@ -297,15 +317,18 @@ def scheduler(parameters: dict | None = None, player=None, session_memory=None, 
         else:
             return ("Samajh nahi aaya. Bolo: 'roz subah 9 baje X', 'har 30 minute Y', "
                     "'10 minute me Z', ya file/battery/app trigger.")
-    return _add_time_job(name, message, spec, routine, player)
+    target_file = str(params.get("target_file", "") or "").strip()
+    auto_news = bool(params.get("auto_news", False) or "news" in message.lower() or "news" in name.lower())
+    news_topic = str(params.get("news_topic", "latest AI technology trends in India") or "").strip()
+    return _add_time_job(name, message, spec, routine, player, target_file=target_file, auto_news=auto_news, news_topic=news_topic)
 
 
 TOOL = {
     "name": "scheduler",
     "description": (
         "Recurring schedules + smart triggers (cron/interval/once, file-arrival, "
-        "battery-low, app-open). Trigger on 'roz subah', 'har 30 minute', 'nayi file aaye', "
-        "'battery kam ho'. Do NOT use reminder for recurring/smart triggers."
+        "battery-low, app-open, daily file news updates). Trigger on 'roz subah', 'har 30 minute', "
+        "'daily update karo is file mein', 'nayi file aaye', 'battery kam ho'. Do NOT use reminder for recurring/smart triggers."
     ),
     "parameters": {
         "type": "OBJECT",
@@ -318,6 +341,9 @@ TOOL = {
             "kind": {"type": "STRING", "description": "file | battery | app | cron | interval"},
             "folder": {"type": "STRING", "description": "Folder for file trigger"},
             "app": {"type": "STRING", "description": "App name for app trigger"},
+            "target_file": {"type": "STRING", "description": "Target file path if this job appends daily data/news"},
+            "auto_news": {"type": "BOOLEAN", "description": "True if this scheduled job should fetch fresh news and append to target_file"},
+            "news_topic": {"type": "STRING", "description": "News topic to search and update (e.g. 'latest AI news')"},
         },
         "required": ["action"],
     },

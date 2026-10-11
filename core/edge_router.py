@@ -248,8 +248,13 @@ class NeedleToolRouter:
                 pass
 
             try:
-                from core import reflex_policy
-                execute_now, _reason = reflex_policy.gate(text, tool_name)
+                # Safe, non-destructive OS reflexes execute immediately without gating
+                _SAFE_ACTIONS = {"lock_screen", "screenshot", "mute", "unmute", "volume_up", "volume_down"}
+                if tool_name == "computer_settings" and tool_args.get("action") in _SAFE_ACTIONS:
+                    execute_now = True
+                else:
+                    from core import reflex_policy
+                    execute_now, _reason = reflex_policy.gate(text, tool_name)
             except Exception:
                 # Policy unavailable -> keep legacy behaviour rather than
                 # silently breaking every local command.
@@ -388,7 +393,7 @@ class NeedleToolRouter:
             return _dispatch("troubleshoot_screen", {"query": clean})
 
         # -- PC / System Lock ------------------------------------------------
-        if re.search(r"\b(pc\s*lock|system\s*lock|computer\s*lock|lock\s*(?:pc|screen|computer|system)|screen\s*lock\s*karo)\b", clean):
+        if re.search(r"\b(pc\s*lock|system\s*lock|computer\s*lock|lock\s*(?:pc|screen|computer|system|window|windows)|(?:window|windows|screen|pc|computer|system)\s*lock(?:\s*karo|\s*kar\s*do)?|screen\s*lock\s*karo|lock\s*karo)\b", clean):
             return _dispatch("computer_settings", {"action": "lock_screen"})
 
         # -- Clear Chat / Log ------------------------------------------------

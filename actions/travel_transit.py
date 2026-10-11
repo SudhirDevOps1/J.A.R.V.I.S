@@ -44,6 +44,26 @@ _KNOWN_CORRIDORS: dict[tuple[str, str], list[dict]] = {
         {"name": "Vande Bharat Express (22225)", "dep": "06:25", "arr": "09:35", "dur": "3h 10m", "classes": "CC, EC", "type": "Semi-High Speed"},
         {"name": "Deccan Queen (12123)", "dep": "17:10", "arr": "20:25", "dur": "3h 15m", "classes": "CC, 2S", "type": "Intercity"},
     ],
+    ("bhabua", "banaras"): [
+        {"name": "Purushottam Express (12801)", "dep": "15:35", "arr": "17:00", "dur": "1h 25m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
+        {"name": "Budh Purnima Express (14223)", "dep": "04:20", "arr": "05:40", "dur": "1h 20m", "classes": "2A, 3A, SL, 2S", "type": "Express"},
+        {"name": "Doongurpur Intercity (13249)", "dep": "09:12", "arr": "10:45", "dur": "1h 33m", "classes": "CC, 2S", "type": "Intercity"},
+    ],
+    ("bhabua road", "banaras"): [
+        {"name": "Purushottam Express (12801)", "dep": "15:35", "arr": "17:00", "dur": "1h 25m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
+        {"name": "Budh Purnima Express (14223)", "dep": "04:20", "arr": "05:40", "dur": "1h 20m", "classes": "2A, 3A, SL, 2S", "type": "Express"},
+        {"name": "Doongurpur Intercity (13249)", "dep": "09:12", "arr": "10:45", "dur": "1h 33m", "classes": "CC, 2S", "type": "Intercity"},
+    ],
+    ("bhabua", "varanasi"): [
+        {"name": "Purushottam Express (12801)", "dep": "15:35", "arr": "17:00", "dur": "1h 25m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
+        {"name": "Budh Purnima Express (14223)", "dep": "04:20", "arr": "05:40", "dur": "1h 20m", "classes": "2A, 3A, SL, 2S", "type": "Express"},
+        {"name": "Doongurpur Intercity (13249)", "dep": "09:12", "arr": "10:45", "dur": "1h 33m", "classes": "CC, 2S", "type": "Intercity"},
+    ],
+    ("bhabua road", "varanasi"): [
+        {"name": "Purushottam Express (12801)", "dep": "15:35", "arr": "17:00", "dur": "1h 25m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
+        {"name": "Budh Purnima Express (14223)", "dep": "04:20", "arr": "05:40", "dur": "1h 20m", "classes": "2A, 3A, SL, 2S", "type": "Express"},
+        {"name": "Doongurpur Intercity (13249)", "dep": "09:12", "arr": "10:45", "dur": "1h 33m", "classes": "CC, 2S", "type": "Intercity"},
+    ],
 }
 
 
@@ -129,6 +149,7 @@ def _format_transit_card(
     flight_dur: str,
     bus_dur: str,
     gmaps_url: str,
+    flight_label: str = "Non-Stop Direct",
 ) -> str:
     """Format an authentic Cyber-HUD HTML card for the player content panel."""
     if trains:
@@ -181,7 +202,7 @@ def _format_transit_card(
             <div style="flex: 1; background: #001726; border: 1px solid #00dcff; border-radius: 4px; padding: 8px; text-align: center;">
                 <div style="color: #a0aec0; font-size: 10px;">✈️ FLIGHT</div>
                 <div style="color: #00dcff; font-weight: bold; font-size: 14px;">{flight_dur}</div>
-                <div style="color: #a0aec0; font-size: 10px;">Non-Stop Direct</div>
+                <div style="color: #a0aec0; font-size: 10px;">{flight_label}</div>
             </div>
             <div style="flex: 1; background: #001726; border: 1px solid #00dcff; border-radius: 4px; padding: 8px; text-align: center;">
                 <div style="color: #a0aec0; font-size: 10px;">🚌 BUS / VOLVO</div>
@@ -236,13 +257,18 @@ def travel_transit(parameters: dict | None = None, player=None, **_) -> str:
         drive_h = 14.5
 
     # 2. Derive multimodal transit times
-    # Flight duration: ~1h takeoff/landing + distance / 700 km/h
-    flight_h = max(1.0, round(1.0 + (road_km / 700.0), 1))
-    flight_dur = f"{int(flight_h)}h {int((flight_h % 1) * 60):02d}m"
+    # Flight duration: only realistic for journeys > 180 km
+    if road_km > 180:
+        flight_h = max(1.0, round(1.0 + (road_km / 700.0), 1))
+        flight_dur = f"{int(flight_h)}h {int((flight_h % 1) * 60):02d}m"
+        flight_label = "Non-Stop Direct"
+    else:
+        flight_dur = "N/A"
+        flight_label = "Distance < 180 km"
 
     # Bus duration: highway speed ~50-55 km/h with stops
-    bus_h = max(2.0, round(road_km / 52.0, 1))
-    bus_dur = f"~{int(bus_h)} hrs"
+    bus_h = max(1.0, round(road_km / 50.0, 1))
+    bus_dur = f"~{int(bus_h)} hrs" if bus_h >= 1.5 else f"~{int(bus_h * 60)} mins"
 
     trains = _find_trains(origin, dest, road_km)
     fastest_train = trains[0] if trains else None
@@ -255,7 +281,7 @@ def travel_transit(parameters: dict | None = None, player=None, **_) -> str:
     )
 
     # 3. Render Cyber-HUD Telemetry Card
-    card = _format_transit_card(origin, dest, road_km, drive_h, trains, flight_dur, bus_dur, gmaps_url)
+    card = _format_transit_card(origin, dest, road_km, drive_h, trains, flight_dur, bus_dur, gmaps_url, flight_label=flight_label)
     if player and hasattr(player, "show_content"):
         try:
             player.show_content(f"TRANSIT — {origin.upper()} TO {dest.upper()}", card)
@@ -267,29 +293,34 @@ def travel_transit(parameters: dict | None = None, player=None, **_) -> str:
         if fastest_train:
             return (
                 f"{origin} se {dest} ke beech road distance {road_km} km hai. "
-                f"Fastest option {fastest_train['name']} hai jo {fastest_train['dur']} leti hai "
-                f"(Departure: {fastest_train['dep']}). Poori train list maine screen par render kar di hai."
+                f"Fastest train {fastest_train['name']} hai jo {fastest_train['dur']} leti hai "
+                f"(Departure: {fastest_train['dep']}). Poori train details screen par ready hain."
             )
-        return f"{origin} se {dest} ke trains ki poori jankari screen par render kar di gayi hai."
+        return (
+            f"{origin} se {dest} ke verified live train schedules offline cache me nahi hain. "
+            f"Kripya confirmed seat availability ke liye live IRCTC portal check karein."
+        )
 
     if mode == "flight":
+        if road_km <= 180:
+            return f"{origin} se {dest} ke beech distance sirf {road_km} km hai, isliye yahan direct flight service available nahi hai. Road ya train best option hai."
         return (
             f"{origin} se {dest} ki non-stop flight lagbhag {flight_dur} leti hai. "
-            f"Distance {road_km} km hai. Flight aur travel telemetry card screen par ready hai."
+            f"Distance {road_km} km hai. Flight telemetry screen par ready hai."
         )
 
     if mode == "bus":
         return (
             f"{origin} se {dest} ke beech bus journey lagbhag {bus_dur} ({road_km} km) ki hai. "
-            f"AC Sleeper aur Roadways options screen par available hain."
+            f"Bus aur roadways route card screen par available hai."
         )
 
     # Comprehensive transit summary
     fastest_str = f" Fastest train {fastest_train['name']} ({fastest_train['dur']}) hai." if fastest_train else ""
+    flight_str = f" Flight se ~{flight_dur}." if road_km > 180 else ""
     return (
-        f"{origin} se {dest} ka road distance {road_km} km hai (driving: ~{drive_h} hrs). "
-        f"Flight se yeh sirf {flight_dur} ka safar hai.{fastest_str} "
-        f"Maine Train, Flight, Bus aur Map route ka poora comparison card screen par render kar diya hai."
+        f"{origin} se {dest} ka road distance {road_km} km hai (driving: ~{drive_h} hrs).{flight_str}{fastest_str} "
+        f"Route ka comparison card screen par render kar diya hai."
     )
 
 
