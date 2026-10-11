@@ -26,6 +26,18 @@ memory/learning.db or config/api_keys.json.
 import pytest
 
 
+def pytest_configure(config):
+    """Keep Qt off any real display for the whole run.
+
+    Without this, constructing a QWidget on a headless CI runner aborts the
+    process (not an exception — a hard exit), so it cannot be handled in a
+    fixture. Setting it at configure time means every test, including ones in
+    files this project did not write, gets a usable platform plugin.
+    """
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
 @pytest.fixture(autouse=True)
 def _reflex_gate_off_by_default():
     """Run the suite with the reflex confidence gate disabled.

@@ -663,6 +663,16 @@ class JarvisLive:
         self.ui.request_say = self.plugin_say   # plugins: mid-task speech channel
         self.ui.speak       = self.speak        # ADDITIVE: Unified speech channel for HUD alerts/timers
 
+        # Give the UI the registries so the Ctrl+K palette can list every tool
+        # and plugin without a hand-maintained menu. The palette is built lazily
+        # on first use, so this assignment is cheap.
+        try:
+            self.ui._action_registry = self._action_registry
+            self.ui._plugin_registry = self._plugin_registry
+            self.ui._jarvis = self
+        except Exception:
+            pass
+
         # ── MCP servers (config/mcp_servers.json) ────────────────────────────
         # Declarative MCP: tools declared there join Gemini's tool list under an
         # mcp__<server>__<tool> namespace. Discovery is lazy and must not block

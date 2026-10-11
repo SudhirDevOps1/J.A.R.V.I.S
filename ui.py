@@ -6866,12 +6866,33 @@ class MainWindow(QMainWindow):
         if not self._ready:
             self._show_setup()
 
-        sc_mute = QShortcut(QKeySequence("F4"), self)
-        sc_mute.activated.connect(self._toggle_mute)
-        sc_full = QShortcut(QKeySequence("F11"), self)
-        sc_full.activated.connect(self._toggle_fullscreen)
-        sc_intr = QShortcut(QKeySequence("Escape"), self)
-        sc_intr.activated.connect(self._do_interrupt)
+        # Escape is intentionally NOT bound here. It is the dismiss key for eight
+        # overlays (Setup, Provider, Customize, PluginManager, AudioDevice,
+        # PluginSettings, the command palette and the history panel), and binding
+        # it a second time to "interrupt speech" meant closing any settings
+        # dialog cut JARVIS off mid-sentence. The registry below binds Esc to
+        # interrupt, but _do_interrupt is now a no-op while an overlay is open,
+        # so the key does the contextually correct thing.
+        try:
+            from ui.shortcuts import ShortcutManager, register_defaults
+            self._shortcut_mgr = ShortcutManager(self)
+            register_defaults(self._shortcut_mgr, self)
+            conflicts = self._shortcut_mgr.conflicts()
+            if conflicts:
+                print(f"[Shortcuts] duplicate bindings ignored: {conflicts}")
+        except Exception as e:
+            self._shortcut_mgr = None
+            print(f"[Shortcuts] registry unavailable: {e}")
+
+        # Command palette + history + help overlays (lazily built, all fail-safe).
+        self._palette = None
+        self._history_panel = None
+        self._shortcut_help = None
+        # Filled in by main.py once the registries exist, so the palette can list
+        # every tool and plugin. Kept as plain attributes rather than looked up
+        # through self so a missing registry can never break the UI.
+        self._action_registry = None
+        self._plugin_registry = None
 
         try:
             from core.sfx import play_sfx
@@ -8464,9 +8485,20 @@ class MainWindow(QMainWindow):
         self._content_title_lbl.setText(title.upper()[:48])
         self._content_ts_lbl.setText(_time.strftime("%H:%M:%S"))
         text_str = str(text or "")
-        if any(tag in text_str for tag in ("<table", "<div", "<html", "<span", "<b", "<p")):
-            self._content_display.setHtml(text_str)
-        else:
+        # Sanitize before setHtml. This text comes from web_search results, tool
+        # output and model text, not from us, and passing it straight to setHtml
+        # meant a search result containing markup rendered as markup. The old
+        # sniff (`any(tag in text for tag in ("<table","<div",...))`) also had the
+        # opposite failure: a sentence mentioning "<p" rendered as broken markup.
+        try:
+            from ui.html_sanitize import looks_like_html, sanitize_html
+            if looks_like_html(text_str):
+                self._content_display.setHtml(sanitize_html(text_str))
+            else:
+                self._content_display.setPlainText(text_str)
+        except Exception:
+            # If the sanitizer itself is unavailable, fall back to plain text,
+            # which is always safe.
             self._content_display.setPlainText(text_str)
         try:  # ADDITIVE: thumbs/CTA context (fail-safe)
             self._last_ai_text = f"{title}: {(text or '')[:200]}"
@@ -8565,7 +8597,10 @@ class MainWindow(QMainWindow):
             l.setStyleSheet(f"color: {color}; background: transparent;")
             return l
 
-        lay.addWidget(_fl("[F4] Mute  ·  [F11] Fullscreen"))
+        lay.addWidget(_fl(
+            "[Ctrl+K] Commands  ·  [F4] Mute  ·  [F11] Fullscreen  ·  "
+            "[Esc] Interrupt  ·  [Ctrl+/] Keys"
+        ))
         lay.addSpacing(14)
 
         self._news_lbl = QLabel("📡 DEV NEWS: Connecting to HackerNews...")
@@ -9148,7 +9183,37 @@ class MainWindow(QMainWindow):
 
     # ────────────────────────────────────────────────────────────────────────────
 
+    def _open_overlay_is_active(self) -> bool:
+        """True when one of the keyboard-driven overlays is on screen.
+
+        Escape means "close this" when a dialog is open and "stop talking"
+        otherwise. Without this check a single binding could not serve both, and
+        closing a settings dialog cut speech off mid-sentence.
+        """
+        for attr in ("_palette", "_history_panel", "_shortcut_help"):
+            ov = getattr(self, attr, None)
+            if ov is not None:
+                try:
+                    if ov.isVisible():
+                        return True
+                except Exception:
+                    pass
+        # The pre-existing overlays each track their own reference.
+        for attr in ("_overlay", "_customize_overlay", "_audio_devices",
+                     "_plugin_manager_overlay", "_memory_overlay", "_setup_overlay"):
+            ov = getattr(self, attr, None)
+            if ov is not None:
+                try:
+                    if ov.isVisible():
+                        return True
+                except Exception:
+                    pass
+        return False
+
     def _do_interrupt(self):
+        # If a dialog owns the Escape key, let it close instead of interrupting.
+        if self._open_overlay_is_active():
+            return
         if self.on_interrupt:
             self.on_interrupt()
 
@@ -9196,6 +9261,269 @@ class MainWindow(QMainWindow):
         self._log.append_log(f"You: {txt}")
         if self.on_text_command:
             threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
+
+    # ── Global shortcuts & overlay surfaces (see ui/shortcuts.py) ───────────
+    # Every one of these is fail-safe: a failure here must never stop the
+    # assistant from answering, so each is wrapped and reported rather than
+    # raised.
+
+    def _ui_commands(self) -> dict:
+        """UI-only commands offered in the palette, ahead of tools."""
+        return {
+            "Settings / customise":      self._open_customize,
+            "Audio devices":             self._open_audio_devices,
+            "Toggle PiP companion":      self._toggle_pip_shortcut,
+            "Toggle fullscreen":         self._toggle_fullscreen,
+            "Mute / unmute microphone":  self._toggle_mute,
+            "Interrupt speech":          self._do_interrupt,
+            "Keyboard shortcuts":        self._open_shortcut_help,
+            "Conversation history":      self._open_history,
+            "Copy last reply":           self._copy_last_reply,
+            "Clear input":               self._clear_input,
+        }
+
+    def _place_overlay(self, ov, width: int | None = None, height: int | None = None) -> None:
+        """Centre an un-parented overlay over the central widget.
+
+        The three new overlays are QFrame children that are deliberately NOT in
+        a layout — a layout would stretch them to fill and defeat their fixed
+        size. But a child with no geometry is left at (0,0), which put them on
+        top of the left-hand metrics rail.
+
+        Clamps to the available area so an overlay taller than a small window is
+        still fully visible.
+        """
+        try:
+            cw = self.centralWidget()
+            w = width or ov.width()
+            h = height or ov.height()
+            avail_w = max(cw.width(), w)
+            avail_h = max(cw.height(), h)
+            x = max(0, (avail_w - w) // 2)
+            y = max(0, (avail_h - h) // 3)
+            ov.setGeometry(x, y, w, h)
+        except Exception as e:
+            print(f"[Overlay] placement failed: {e}")
+
+    def _open_command_palette(self):
+        """Ctrl+K. Built lazily so import cost is paid once, on first use."""
+        try:
+            if self._palette is None:
+                from ui.palette_widget import CommandPalette
+                self._palette = CommandPalette.build(
+                    self.centralWidget(),
+                    action_registry=getattr(self, "_action_registry", None),
+                    plugin_registry=getattr(self, "_plugin_registry", None),
+                    ui_commands=self._ui_commands(),
+                )
+                self._palette.submitted.connect(self._run_palette_request)
+
+            # Rebuild the entry list on every open rather than caching it
+            # forever. Tools can be added, and plugins toggled on or off, while
+            # the app is running; a cached list would quietly go stale and the
+            # palette would stop reflecting reality.
+            try:
+                from ui.command_palette import build_entries
+                self._palette.set_entries(build_entries(
+                    getattr(self, "_action_registry", None),
+                    getattr(self, "_plugin_registry", None),
+                    self._ui_commands(),
+                ))
+            except Exception as e:
+                print(f"[Palette] refresh skipped: {e}")
+
+            self._place_overlay(self._palette)
+            self._palette.open()
+        except Exception as e:
+            print(f"[Palette] open failed: {e}")
+            self.write_log(f"SYS: Command palette unavailable ({e})")
+
+    def _run_palette_request(self, text: str):
+        """A tool chosen in the palette becomes a normal request, so it goes
+        through the same thread hop as the send button."""
+        if not text:
+            return
+        try:
+            self._input.setText(text)
+            self._send()
+        except Exception as e:
+            print(f"[Palette] request failed: {e}")
+
+    def _collect_history_turns(self) -> list:
+        """Build {user, assistant} turns from the live session log.
+
+        JarvisLive._session_log is a flat list of prefixed strings such as
+        "User: open notepad" and "Friday: Opened notepad." — the earlier code
+        wrapped each line in its own turn, so every assistant line rendered as
+        "You:  Friday: ..." and no turn had both halves.
+
+        This pairs consecutive user/assistant lines into real turns, strips the
+        prefixes, and skips system noise. It also merges the on-screen log so a
+        turn shown in the HUD appears in history even if the session log was
+        cleared on reconnect.
+        """
+        import re as _re
+
+        jarvis = getattr(self, "_jarvis", None)
+        name = (getattr(jarvis, "_asst_name", "") or "JARVIS").strip() or "JARVIS"
+
+        lines: list[str] = []
+        raw = getattr(jarvis, "_session_log", None) if jarvis else None
+        if isinstance(raw, list):
+            lines.extend(str(x) for x in raw)
+        if not lines:
+            try:
+                block = self._log.toPlainText()
+                lines = [ln for ln in (block or "").splitlines() if ln.strip()]
+            except Exception:
+                lines = []
+
+        user_re = _re.compile(r"^\s*you\s*:\s*(.*)$", _re.I)
+        asst_re = _re.compile(rf"^\s*{_re.escape(name)}\s*:\s*(.*)$", _re.I)
+
+        turns: list[dict] = []
+        current: dict | None = None
+        for ln in lines:
+            m = user_re.match(ln)
+            if m:
+                if current:
+                    turns.append(current)
+                current = {"user": m.group(1).strip(), "assistant": ""}
+                continue
+            m = asst_re.match(ln)
+            if m:
+                text = m.group(1).strip()
+                if current is None:
+                    current = {"user": "", "assistant": text}
+                elif current["assistant"]:
+                    current["assistant"] += " " + text
+                else:
+                    current["assistant"] = text
+                continue
+            # SYS:/ERR: lines and anything else are not part of a conversation
+            # turn; ignore them rather than showing them as JARVIS replies.
+        if current:
+            turns.append(current)
+
+        # Only turns the user can actually re-run are worth offering.
+        return [t for t in turns if t.get("user")]
+
+    def _open_history(self):
+        """Ctrl+H. Reads the live session log held by JarvisLive."""
+        try:
+            if self._history_panel is None:
+                from ui.history_panel import HistoryPanel
+                self._history_panel = HistoryPanel(self.centralWidget(), [])
+                self._history_panel.rerun_requested.connect(self._run_palette_request)
+            turns = self._collect_history_turns()
+            self._history_panel.set_turns(turns)
+            self._place_overlay(self._history_panel)
+            self._history_panel.open()
+        except Exception as e:
+            print(f"[History] open failed: {e}")
+
+    def _open_shortcut_help(self):
+        """Ctrl+/ — generated from the registry, so it cannot go stale."""
+        try:
+            mgr = getattr(self, "_shortcut_mgr", None)
+            if mgr is None:
+                self.write_log("SYS: Shortcut registry not initialised.")
+                return
+            if self._shortcut_help is None:
+                from ui.shortcut_help import ShortcutHelp
+                self._shortcut_help = ShortcutHelp(self.centralWidget(), mgr)
+            if self._shortcut_help.isVisible():
+                self._shortcut_help.close_help()
+            else:
+                self._place_overlay(self._shortcut_help)
+                self._shortcut_help.open()
+        except Exception as e:
+            print(f"[Shortcuts] help failed: {e}")
+
+    def _clear_input(self):
+        try:
+            self._input.clear()
+            self._input.setFocus()
+        except Exception:
+            pass
+
+    def _copy_last_reply(self):
+        """Copy the most recent JARVIS line out of the log widget."""
+        try:
+            block = self._log.toPlainText() if hasattr(self._log, "toPlainText") else ""
+            lines = [ln for ln in (block or "").splitlines() if ln.strip()]
+            if not lines:
+                self.write_log("SYS: Nothing to copy yet.")
+                return
+            last = next((ln for ln in reversed(lines) if not ln.startswith("You:")), lines[-1])
+            from PyQt6.QtWidgets import QApplication
+            QApplication.clipboard().setText(last)
+            self.write_log("SYS: Copied the last reply.")
+        except Exception as e:
+            print(f"[Clipboard] copy last failed: {e}")
+
+    def _regenerate_last(self):
+        """Re-ask the previous user message."""
+        try:
+            log = getattr(self, "_jarvis", None)
+            turns = getattr(log, "_session_log", None) if log else None
+            if isinstance(turns, list) and turns:
+                self._input.setText(str(turns[-1]))
+                self._send()
+                return
+            self.write_log("SYS: Nothing to regenerate.")
+        except Exception as e:
+            print(f"[History] regenerate failed: {e}")
+
+    def _toggle_pip_shortcut(self):
+        """Ctrl+P.
+
+        The PiP entry point is `toggle_pip` (public, no underscore) — the earlier
+        lookup list only tried underscored names, so this shortcut silently bound
+        to nothing and pressing Ctrl+P did nothing at all.
+        """
+        fn = getattr(self, "toggle_pip", None)
+        if callable(fn):
+            try:
+                fn()
+                return
+            except Exception as e:
+                print(f"[PiP] toggle failed: {e}")
+                return
+        self.write_log("SYS: PiP mode is not available yet.")
+
+    def _toggle_quick_drawer(self):
+        """Ctrl+B.
+
+        `_toggle_drawer(self, checked)` takes a positional argument because it is
+        also wired to a button's toggled signal. Calling it with none raised
+        TypeError, which was swallowed, so the shortcut did nothing.
+        """
+        for name in ("_toggle_drawer", "_toggle_quick", "_toggle_quick_drawer"):
+            fn = getattr(self, name, None)
+            if not callable(fn):
+                continue
+            try:
+                # Pass False: we are toggling from a neutral keyboard state, and
+                # the handler flips its own stored visibility.
+                try:
+                    fn(False)
+                except TypeError:
+                    fn()
+                return
+            except Exception as e:
+                print(f"[Drawer] {name} failed: {e}")
+                return
+        # No drawer toggle exists; opening the palette is a reasonable
+        # substitute for "show me what I can do".
+        self._open_command_palette()
+
+    def _open_settings(self):
+        """Ctrl+, — settings live behind the customise overlay."""
+        try:
+            self._open_customize()
+        except Exception as e:
+            print(f"[Settings] open failed: {e}")
 
     def _apply_state(self, state: str):
         self.hud.state    = state
