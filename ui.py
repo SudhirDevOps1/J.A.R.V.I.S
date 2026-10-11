@@ -8585,20 +8585,33 @@ class MainWindow(QMainWindow):
         self._content_title_lbl.setText(title.upper()[:48])
         self._content_ts_lbl.setText(_time.strftime("%H:%M:%S"))
         text_str = str(text or "")
-        # Sanitize before setHtml. This text comes from web_search results, tool
-        # output and model text, not from us, and passing it straight to setHtml
-        # meant a search result containing markup rendered as markup. The old
-        # sniff (`any(tag in text for tag in ("<table","<div",...))`) also had the
+        # Render markdown, THEN sanitize. The order matters: markdown produces
+        # a narrow, known set of tags, and the sanitizer independently decides
+        # what survives, so rendering can never reopen the hole that sanitizing
+        # alone was closing.
+        #
+        # This text comes from web_search results, tool output and model text,
+        # not from us. Passing it straight to setHtml meant a search result
+        # containing markup rendered as markup. The old sniff
+        # (`any(tag in text for tag in ("<table","<div",...))`) also had the
         # opposite failure: a sentence mentioning "<p" rendered as broken markup.
         try:
             from ui.html_sanitize import looks_like_html, sanitize_html
-            if looks_like_html(text_str):
+            from ui.markdown import looks_like_markdown, render_markdown
+
+            rendered = None
+            if not looks_like_html(text_str) and looks_like_markdown(text_str):
+                rendered = render_markdown(text_str)
+
+            if rendered is not None:
+                self._content_display.setHtml(sanitize_html(rendered))
+            elif looks_like_html(text_str):
                 self._content_display.setHtml(sanitize_html(text_str))
             else:
                 self._content_display.setPlainText(text_str)
         except Exception:
-            # If the sanitizer itself is unavailable, fall back to plain text,
-            # which is always safe.
+            # If the renderer or sanitizer is unavailable, fall back to plain
+            # text, which is always safe.
             self._content_display.setPlainText(text_str)
         try:  # ADDITIVE: thumbs/CTA context (fail-safe)
             self._last_ai_text = f"{title}: {(text or '')[:200]}"

@@ -21,6 +21,13 @@ API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 
 def _get_api_key() -> str:
     try:
+        from memory.config_manager import get_gemini_key
+        k = (get_gemini_key() or "").strip()
+        if k:
+            return k
+    except Exception:
+        pass
+    try:
         from memory.config_manager import load_api_keys
         k = (load_api_keys().get("gemini_api_key") or "").strip()
         if k:
@@ -43,7 +50,6 @@ def _gemini_search(query: str) -> str:
         client = genai.Client(api_key=api_k)
         models_to_try = [
             "gemini-2.5-flash-lite",
-            "gemini-flash-latest",
             "gemini-2.5-flash",
             "gemini-3.7-flash",
             "gemini-2.0-flash",
@@ -66,6 +72,16 @@ def _gemini_search(query: str) -> str:
                     return text
             except Exception as e:
                 last_err = e
+                # Check for quota exhaustion / 429
+                err_s = str(e).lower()
+                if "429" in err_s or "quota" in err_s or "resource_exhausted" in err_s:
+                    try:
+                        from memory.config_manager import rotate_gemini_key
+                        new_k = rotate_gemini_key()
+                        if new_k and new_k != api_k:
+                            client = genai.Client(api_key=new_k)
+                    except Exception:
+                        pass
                 continue
     # Fallback to MultiLLM / Free Proxy or DDG
     try:
@@ -98,13 +114,16 @@ def _ddg_client():
 
 def _ddg_search(query: str, max_results: int = 6) -> list[dict]:
     results = []
-    with _ddg_client() as ddgs:
-        for r in ddgs.text(query, max_results=max_results):
-            results.append({
-                "title":   r.get("title",  ""),
-                "snippet": r.get("body",   ""),
-                "url":     r.get("href",   ""),
-            })
+    try:
+        with _ddg_client() as ddgs:
+            for r in ddgs.text(query, max_results=max_results):
+                results.append({
+                    "title":   r.get("title",  ""),
+                    "snippet": r.get("body",   ""),
+                    "url":     r.get("href",   ""),
+                })
+    except Exception as e:
+        print(f"[WebSearch] ⚠️ DDG search failed ({e})")
     return results
 
 

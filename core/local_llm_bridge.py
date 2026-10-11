@@ -170,14 +170,9 @@ def generate_local_llm(
         _host, _port = "localhost", 11434
     if not _is_port_open(_host, _port, timeout=0.05):
         with _bridge_lock:
-            loud = not _offline_logged
             _last_offline_time = time.monotonic()
-            _OFFLINE_COOLDOWN = min(_OFFLINE_COOLDOWN * 2.0, _OFFLINE_COOLDOWN_MAX)
+            _OFFLINE_COOLDOWN = 120.0
             _offline_logged = True
-            cool = _OFFLINE_COOLDOWN
-        if loud:
-            print(f"[LocalLLMBridge] Local engine not running on {cfg['url']}. "
-                  f"Backing off (next retry in {cool:.0f}s).")
         return None
 
 

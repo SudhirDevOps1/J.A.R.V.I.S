@@ -31,6 +31,22 @@ class ContextBuffer:
         self.last_assistant_response: str = ""
         self.history: List[Dict[str, Any]] = []
 
+    def reset(self) -> None:
+        """Reset conversation context state (useful between tests or session resets)."""
+        with self._lock:
+            self.last_app = ""
+            self.last_file = ""
+            self.last_note = ""
+            self.last_topic = ""
+            self.last_location = ""
+            self.last_url = ""
+            self.last_window = ""
+            self.last_tool = ""
+            self.last_tool_args = {}
+            self.last_user_query = ""
+            self.last_assistant_response = ""
+            self.history.clear()
+
     def get_active_window_title(self) -> str:
         """Query operating system for current foreground window title."""
         try:
@@ -164,9 +180,17 @@ class ContextBuffer:
             cur_loc = self.last_location
             cur_win = self.last_window
 
-        # 1. Close / Kill / Stop commands: pronoun refers to app or active window
-        if re.search(r"\b(band\s*karo|band\s*kar\s*do|close|kill|quit|stop|exit|hatao|minimize)\b", t_low):
-            target_app = cur_app or (cur_win.split("-")[0].strip() if cur_win else "")
+        # 1. Close / Kill / Stop commands: pronoun refers ONLY to an active app or known window
+        if re.search(r"\b(band\s*(?:karo|kro|kar\s*do|kardo)?|close|kill|quit|stop|exit|hatao|minimize)\b", t_low):
+            target_app = cur_app
+            if not target_app and cur_win:
+                win_candidate = cur_win.split("-")[0].strip()
+                if win_candidate.lower() in (
+                    "notepad", "chrome", "firefox", "edge", "brave", "spotify",
+                    "vlc", "code", "cmd", "terminal", "calculator", "whatsapp",
+                    "telegram", "obsidian"
+                ):
+                    target_app = win_candidate
             if target_app:
                 # Replace pronoun phrase with target_app
                 resolved = re.sub(
@@ -177,8 +201,9 @@ class ContextBuffer:
                 )
                 if resolved != raw:
                     return resolved
-                # If pronoun was at start or implicit: e.g. "band karo"
                 return f"{target_app} {raw}"
+            # Never let topics or files leak into close commands
+            return raw
 
         # 2. Read / Open / Show commands: pronoun refers to note or file
         if re.search(r"\b(padho|read|dikhao|show|open|kholo|content)\b", t_low):
@@ -231,7 +256,14 @@ class ContextBuffer:
                     return resolved
 
         # 6. Generic Fallback: if 'isko' or 'use' is used and we have an active app or note
-        fallback_ent = cur_app or cur_note or cur_topic
+        # Never resolve a topic if utterance implies closing/stopping/killing
+        if re.search(r"\b(band|close|kill|stop|exit|hatao)\b", t_low):
+            return raw
+
+        fallback_ent = cur_app or cur_note
+        if not fallback_ent and re.search(r"\b(research|search|padho|read|batao|explain|detail|jano)\b", t_low):
+            fallback_ent = cur_topic
+
         if fallback_ent:
             resolved = re.sub(
                 r"\b(isko|ise|isey|use|usko)\b",

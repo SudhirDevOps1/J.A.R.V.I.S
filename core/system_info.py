@@ -9,6 +9,8 @@ import shutil
 import string
 import socket
 import time
+import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Optional
 import psutil
@@ -46,15 +48,16 @@ def get_drive_stats() -> list[dict]:
 _ip_cache: dict = {"time": 0.0, "data": {}}
 
 def get_ip_location() -> dict:
-    """Get rich location & ISP info via free ip-api.com (0 keys, 0 tokens, 15-min cache)."""
+    """Get rich location & ISP info via multi-tier free geo APIs (0 keys, 0 tokens, 15-min cache)."""
     global _ip_cache
     now = time.time()
     if _ip_cache["data"] and (now - _ip_cache["time"] < 900):
         return _ip_cache["data"]
 
+    # Tier 1: ip-api.com
     try:
         url = "http://ip-api.com/json/?fields=status,city,regionName,country,isp,query,lat,lon,timezone"
-        resp = requests.get(url, timeout=3.5)
+        resp = requests.get(url, timeout=3.0)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "success":
@@ -64,9 +67,30 @@ def get_ip_location() -> dict:
                     "country": data.get("country", "Earth"),
                     "isp": data.get("isp", "Local Network"),
                     "ip": data.get("query", "127.0.0.1"),
-                    "lat": data.get("lat", 28.6139),
-                    "lon": data.get("lon", 77.2090),
+                    "lat": float(data.get("lat", 28.6139)),
+                    "lon": float(data.get("lon", 77.2090)),
                     "timezone": data.get("timezone", "UTC"),
+                }
+                _ip_cache = {"time": now, "data": res}
+                return res
+    except Exception:
+        pass
+
+    # Tier 2: ipwho.is
+    try:
+        resp = requests.get("https://ipwho.is/", timeout=3.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success", False):
+                res = {
+                    "city": data.get("city", "Local"),
+                    "region": data.get("region", ""),
+                    "country": data.get("country", "Earth"),
+                    "isp": (data.get("connection") or {}).get("isp", "Local Network"),
+                    "ip": data.get("ip", "127.0.0.1"),
+                    "lat": float(data.get("latitude", 28.6139)),
+                    "lon": float(data.get("longitude", 77.2090)),
+                    "timezone": (data.get("timezone") or {}).get("id", "UTC"),
                 }
                 _ip_cache = {"time": now, "data": res}
                 return res
@@ -294,4 +318,53 @@ def fetch_top_dev_news(limit: int = 3) -> list[dict]:
         {"title": "Zero-Token Edge Telemetry Running Locally", "url": "", "score": 85, "by": "JARVIS"},
     ]
     return _news_cache.get("data") or fallback
+
+
+_rss_news_cache: dict = {"time": 0.0, "data": []}
+
+def fetch_live_rss_news(limit: int = 5) -> list[dict]:
+    """
+    Fetch live real-world news headlines from verified RSS feeds (Google News India & BBC World).
+    100% Free, NO API Key, 0 LLM tokens, 10-minute cache.
+    """
+    global _rss_news_cache
+    now = time.time()
+    if _rss_news_cache["data"] and (now - _rss_news_cache["time"] < 600):
+        return _rss_news_cache["data"]
+
+    feeds = [
+        ("Google News", "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en"),
+        ("BBC World", "http://feeds.bbci.co.uk/news/world/rss.xml"),
+    ]
+    results = []
+    for source_name, feed_url in feeds:
+        try:
+            req = urllib.request.Request(
+                feed_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=3.5) as response:
+                content = response.read()
+            root = ET.fromstring(content)
+            for item in root.findall(".//item"):
+                title_elem = item.find("title")
+                link_elem = item.find("link")
+                title = (title_elem.text if title_elem is not None and title_elem.text else "").strip()
+                link = (link_elem.text if link_elem is not None and link_elem.text else "").strip()
+                if title and not any(r["title"] == title for r in results):
+                    results.append({"title": title, "url": link, "source": source_name})
+                if len(results) >= limit:
+                    break
+        except Exception:
+            continue
+        if len(results) >= limit:
+            break
+
+    if results:
+        _rss_news_cache = {"time": now, "data": results}
+        return results
+
+    # Graceful fallback to dev news if RSS is blocked by ISP
+    dev_items = fetch_top_dev_news(limit)
+    return [{"title": d["title"], "url": d.get("url", ""), "source": "TechNews"} for d in dev_items]
 

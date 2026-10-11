@@ -32,15 +32,10 @@ def weather_action(
     city     = parameters.get("city")
     when     = parameters.get("time", "today")
 
-    if not city or not isinstance(city, str) or not city.strip():
-        # ADDITIVE: bina city ke dead-end nahi — memory/IP se uthao (purana msg fallback rakha)
-        city = _default_city()
-    if not city or not isinstance(city, str) or not city.strip():
-        msg = "Sir, the city is missing for the weather report."
-        _log(msg, player)
-        return msg
+    if not city or not isinstance(city, str) or not city.strip() or city.lower().strip() in ("here", "current", "mera", "aaj ka", "local", "weather", "mausam"):
+        city = _default_city() or None
 
-    city = city.strip()
+    city = city.strip() if city else None
     when = (when or "today").strip()
 
     # Instant live weather from Open-Meteo (0 tokens, 100% free)

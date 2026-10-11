@@ -954,60 +954,33 @@ class NeedleToolRouter:
         if _is_status_intent:
             return _dispatch("todo_agent", {"action": "list"})
 
-        # -- Web Search -------------------------------------------------------
-        # "google karo X" / "X dhundo" / "search karo X" / "X ke baare mein batao"
-        m_ws_en = re.search(r"\b(search|google|bing|find|lookup)\s+(?:for\s+)?(.+)", clean)
-        m_ws_hi = re.search(r"(.+?)\s+(?:dhundo|search\s*karo|google\s*karo|khojo|batao|dekho)\b", clean)
-        m_ws_kya = re.search(r"\b(kya hai|kaun hai|kahan hai|kab hai)\s+(.+)", clean)
+        # -- Web Search (Explicit search commands only; conversational questions go to Gemini) --
+        # "google karo X" / "search karo X" / "web search karo X"
+        m_ws_en = re.search(r"\b(?:google|web\s*search|search\s+on\s+google|search\s+online)\s+(?:for\s+)?(.+)", clean)
+        m_ws_hi = re.search(r"(.+?)\s+(?:google\s*karo|search\s*karo|net\s*par\s*dhundo|web\s*search\s*karo|online\s*dhundo)\b", clean)
 
         # Screen / camera / physical hand / Obsidian queries MUST NEVER go to web search
         _is_vision_query = any(w in clean for w in ("screen", "creen", "display", "camera", "webcam", "screenshot", "hand", "hath", "haath", "chehra", "face", "pakda", "samne"))
         _is_obsidian_query = "obsidian" in clean or "second brain" in clean
 
-        # Conversational continuation & personal presence MUST NEVER go to web search
-        _is_conversational = (
-            clean in (
-                "aur", "aur batao", "aur kya", "aur sunao", "aur kuch", "aur kuchh",
-                "aage", "aage batao", "aage bolo", "phir", "fir", "phir kya", "fir kya",
-                "kuch aur", "kuchh aur", "bolo", "batao", "suno", "sunao",
-                "main kya kr raha hu", "main kya kar raha hoon", "main kya kar raha hu", "kya kar raha hu"
-            )
-            or bool(re.match(r"^(aur|aage|phir|fir)\s*(batao|bolo|sunao|kaho|hai|kya)?$", clean))
-            or clean.startswith("aur ")
-            or clean.startswith("aage ")
-            or clean.startswith("phir ")
-            or clean.startswith("fir ")
-            or clean.startswith("main kya ")
-        )
-
-        _EXCLUDE_SEARCH_WORDS = (
-            "fact", "facts", "tum", "tu", "yeh", "ye", "wo", "woh",
-            "mujhe", "tumhe", "batao", "kuch", "kuchh", "ek", "koi", "kya",
-            "aur", "aage", "fir", "phir", "bolo", "suno", "kaise ho",
-            "main kya kr raha hu", "main kya kar raha hoon", "kya chal raha hai",
-            "kya kar raha hu", "kya ho raha hai",
-            # ADDITIVE: task-progress words must never hit DDG
-            "status", "progress", "kitna hua", "bana diye", "bana diya",
-            "ban gaya", "ban gaye", "hua kya", "kaam hua", "complete hua",
-        )
-
-        if not _is_vision_query and not _is_obsidian_query and not _is_conversational and m_ws_en and "click" not in clean:
-            q = m_ws_en.group(2).strip()
+        if not _is_vision_query and not _is_obsidian_query and m_ws_en and "click" not in clean:
+            q = m_ws_en.group(1).strip()
             if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting")):
                 return _dispatch("web_search", {"query": q})
-        elif not _is_vision_query and not _is_obsidian_query and not _is_conversational and m_ws_hi and "click" not in clean:
+        elif not _is_vision_query and not _is_obsidian_query and m_ws_hi and "click" not in clean:
             q = m_ws_hi.group(1).strip()
             q = re.sub(r"\b(yaar|bhai|sir|please|zara|jaldi|mujhe|abhi)\b", "", q).strip()
-            if (q.lower().strip() in _EXCLUDE_SEARCH_WORDS
-                    or q.lower().strip().startswith("aur ")
-                    or q.lower().strip() == "aur"):
-                pass  # fall through to LLM conversation
-            elif q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting", "mausam", "weather", "train", "flight", "bus", "route")):
+            if q and len(q) > 1 and not any(w in q for w in ("tab", "window", "folder", "calc", "setting", "mausam", "weather", "train", "flight", "bus", "route")):
                 return _dispatch("web_search", {"query": q})
-        elif not _is_vision_query and not _is_obsidian_query and not _is_conversational and m_ws_kya and "click" not in clean:
-            q = f"{m_ws_kya.group(2)} {m_ws_kya.group(1)}".strip()
-            if not any(w in q.lower() for w in ("main", "hum", "mera", "meri", "kya kr", "kya kar")):
-                return _dispatch("web_search", {"query": q})
+        elif not _is_vision_query and not _is_obsidian_query and re.search(r"\b(price|rate|score|meaning|definition)\b", clean) and any(w in clean for w in ("batao", "bata do", "check karo", "dikhao")):
+            q = re.sub(r"\b(batao|bata do|check karo|dikhao|zara|please|yaar)\b", "", clean).strip()
+            return _dispatch("web_search", {"query": q or clean})
+        elif not _is_vision_query and not _is_obsidian_query and re.search(r"\b(kaun hai|who is)\b", clean):
+            who_match = re.search(r"\b(?:kaun hai|who is)\s+(.+)", clean)
+            if who_match:
+                person = who_match.group(1).strip()
+                if person and not any(w in person.lower() for w in ("main", "hum", "mera", "meri", "tu", "tum")):
+                    return _dispatch("web_search", {"query": f"who is {person}"})
 
         # -- Reminder / Alarm -------------------------------------------------
         # "5 minute baad yaad dilana" / "kal subah 8 baje reminder"
@@ -1548,15 +1521,11 @@ class LFMChatEngine:
            clean in ("kya chal raha hai", "computer me kya chal raha hai", "pc me kya chal raha hai", "running apps batao", "running apps dikhao"):
             return "running apps", "list_apps"
 
-        # Semantic Mapping 6: Web Search
-        # "google karo X" / "X ke baare mein batao" / "X dhundo" / "X kya hai"
+        # Semantic Mapping 6: Web Search (Explicit search only)
+        # "google karo X" / "search karo X" / "net par search karo"
         _conv_tokens = ("aur", "kuch", "kuchh", "aage", "phir", "fir", "bolo", "batao", "suno", "main kya kr raha hu", "main kya kar raha hu")
-        if any(w in clean for w in ("google karo", "search karo", "dhundo", "khojo", "net par dekho")):
-            q = re.sub(r"\b(google\s*karo|search\s*karo|dhundo|khojo|net\s*par\s*dekho|zara|yaar|bhai|sir|please)\b", "", clean).strip()
-            if q and q.lower() not in _conv_tokens and not q.lower().startswith("aur "):
-                return f"search {q}", "web_search"
-        if re.search(r"\bke\s+baare\s+mein\s+(batao|bolo|samjhao|likho)\b", clean):
-            q = re.sub(r"\bke\s+baare\s+mein\s+(batao|bolo|samjhao|likho)\b", "", clean).strip()
+        if any(w in clean for w in ("google karo", "search karo", "net par search", "web search karo", "online search karo")):
+            q = re.sub(r"\b(google\s*karo|search\s*karo|net\s*par\s*search\s*karo|web\s*search\s*karo|zara|yaar|bhai|sir|please)\b", "", clean).strip()
             if q and q.lower() not in _conv_tokens and not q.lower().startswith("aur "):
                 return f"search {q}", "web_search"
 

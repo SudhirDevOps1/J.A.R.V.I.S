@@ -12,6 +12,7 @@ soundfile
 requests
 beautifulsoup4
 duckduckgo-search
+ddgs>=9.0.0
 playwright
 
 # ── Automation / input control ────────────────────────────────────────────────

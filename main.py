@@ -224,9 +224,19 @@ def _pcm_level(samples) -> float:
 
 def _get_api_key() -> str:
     try:
+        from memory.config_manager import get_gemini_key
+        k = get_gemini_key()
+        if k:
+            return str(k).strip()
+    except Exception:
+        pass
+    try:
         if API_CONFIG_PATH.exists():
             with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-                raw = json.load(f).get("gemini_api_key", "")
+                d = json.load(f)
+                raw = d.get("gemini_api_key", "")
+                if not raw and isinstance(d.get("gemini_api_keys"), list) and d["gemini_api_keys"]:
+                    raw = d["gemini_api_keys"][0]
             try:  # ADDITIVE: ENC blob support (plaintext passthrough)
                 from core.secret_vault import decrypt_value
                 raw = decrypt_value(raw)

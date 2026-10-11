@@ -100,8 +100,60 @@ def load_api_keys() -> dict:
     except Exception:
         return data if isinstance(data, dict) else {}
 
+_current_gemini_key_idx: int = 0
+
+
+def get_gemini_key_pool() -> list[str]:
+    """Return all configured Gemini API keys (from gemini_api_key and gemini_api_keys list)."""
+    cfg = load_api_keys()
+    pool = []
+    primary = (cfg.get("gemini_api_key") or "").strip()
+    if primary:
+        pool.append(primary)
+    extra = cfg.get("gemini_api_keys", [])
+    if isinstance(extra, list):
+        for k in extra:
+            k_str = str(k or "").strip()
+            if k_str and k_str not in pool:
+                pool.append(k_str)
+    elif isinstance(extra, str) and extra.strip():
+        for k in extra.split(","):
+            k_str = k.strip()
+            if k_str and k_str not in pool:
+                pool.append(k_str)
+    return pool
+
+
 def get_gemini_key() -> str | None:
-    return load_api_keys().get("gemini_api_key")
+    """Return active Gemini API key from the configured key pool."""
+    global _current_gemini_key_idx
+    pool = get_gemini_key_pool()
+    if not pool:
+        return None
+    _current_gemini_key_idx = _current_gemini_key_idx % len(pool)
+    return pool[_current_gemini_key_idx]
+
+
+def rotate_gemini_key() -> str | None:
+    """Rotate to the next Gemini API key in the pool (e.g. on 429 quota exhaustion)."""
+    global _current_gemini_key_idx
+    pool = get_gemini_key_pool()
+    if not pool:
+        return None
+    if len(pool) > 1:
+        _current_gemini_key_idx = (_current_gemini_key_idx + 1) % len(pool)
+        next_key = pool[_current_gemini_key_idx]
+        print(f"[ConfigManager] Rotated Gemini API key to slot {_current_gemini_key_idx + 1}/{len(pool)}")
+        return next_key
+    return pool[0]
+
+
+def save_gemini_api_keys(keys: list[str]) -> None:
+    """Persist a pool of Gemini API keys."""
+    cleaned = [str(k).strip() for k in keys if str(k).strip()]
+    primary = cleaned[0] if cleaned else ""
+    _patch_config(gemini_api_key=primary, gemini_api_keys=cleaned)
+
 
 def is_configured() -> bool:
     key = get_gemini_key()

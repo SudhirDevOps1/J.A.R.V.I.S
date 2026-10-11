@@ -909,39 +909,89 @@ def list_running_apps() -> list[str]:
 
 
 def _close_app(app_name: str) -> str:
-    """Gracefully terminate or kill a running application process."""
+    """Gracefully terminate or kill a running application process with truthful post-termination verification."""
     if not app_name:
         return "No application specified to close."
 
-    clean_target = app_name.lower().strip().replace(".exe", "")
-    closed_count = 0
+    raw_clean = re.sub(r"\b(hu|kya|ye|yeh|wo|woh|mera|meri|ko|bhi|app|application)\b", "", app_name.lower()).strip()
+    if not raw_clean:
+        raw_clean = app_name.lower().strip()
+
+    # Map well-known aliases (e.g. "command prompt" -> "cmd")
+    alias_map = {
+        "command prompt": "cmd",
+        "command line": "cmd",
+        "terminal": "cmd",
+        "windows terminal": "windowsterminal",
+        "file explorer": "explorer",
+    }
+    clean_target = alias_map.get(raw_clean, raw_clean).replace(".exe", "").strip()
+
+    verified_closed = 0
+    failed_pids = []
 
     if _PSUTIL:
+        matching_procs = []
         for proc in psutil.process_iter(['name', 'pid']):
             try:
                 pname = (proc.info.get('name') or "").lower().replace(".exe", "")
-                if clean_target == pname or clean_target in pname:
-                    proc.terminate()
-                    closed_count += 1
+                if clean_target == pname or (len(clean_target) > 3 and clean_target in pname):
+                    matching_procs.append(proc)
             except Exception:
                 pass
 
-    if closed_count > 0:
-        return f"{app_name.capitalize()} band kar diya gaya hai ({closed_count} process closed)."
+        for proc in matching_procs:
+            pid = proc.pid
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=0.6)
+                except (psutil.TimeoutExpired, psutil.NoSuchProcess):
+                    pass
+                if proc.is_running():
+                    proc.kill()
+                    try:
+                        proc.wait(timeout=0.4)
+                    except Exception:
+                        pass
+                # Post-kill verification
+                if not proc.is_running():
+                    verified_closed += 1
+                else:
+                    failed_pids.append(pid)
+            except psutil.NoSuchProcess:
+                verified_closed += 1
+            except Exception:
+                failed_pids.append(pid)
 
-    # Fallback to taskkill on Windows
+    if verified_closed > 0:
+        return f"✅ Verified: {raw_clean.capitalize()} band kar diya gaya hai ({verified_closed} process closed)."
+
+    # Fallback to taskkill on Windows with post-verification
     if _SYSTEM == "Windows":
         try:
+            exe_name = f"{clean_target}.exe"
             res = subprocess.run(
-                ["taskkill", "/IM", f"{clean_target}.exe", "/F"],
+                ["taskkill", "/IM", exe_name, "/F"],
                 capture_output=True, text=True, timeout=5
             )
             if res.returncode == 0:
-                return f"{app_name.capitalize()} band kar diya gaya hai."
+                time.sleep(0.3)
+                chk = subprocess.run(
+                    ["tasklist", "/FI", f"IMAGENAME eq {exe_name}"],
+                    capture_output=True, text=True, timeout=3
+                )
+                if exe_name.lower() not in chk.stdout.lower():
+                    return f"✅ Verified: {raw_clean.capitalize()} band kar diya gaya hai."
+                else:
+                    return f"⚠️ {raw_clean.capitalize()} band nahi ho saka (Process still running)."
         except Exception:
             pass
 
-    return f"{app_name.capitalize()} abhi chal nahi raha tha."
+    if failed_pids:
+        return f"⚠️ {raw_clean.capitalize()} band nahi ho saka (Access Denied / System Process)."
+
+    return f"{raw_clean.capitalize()} abhi chal nahi raha tha."
 
 
 def open_app(
