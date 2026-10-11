@@ -16,55 +16,8 @@ from pathlib import Path
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Popular Indian Railways corridors and prominent train options
-_KNOWN_CORRIDORS: dict[tuple[str, str], list[dict]] = {
-    ("delhi", "patna"): [
-        {"name": "Vande Bharat Express (22346)", "dep": "06:05", "arr": "14:15", "dur": "8h 10m", "classes": "CC, EC", "type": "Semi-High Speed"},
-        {"name": "Tejas Rajdhani Express (12310)", "dep": "17:10", "arr": "05:15", "dur": "12h 05m", "classes": "1A, 2A, 3A", "type": "Superfast AC"},
-        {"name": "Sampoorna Kranti Express (12394)", "dep": "17:30", "arr": "06:50", "dur": "13h 20m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
-    ],
-    ("patna", "delhi"): [
-        {"name": "Vande Bharat Express (22345)", "dep": "06:00", "arr": "14:05", "dur": "8h 05m", "classes": "CC, EC", "type": "Semi-High Speed"},
-        {"name": "Tejas Rajdhani Express (12309)", "dep": "19:25", "arr": "07:40", "dur": "12h 15m", "classes": "1A, 2A, 3A", "type": "Superfast AC"},
-        {"name": "Sampoorna Kranti Express (12393)", "dep": "19:25", "arr": "08:35", "dur": "13h 10m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
-    ],
-    ("delhi", "varanasi"): [
-        {"name": "Vande Bharat Express (22436)", "dep": "06:00", "arr": "14:00", "dur": "8h 00m", "classes": "CC, EC", "type": "Semi-High Speed"},
-        {"name": "Shiv Ganga Express (12560)", "dep": "20:05", "arr": "06:10", "dur": "10h 05m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
-    ],
-    ("delhi", "jaipur"): [
-        {"name": "Vande Bharat Express (20978)", "dep": "06:10", "arr": "09:55", "dur": "3h 45m", "classes": "CC, EC", "type": "Semi-High Speed"},
-        {"name": "Ajmer Shatabdi (12015)", "dep": "06:10", "arr": "10:40", "dur": "4h 30m", "classes": "CC, EC", "type": "Shatabdi Express"},
-    ],
-    ("mumbai", "goa"): [
-        {"name": "Vande Bharat Express (22229)", "dep": "05:25", "arr": "13:10", "dur": "7h 45m", "classes": "CC, EC", "type": "Semi-High Speed"},
-        {"name": "Tejas Express (22119)", "dep": "05:50", "arr": "14:00", "dur": "8h 10m", "classes": "CC, EC", "type": "Superfast AC"},
-    ],
-    ("mumbai", "pune"): [
-        {"name": "Vande Bharat Express (22225)", "dep": "06:25", "arr": "09:35", "dur": "3h 10m", "classes": "CC, EC", "type": "Semi-High Speed"},
-        {"name": "Deccan Queen (12123)", "dep": "17:10", "arr": "20:25", "dur": "3h 15m", "classes": "CC, 2S", "type": "Intercity"},
-    ],
-    ("bhabua", "banaras"): [
-        {"name": "Purushottam Express (12801)", "dep": "15:35", "arr": "17:00", "dur": "1h 25m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
-        {"name": "Budh Purnima Express (14223)", "dep": "04:20", "arr": "05:40", "dur": "1h 20m", "classes": "2A, 3A, SL, 2S", "type": "Express"},
-        {"name": "Doongurpur Intercity (13249)", "dep": "09:12", "arr": "10:45", "dur": "1h 33m", "classes": "CC, 2S", "type": "Intercity"},
-    ],
-    ("bhabua road", "banaras"): [
-        {"name": "Purushottam Express (12801)", "dep": "15:35", "arr": "17:00", "dur": "1h 25m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
-        {"name": "Budh Purnima Express (14223)", "dep": "04:20", "arr": "05:40", "dur": "1h 20m", "classes": "2A, 3A, SL, 2S", "type": "Express"},
-        {"name": "Doongurpur Intercity (13249)", "dep": "09:12", "arr": "10:45", "dur": "1h 33m", "classes": "CC, 2S", "type": "Intercity"},
-    ],
-    ("bhabua", "varanasi"): [
-        {"name": "Purushottam Express (12801)", "dep": "15:35", "arr": "17:00", "dur": "1h 25m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
-        {"name": "Budh Purnima Express (14223)", "dep": "04:20", "arr": "05:40", "dur": "1h 20m", "classes": "2A, 3A, SL, 2S", "type": "Express"},
-        {"name": "Doongurpur Intercity (13249)", "dep": "09:12", "arr": "10:45", "dur": "1h 33m", "classes": "CC, 2S", "type": "Intercity"},
-    ],
-    ("bhabua road", "varanasi"): [
-        {"name": "Purushottam Express (12801)", "dep": "15:35", "arr": "17:00", "dur": "1h 25m", "classes": "1A, 2A, 3A, SL", "type": "Superfast"},
-        {"name": "Budh Purnima Express (14223)", "dep": "04:20", "arr": "05:40", "dur": "1h 20m", "classes": "2A, 3A, SL, 2S", "type": "Express"},
-        {"name": "Doongurpur Intercity (13249)", "dep": "09:12", "arr": "10:45", "dur": "1h 33m", "classes": "CC, 2S", "type": "Intercity"},
-    ],
-}
+# Dynamic corridor cache (populated on demand via live search / user query)
+_KNOWN_CORRIDORS: dict[tuple[str, str], list[dict]] = {}
 
 
 def _geocode_nominatim(place: str) -> tuple[float, float, str] | None:
@@ -115,20 +68,18 @@ def _haversine_road_estimate(lat1: float, lon1: float, lat2: float, lon2: float)
 
 
 def _get_user_default_city() -> str:
-    """Retrieve user's home location from long-term memory or default to Delhi."""
+    """Retrieve user's home location from long-term memory or return empty string."""
     try:
         from memory.memory_manager import load_memory
         mem = load_memory()
         ident = mem.get("identity", {})
         loc = ident.get("location", {})
         val = loc.get("value", "") if isinstance(loc, dict) else str(loc)
-        if val and "bihar" in val.lower():
-            return "Patna"
-        if val and len(val.strip()) > 2:
+        if val and len(val.strip()) > 1:
             return val.split(",")[0].strip()
     except Exception:
         pass
-    return "Delhi"
+    return ""
 
 
 def _find_trains(origin: str, dest: str, dist_km: float) -> list[dict]:
@@ -182,7 +133,7 @@ def _format_transit_card(
     else:
         train_section = f"""
         <div style="background: #001726; border: 1px dashed rgba(0, 220, 255, 0.3); border-radius: 4px; padding: 8px; font-size: 10px; color: #a0aec0; margin-bottom: 10px;">
-            ℹ️ <b>Railway Telemetry:</b> Is specific sector ke train schedules offline cache me nahi hain. Live IRCTC portal par verified trains check karein.
+            ℹ️ <b>Railway Telemetry:</b> Train schedules for this route are not cached locally. Check your local transit / railway portal for live verified trains.
         </div>
         """
 
@@ -197,7 +148,7 @@ def _format_transit_card(
             <div style="flex: 1; background: #001726; border: 1px solid #00dcff; border-radius: 4px; padding: 8px; text-align: center;">
                 <div style="color: #a0aec0; font-size: 10px;">🚗 DRIVING / ROAD</div>
                 <div style="color: #00ff88; font-weight: bold; font-size: 14px;">{road_km} km</div>
-                <div style="color: #a0aec0; font-size: 10px;">~{drive_h} hrs (NH/Exp)</div>
+                <div style="color: #a0aec0; font-size: 10px;">~{drive_h} hrs (Highway)</div>
             </div>
             <div style="flex: 1; background: #001726; border: 1px solid #00dcff; border-radius: 4px; padding: 8px; text-align: center;">
                 <div style="color: #a0aec0; font-size: 10px;">✈️ FLIGHT</div>
@@ -205,16 +156,16 @@ def _format_transit_card(
                 <div style="color: #a0aec0; font-size: 10px;">{flight_label}</div>
             </div>
             <div style="flex: 1; background: #001726; border: 1px solid #00dcff; border-radius: 4px; padding: 8px; text-align: center;">
-                <div style="color: #a0aec0; font-size: 10px;">🚌 BUS / VOLVO</div>
+                <div style="color: #a0aec0; font-size: 10px;">🚌 BUS / TRANSIT</div>
                 <div style="color: #ffaa00; font-weight: bold; font-size: 14px;">{bus_dur}</div>
-                <div style="color: #a0aec0; font-size: 10px;">AC Sleeper/Express</div>
+                <div style="color: #a0aec0; font-size: 10px;">Intercity Transit</div>
             </div>
         </div>
 
         {train_section}
 
         <div style="font-size: 10px; color: #a0aec0; border-top: 1px solid rgba(0, 220, 255, 0.2); padding-top: 6px;">
-            📍 <b>Map Navigation:</b> <a href="{gmaps_url}" style="color: #00dcff; text-decoration: underline;">Open Google Maps Directions</a> | <b>Booking:</b> IRCTC (Trains) • RedBus (Buses)
+            📍 <b>Map Navigation:</b> <a href="{gmaps_url}" style="color: #00dcff; text-decoration: underline;">Open Google Maps Directions</a> | <b>Booking:</b> Check local railway / bus operators
         </div>
     </div>
     """
@@ -297,8 +248,8 @@ def travel_transit(parameters: dict | None = None, player=None, **_) -> str:
                 f"(Departure: {fastest_train['dep']}). Poori train details screen par ready hain."
             )
         return (
-            f"{origin} se {dest} ke verified live train schedules offline cache me nahi hain. "
-            f"Kripya confirmed seat availability ke liye live IRCTC portal check karein."
+            f"{origin} se {dest} ke live train schedules local cache me nahi hain. "
+            f"Kripya accurate schedules ke liye local railway portal ya search check karein."
         )
 
     if mode == "flight":
