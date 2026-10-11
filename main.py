@@ -672,6 +672,26 @@ class JarvisLive:
             self.ui._action_registry = self._action_registry
             self.ui._plugin_registry = self._plugin_registry
             self.ui._jarvis = self
+
+            # Quitting from the tray menu (or anywhere else) has to run the
+            # real shutdown, not just quit the event loop - otherwise the wake
+            # detector, the dashboard, the MCP child processes and the metrics
+            # thread are all left running until the process dies.
+            # See ui/tray.py for why close-to-tray exists at all.
+            def _quit_app():
+                try:
+                    self.shutdown()
+                except Exception:
+                    pass
+                try:
+                    from PyQt6.QtWidgets import QApplication
+                    app = QApplication.instance()
+                    if app is not None:
+                        app.quit()
+                except Exception:
+                    pass
+
+            self.ui.on_quit = _quit_app
         except Exception:
             pass
 

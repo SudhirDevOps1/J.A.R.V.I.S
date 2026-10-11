@@ -6675,6 +6675,24 @@ class MainWindow(QMainWindow):
             app_icon = QIcon(str(ico_file))
             self.setWindowIcon(app_icon)
             QApplication.setWindowIcon(app_icon)
+
+        # System tray: closing the window now hides it instead of quitting.
+        # Before this there was no closeEvent at all, so the close button was a
+        # hard stop - wrong for an assistant whose value is being reachable
+        # without thinking about it. See ui/tray.py.
+        self._tray = None
+        self._tray_quitting = False
+        # Set by main.py so quitting can flush state and stop threads in the
+        # right order. Left None here so the UI is usable without main.py.
+        self.on_quit = None
+        try:
+            from ui.tray import TrayController
+            self._tray = TrayController(self, icon_path=str(ico_file))
+            self._tray.setup()
+        except Exception as e:
+            self._tray = None
+            print(f"[Tray] unavailable: {e}")
+
         if sys.platform == "win32":
             try:
                 # Config-derived id, not the hardcoded maintainer's account.
@@ -9236,6 +9254,99 @@ class MainWindow(QMainWindow):
                 except Exception:
                     pass
         return False
+
+    def _tray_toggle_window(self):
+        """Restore the window, or hide it if it is already up.
+
+        Called from the tray menu and from a tray click, so it has to be
+        idempotent rather than a one-way "show".
+        """
+        try:
+            if self.isVisible() and not self.isMinimized():
+                self.hide()
+                return
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+        except Exception as e:
+            print(f"[Tray] toggle window failed: {e}")
+
+    def _tray_toggle_mute(self):
+        try:
+            self._toggle_mute()
+        except Exception as e:
+            print(f"[Tray] mute failed: {e}")
+
+    def _tray_open_palette(self):
+        self._tray_toggle_window()
+        self._open_command_palette()
+
+    def _tray_open_shortcuts(self):
+        self._tray_toggle_window()
+        self._open_shortcut_help()
+
+    def _tray_open_history(self):
+        self._tray_toggle_window()
+        self._open_history()
+
+    def _tray_quit(self):
+        """The real exit.
+
+        Separate from closing on purpose. Hiding to the tray is convenient and
+        easy to do by accident; quitting destroys state and must be deliberate.
+        Sets _tray_quitting so closeEvent does not swallow the shutdown as a
+        hide.
+        """
+        self._tray_quitting = True
+        try:
+            if self.on_quit is not None:
+                self.on_quit()
+            else:
+                app = QApplication.instance()
+                if app is not None:
+                    app.quit()
+        except Exception as e:
+            print(f"[Tray] quit failed: {e}")
+
+    def closeEvent(self, event):
+        """Hide to the tray instead of exiting.
+
+        This is the change that makes the window's close button safe. If the
+        tray could not be created, close must still quit — hiding a window
+        with no visible way back is indistinguishable from a crash.
+        """
+        try:
+            from ui.tray import should_hide_on_close
+            enabled = True
+            try:
+                from memory.config_manager import get_close_to_tray_enabled
+                enabled = bool(get_close_to_tray_enabled())
+            except Exception:
+                enabled = True
+
+            tray_ok = bool(getattr(self, "_tray", None) and self._tray.available)
+            quitting = bool(getattr(self, "_tray_quitting", False))
+
+            if should_hide_on_close(tray_ok, enabled) and not quitting:
+                event.ignore()
+                self.hide()
+                name = "JARVIS"
+                try:
+                    from memory.config_manager import get_app_name
+                    name = get_app_name() or name
+                except Exception:
+                    pass
+                self._tray.notify_close_to_tray(name)
+                return
+        except Exception as e:
+            print(f"[Tray] close handling failed, allowing close: {e}")
+
+        try:
+            if getattr(self, "_tray", None) is not None:
+                self._tray.shutdown()
+        except Exception:
+            pass
+        super().closeEvent(event)
 
     def _do_interrupt(self):
         # If a dialog owns the Escape key, let it close instead of interrupting.

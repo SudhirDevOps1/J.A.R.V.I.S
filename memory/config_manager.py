@@ -457,6 +457,40 @@ def get_reflex_learning_enabled() -> bool:
         return True
 
 
+def get_close_to_tray_enabled() -> bool:
+    """Whether closing the main window hides to the tray instead of quitting.
+
+    Default True. See ui/tray.py for why this matters for an ambient
+    assistant: before it existed there was no closeEvent on MainWindow at all,
+    so the close button killed the process.
+
+    Set false to restore the old behaviour. That is only safe when a system
+    tray is actually available — the tray controller already refuses to hide
+    the window when it is not, so this flag does not override that.
+    """
+    try:
+        return bool(load_api_keys().get("close_to_tray_enabled", True))
+    except Exception:
+        return True
+
+
+def save_close_to_tray_enabled(enabled: bool) -> bool:
+    """Persist the close-to-tray preference.
+
+    Uses _patch_config, not save_api_keys. save_api_keys takes an API key
+    *string* and writes the gemini_api_key field, so calling it here would
+    have raised on a dict and silently saved nothing - the getter would then
+    keep returning the default and the setting would look broken with no
+    error anywhere.
+    """
+    try:
+        _patch_config(close_to_tray_enabled=bool(enabled))
+        return True
+    except Exception as e:
+        print(f"[config] could not save close_to_tray_enabled: {e}")
+        return False
+
+
 def save_reflex_learning_enabled(enabled: bool) -> None:
     _patch_config(reflex_learning_enabled=bool(enabled))
 
