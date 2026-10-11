@@ -1,0 +1,74 @@
+name: Google Release Please Engine
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Evaluate Conventional Commits & Manage Release PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚀 Run Google Release Please Action
+        uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # ── The steps below ONLY execute when you MERGE the Release PR ──
+      - name: 📥 Checkout Repository (On Release Created)
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: 🔒 Credential & Secret Audit
+        if: ${{ steps.release.outputs.release_created }}
+        shell: bash
+        run: |
+          echo "Scanning for accidental secrets before release packaging..."
+          if [ -f config/api_keys.json ]; then
+            echo "CRITICAL: config/api_keys.json found! Aborting release."
+            exit 1
+          fi
+          if [ -f .env ]; then
+            echo "CRITICAL: .env file found! Aborting release."
+            exit 1
+          fi
+          echo "Security audit passed: Clean repository."
+
+      - name: 📦 Package Release Zip Distribution
+        if: ${{ steps.release.outputs.release_created }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ steps.release.outputs.tag_name }}"
+          echo "Packaging distribution for ${TAG_NAME}..."
+          mkdir -p dist
+
+          zip -r "dist/JARVIS-${TAG_NAME}.zip" . \
+            -x "*.git*" \
+            -x "*__pycache__*" \
+            -x "*.pytest_cache*" \
+            -x "*.venv*" \
+            -x "*dist/*" \
+            -x "*build/*" \
+            -x "*.tmp*" \
+            -x "*.log" \
+            -x "config/api_keys.json" \
+            -x ".env*"
+
+          cd dist
+          sha256sum "JARVIS-${TAG_NAME}.zip" > checksums-sha256.txt
+          cd ..
+
+          # Upload zip and checksum to the release created by Release Please
+          gh release upload "${TAG_NAME}" \
+            "dist/JARVIS-${TAG_NAME}.zip" \
+            "dist/checksums-sha256.txt" \
+            --clobber

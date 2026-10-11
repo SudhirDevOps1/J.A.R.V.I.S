@@ -29,7 +29,14 @@ An automated release tag (`vX.Y.Z`) and official release package will **ONLY** b
 ---
 
 ## 3. Automation Tooling
-We provide an automated verification engine:
+
+### A. Google Release Please Action (`googleapis/release-please-action`)
+- Triggered automatically on push to `main`.
+- Aggregates conventional commits into an open **Release PR** (`chore(main): release vX.Y.Z`).
+- **Does not create any tags** until maintainer reviews and merges the Release PR!
+- Upon merge: automatically creates the Git Tag, publishes the GitHub Release, and uploads distribution zip assets.
+
+### B. Local Threshold Evaluator
 ```bash
 # Check current progress towards the 20-commit release threshold
 python scripts/check_release_readiness.py --check
