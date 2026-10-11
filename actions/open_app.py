@@ -2,6 +2,7 @@ import difflib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import time
@@ -36,6 +37,10 @@ _APP_ALIASES: dict[str, dict[str, str]] = {
     "netflix":            {"Windows": "Netflix",                 "Darwin": "Netflix",              "Linux": "firefox"},
     "vscode":             {"Windows": "code",                    "Darwin": "Visual Studio Code",   "Linux": "code"},
     "visual studio code": {"Windows": "code",                    "Darwin": "Visual Studio Code",   "Linux": "code"},
+    # Spaced form of the same product. Without this, "vs code" fell through to
+    # fuzzy matching and resolved to Notepad, because "code" is not itself an
+    # installed app name on Windows.
+    "vs code":            {"Windows": "code",                    "Darwin": "Visual Studio Code",   "Linux": "code"},
     "code":               {"Windows": "code",                    "Darwin": "Visual Studio Code",   "Linux": "code"},
     "terminal":           {"Windows": "wt",                      "Darwin": "Terminal",             "Linux": "x-terminal-emulator"},
     "cmd":                {"Windows": "cmd.exe",                 "Darwin": "Terminal",             "Linux": "bash"},
@@ -412,6 +417,9 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
         return requested, None
 
     key = requested.strip().lower()
+    # Shortest meaningful app-name fragment. Guards the substring/fuzzy stages
+    # below against matching on bare 2-3 character prefixes such as "hu".
+    _MIN_SUBSTR = 4
 
     # Stage 0: Direct protocol / URI schemes
     if _SYSTEM == "Windows" and (key.endswith(":") or key.startswith("ms-") or key.startswith("microsoft.")):
@@ -423,9 +431,32 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
     if key in _HINDI_APP_NAMES:
         key = _HINDI_APP_NAMES[key]
 
+    # Stage 0b: Exact alias lookup, BEFORE any category fallback.
+    #
+    # An explicit alias is the most specific answer available and must not be
+    # pre-empted by a category. "vs code" is an alias for VS Code, but the word
+    # "code" is also a member of the "dev" category, whose fallback list ends in
+    # notepad++ — so the category stage resolved "vs code" to Notepad before the
+    # alias was ever consulted.
+    if key in _APP_ALIASES:
+        _alias_target = _APP_ALIASES[key].get(_SYSTEM, requested)
+        if _SYSTEM == "Windows" and (_alias_target.endswith(":")
+                                     or _alias_target.startswith("ms-")
+                                     or _alias_target.startswith("microsoft.")):
+            return _alias_target, None
+        if _is_app_installed(_alias_target):
+            return installed.get(key, installed.get(_alias_target.lower(),
+                                                    _alias_target)), None
+
     # Stage 1: Category fallback mapping
+    #
+    # REGRESSION: `any(c in key for c in candidates)` is a bare substring test.
+    # "aur tasks" contains "tasks", so the todo category matched and the
+    # resolver answered "aur tasks" with OneNote. Category words must be
+    # matched as whole words, not as fragments of unrelated prose.
+    _key_words = set(re.split(r"[\s_\-.]+", key))
     for category, candidates in _CATEGORY_FALLBACKS.items():
-        if key == category or any(c in key for c in candidates):
+        if key == category or any(c in _key_words for c in candidates):
             for candidate in candidates:
                 if candidate == key:
                     if candidate in installed:
@@ -462,14 +493,40 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
     if shutil.which(key) or shutil.which(key.split(".")[0]):
         return key, None
 
-    # Substring match across installed apps
-    for app_name, app_id in installed.items():
-        if key in app_name or app_name in key:
-            return app_id, None
+    # Substring match across installed apps.
+    #
+    # REGRESSION: this used to be a bare two-way substring test
+    # (`key in app_name or app_name in key`). With a two-word target that
+    # matches almost anything — "hu use" contains "hu", and any app whose name
+    # starts with "hu" (Hubs, Hub) satisfied `app_name in key`, so the resolver
+    # confidently reported Notepad as the answer to "main nahi kiya hu use band
+    # kro" and the assistant announced it had closed an app that does not exist.
+    #
+    # A substring is only meaningful when it is a substantial part of the query
+    # and not a bare prefix fragment, so require the overlap to be at least
+    # 4 characters (the shortest real app name) and to anchor on a word boundary.
+    if len(key) >= _MIN_SUBSTR:
+        for app_name, app_id in installed.items():
+            if len(app_name) >= _MIN_SUBSTR:
+                if key in app_name or app_name in key:
+                    return app_id, None
 
     # Stage 4: Fuzzy matching against installed apps
     all_names = list(installed.keys())
-    close = difflib.get_close_matches(key, all_names, n=1, cutoff=0.6)
+    # Fuzzy matching, but only against names that plausibly overlap.
+    #
+    # `difflib.get_close_matches(key, all_names, cutoff=0.6)` compares whole
+    # strings, so a two-word query like "vs code" can land on an unrelated
+    # single-word app. Restricting the candidate pool to names that share at
+    # least one meaningful word with the query keeps the fuzzy step useful
+    # without letting it invent a target.
+    _query_words = {w for w in re.split(r"[\s_\-.]+", key) if len(w) >= _MIN_SUBSTR}
+    if _query_words:
+        all_names = [n for n in installed.keys()
+                     if _query_words & set(re.split(r"[\s_\-.]+", n.lower()))]
+    else:
+        all_names = list(installed.keys())
+    close = difflib.get_close_matches(key, all_names, n=1, cutoff=0.6) if all_names else []
     if close:
         matched_name = close[0]
         return installed[matched_name], f"'{requested}' ki jagah '{matched_name}' mila"
@@ -480,8 +537,14 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
         _scan_installed_apps(force_refresh=True)
         return _resolve_app(requested, allow_rescan=False)
 
-    # Fallback to normalized alias or raw string
+    # Fallback to normalized alias or raw string.
+    # Same word-boundary guard as the substring stage above: a bare two-way
+    # containment test here would let a short alias fragment match an unrelated
+    # multi-word query.
+    _MIN_SUBSTR = 4
     for alias_key, os_map in _APP_ALIASES.items():
+        if len(alias_key) < _MIN_SUBSTR or len(key) < _MIN_SUBSTR:
+            continue
         if alias_key in key or key in alias_key:
             return os_map.get(_SYSTEM, requested), None
 
@@ -1041,7 +1104,22 @@ def open_app(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "open_app",
-    "description": "Opens any application on the computer, closes apps, lists active running applications, refreshes installed apps cache, opens files in apps (open_with), or launches saved multi-app routines/workspaces. Supports intelligent dynamic auto-discovery on any PC and smart category fallbacks (e.g. opens Brave if Chrome is not installed).",
+    "description": (
+        "Launch or CLOSE a desktop application. Also lists running apps and launches "
+        "saved multi-app routines.\n"
+        "USE FOR: 'notepad kholo', 'open chrome', 'brave chalao', 'close notepad', "
+        "'spotify band karo', 'kill word', 'open vs code', 'list running apps', "
+        "'dev routine chalao'.\n"
+        "DO NOT USE FOR (these are different tools):\n"
+        "  - opening a FILE or FOLDER   -> file_controller (action=open/explorer)\n"
+        "  - timers, tasks, todos       -> todo_agent or tinydb_memory\n"
+        "  - volume, brightness, wifi   -> computer_settings\n"
+        "  - changing wallpaper, icons  -> desktop_control\n"
+        "  - a QUESTION about apps ('mere paas kaunse apps hain') -> just answer in "
+        "text, no tool call needed.\n"
+        "IMPORTANT: app_name must be a real application name. Never pass sentence "
+        "fragments, pronouns or conjunctions such as 'aur tasks' or 'hu use'."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {

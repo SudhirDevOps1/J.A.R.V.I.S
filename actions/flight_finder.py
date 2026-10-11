@@ -480,7 +480,16 @@ def flight_finder(parameters: dict, player=None, speak=None) -> str:
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "flight_finder",
-    "description": "Searches Google Flights and speaks the best options.",
+    "description": (
+        "Search live FLIGHT schedules and fares between two cities via Google "
+        "Flights, rendered headlessly (no browser popup).\n"
+        "USE FOR: 'Delhi se Mumbai flight', 'flight price kya hai', 'kal ka flight "
+        "dekho', 'cheapest flight batao'.\n"
+        "DO NOT USE FOR: road/train/bus routes (use travel_transit), or general "
+        "travel advice.\n"
+        "Pass city names in English ('origin': 'Delhi'). 'date' accepts "
+        "'tomorrow', 'next week', or an explicit date."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {

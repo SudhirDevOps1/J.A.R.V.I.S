@@ -702,7 +702,16 @@ def send_message(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "send_message",
-    "description": "Sends a text message via WhatsApp, Telegram, or other messaging platform.",
+    "description": (
+        "Send a text message to a CONTACT through WhatsApp (Web) or Telegram, or "
+        "open a chat with them.\n"
+        "USE FOR: 'mummy ko whatsapp karo hello', 'Ramesh ko message bhejo', "
+        "'telegram pe Priya ko ping karo', 'Papa ko call karwa do'.\n"
+        "DO NOT USE FOR: reminders to yourself ('10 min me chai' -> use reminder), "
+        "notes to self (use quick_notes), or emails.\n"
+        "If the contact is not in the contact book, ask the user for the name/number "
+        "before calling. Message content belongs in 'message'."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {

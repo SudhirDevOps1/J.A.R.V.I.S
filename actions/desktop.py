@@ -501,7 +501,18 @@ def desktop_control(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "desktop_control",
-    "description": "Controls the desktop: wallpaper, organize, clean, list, stats.",
+    "description": (
+        "Desktop appearance and cleanup: set or change the WALLPAPER (from a URL or "
+        "a local image), organise the Desktop, delete desktop junk, or report disk "
+        "usage.\n"
+        "USE FOR: 'wallpaper change karo', 'desktop clean karo', 'desktop organize "
+        "karo', 'desktop pr kitna space hai'.\n"
+        "DO NOT USE FOR: launching apps (use open_app), opening folders (use "
+        "file_controller), or any other file operation outside the Desktop (use "
+        "file_controller).\n"
+        "Note: organize/clean here is reversible via undo; file_controller's "
+        "'organize' is type-based."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {

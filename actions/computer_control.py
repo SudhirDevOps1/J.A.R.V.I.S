@@ -594,7 +594,18 @@ def computer_control(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "computer_control",
-    "description": "Direct computer control: type, click, hotkeys, scroll, move mouse, screenshots, find elements on screen.",
+    "description": (
+        "Direct MOUSE and KEYBOARD control of the desktop: type text, click at "
+        "coordinates, press hotkeys, scroll, move the mouse, take a screenshot, or "
+        "find an on-screen element by describing it and click it.\n"
+        "USE FOR: 'type karo ...', 'mouse move karo', 'ctrl+s dabao', 'screenshot "
+        "lo', 'save button pe click karo', 'screen par X dhoondh kar click karo'.\n"
+        "DO NOT USE FOR: launching or closing apps (use open_app — far more "
+        "reliable than simulating clicks), window management (use window_tools), "
+        "or semantic UI element access on Windows (use uia_controller, which does not "
+        "need coordinates).\n"
+        "Prefer a purpose-built tool over blind clicking whenever one exists."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {

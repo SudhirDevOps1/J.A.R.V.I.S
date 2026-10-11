@@ -135,7 +135,16 @@ def _log(message: str, player=None) -> None:
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "weather_report",
-    "description": "Gives the weather report to user",
+    "description": (
+        "Live WEATHER for a city using Open-Meteo (free, no API key, 0 tokens). "
+        "Returns temperature, feels-like, humidity, wind and a description.\n"
+        "USE FOR: 'aaj mausam kaisa hai', 'weather in Mumbai', 'Delhi ka mausam batao', "
+        "'kal ka temperature kya rahega', 'bahar ka mausam'.\n"
+        "DO NOT USE FOR: news (use web_search), travel/flight status "
+        "(use flight_finder or travel_transit), or general questions.\n"
+        "If the user does not name a city, omit 'city' and the user's saved "
+        "location or IP-detected city is used automatically."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {

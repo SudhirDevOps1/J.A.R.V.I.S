@@ -63,7 +63,16 @@ def local_llm_control(
 
 TOOL = {
     "name": "local_llm_control",
-    "description": "Checks status or toggles the safe, opt-in Local LLM Bridge (DeepSeek-R1 / Qwen2.5 / Ollama).",
+    "description": (
+        "Inspect or toggle the opt-in LOCAL LLM bridge (Ollama — DeepSeek-R1, "
+        "Qwen2.5, Llama). Runs a model on this machine with no cloud call.\n"
+        "USE FOR: 'local llm status', 'offline model chalu karo', 'local llm band "
+        "karo'.\n"
+        "DO NOT USE FOR: general answering — that already routes automatically. "
+        "This only reports or changes whether the local engine is enabled.\n"
+        "The bridge is OFF by default and fast-fails (1.5s probe), so enabling it "
+        "never freezes the assistant."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {

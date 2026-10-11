@@ -52,6 +52,33 @@ def learning_ctl(
     action = str(params.get("action") or "summary").strip().lower()
     phrase = str(params.get("phrase") or params.get("command") or "").strip()
 
+    if action in ("routing", "policy", "gate", "reflex"):
+        # Show whether the fast reflex path would auto-execute a phrase, or
+        # whether the cloud model gets to decide. This is the switch that makes
+        # the regex tier a cache of proven routes instead of an authority.
+        out = ["🧭 Reflex routing policy:"]
+        try:
+            from core import reflex_policy
+            snap = reflex_policy.snapshot()
+            out.append(f"   Gate enabled   : {snap['enabled']}")
+            out.append(f"   Min evidence   : {snap['min_evidence']} successful runs")
+            if snap["pinned_tools"]:
+                out.append(f"   Pinned tools   : {', '.join(snap['pinned_tools'])}")
+            out.append("   Never auto-run : "
+                       f"{', '.join(snap['never_trust'][:6])}...")
+        except Exception as e:
+            out.append(f"   policy unavailable: {e}")
+        if phrase:
+            try:
+                from core import reflex_policy
+                out.append("")
+                out.append(f"   \"{phrase}\" -> {reflex_policy.describe(phrase, '')}")
+            except Exception:
+                pass
+        out.append("")
+        out.append("   Unproven phrases are handled by the model, not the regex.")
+        return "\n".join(out)
+
     if action in ("summary", "status", "show", "kya_seekha"):
         _log(player, "Learning loop status requested")
         return LL.summary_text()
@@ -155,11 +182,11 @@ TOOL = {
             "action": {
                 "type": "STRING",
                 "description": (
-                    "summary | stats | patterns | promotions | promote | "
+                    "summary | stats | patterns | promotions | routing | promote | "
                     "unpromote | forget | reset | corrections"
                 ),
-                "enum": ["summary", "stats", "patterns", "promotions", "promote",
-                         "unpromote", "forget", "reset", "corrections"],
+                "enum": ["summary", "stats", "patterns", "promotions", "routing",
+                         "promote", "unpromote", "forget", "reset", "corrections"],
             },
             "phrase": {
                 "type": "STRING",

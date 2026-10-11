@@ -430,6 +430,27 @@ def save_edge_voice(voice: str) -> None:
     _patch_config(edge_voice=(voice or "").strip())
 
 
+def get_reflex_learning_enabled() -> bool:
+    """Whether the regex reflex tier must prove itself before acting.
+
+    Default True: a regex match is treated as a proposal, and only phrases the
+    usage-learning loop has seen succeed are executed locally. Anything else
+    goes to the model, which understands natural language.
+
+    Set false to restore the previous behaviour where every regex match ran
+    immediately. That is faster and works offline, but a wrong match performs a
+    real action on the machine.
+    """
+    try:
+        return bool(load_api_keys().get("reflex_learning_enabled", True))
+    except Exception:
+        return True
+
+
+def save_reflex_learning_enabled(enabled: bool) -> None:
+    _patch_config(reflex_learning_enabled=bool(enabled))
+
+
 def get_edge_pitch() -> str:
     """Return configured voice pitch (e.g. '+0Hz', '+5Hz', '-5Hz'). Default is '+0Hz' for natural human tone."""
     cfg_pitch = (load_api_keys().get("edge_pitch") or "").strip()

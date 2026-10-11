@@ -92,6 +92,7 @@ _NON_APP_WORDS = {
     "kiya", "ki", "kar", "karta", "karti", "karte", "karna", "karte",
     "hu", "use", "usi", "un", "in", "is", "it", "tha", "thi", "the",
     "gaya", "gayi", "gay", "chalo", "chala", "chali", "bolo", "bol",
+    "nahi", "nahin", "nai", "koi", "kuch", "kuchh", "kuchu", "sab", "sabhi",
     "dono", "sabko", "mujhe", "tujhe", "tumhe", "aapko", "humko",
     # interrogatives — "kya hain" re-parses into "kaun hai" after the verb is
     # stripped, which then gets treated as an app name
@@ -169,13 +170,43 @@ class NeedleToolRouter:
 
         # Helper to record and return tool execution for repeat command support
         def _dispatch(tool_name: str, tool_args: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+            """Single choke point for the whole regex tier — everything routes here.
+
+            The regex cascade is a *proposal*, not an authority. It matches on
+            surface patterns and cannot tell "notepad band karo" (real) from
+            "timers aur tasks band karo" (prose containing a verb). Historically
+            every match executed unconditionally, so a bad guess moved the user's
+            mouse or closed an app and was announced as fact.
+
+            Now the match is gated by core.reflex_policy: it executes immediately
+            only if the usage-learning loop has evidence this phrase worked
+            before. Otherwise we return (None, None), which main.py reads as "no
+            reflex match" and lets the cloud model choose from all 57 tool
+            descriptions.
+
+            A wrong reflex costs a real action on the machine; a wrong guess costs
+            one round-trip. That asymmetry is why the reflex tier is demoted to a
+            cache of proven routes rather than deleted — deleting it would also
+            destroy the offline path and add latency to trivial commands.
+            """
             self._last_tool_call = (tool_name, tool_args)
             try:
                 from core.context_buffer import update_context
                 update_context(query=text, tool=tool_name, args=tool_args)
             except Exception:
                 pass
-            return (tool_name, tool_args)
+
+            try:
+                from core import reflex_policy
+                execute_now, _reason = reflex_policy.gate(text, tool_name)
+            except Exception:
+                # Policy unavailable -> keep legacy behaviour rather than
+                # silently breaking every local command.
+                execute_now = True
+
+            if execute_now:
+                return (tool_name, tool_args)
+            return (None, None)
 
         # -- Improvement 5: Repeat Last Tool Command --------------------------
         if re.search(r"\b(wahi dobara|wahi phir se|wahi kholo|dobara karo|phir se karo|repeat karo|repeat that|once more|repeat command)\b", clean):
@@ -439,6 +470,14 @@ class NeedleToolRouter:
         # "kya seekha", "learning dikhao", "learning stats", "sab bhul ja",
         # "corrections dikhao". Distinct from self_learning (which is manual
         # teach/correct) — this inspects the automatic usage loop.
+        if re.search(r"\b(routing|reflex)\b", clean):
+            _lr_action = "routing"
+            _lr_target = ""
+            if re.search(r"\b(policy|gate)\b", clean):
+                _lr_action = "routing"
+            return _dispatch("learning_ctl", {"action": _lr_action,
+                                              "phrase": ""})
+
         if re.search(r"\b(learning|seekha|seekha\s*hai)\b", clean):
             _l_action = "summary"
             if re.search(r"\b(stats|numbers|detail)\b", clean):

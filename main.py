@@ -992,7 +992,11 @@ class JarvisLive:
 
                 if routing.get("tier") == 1 and routing.get("tool"):
                     t_name, t_args = routing["tool"]
-                    if self._action_registry.has(t_name):
+                    # t_name is None when core.reflex_policy declined the regex
+                    # match because the phrase is not yet proven. That is not an
+                    # error — it means "let the cloud model decide". Fall
+                    # through instead of dispatching None.
+                    if t_name and self._action_registry.has(t_name):
                         if routing.get("ear_normalized"):
                             self.ui.write_log(f"⚡ [Ear Normalizer]: '{text}' -> '{routing['ear_normalized']}'")
                         self.ui.write_log(f"⚡ [Fast Local Reflex]: {t_name} {t_args}")

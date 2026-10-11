@@ -629,7 +629,17 @@ def code_helper(
 # ── Tool declaration (auto-discovered by core/action_loader.py) ──────────────
 TOOL = {
     "name": "code_helper",
-    "description": "Writes, edits, explains, runs, or builds code files.",
+    "description": (
+        "Write, edit, explain, run or build CODE FILES on disk. Supports Python, "
+        "JavaScript, shell scripts and text files.\n"
+        "USE FOR: 'python script banao', 'ye code kya karta hai', 'is file me bug "
+        "dhundo', 'run this python file', 'build karo', 'screenshot dekho aur error "
+        "theek karo'.\n"
+        "DO NOT USE FOR: general questions about programming (answer in text, no "
+        "file needed), building a whole multi-file project (use dev_agent), or "
+        "explaining a screenshot of a non-code error (use troubleshoot_screen).\n"
+        "Always pass a real absolute or Desktop-relative path for 'file_path'."
+    ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
