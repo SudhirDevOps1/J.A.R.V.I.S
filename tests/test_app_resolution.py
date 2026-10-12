@@ -95,6 +95,84 @@ def test_minimum_substring_length_is_enforced():
     assert "_MIN_SUBSTR = 4" in src
 
 
+# ── opaque identifiers must never resolve as apps ───────────────────────────
+#
+# From a real session. The user spoke a Firefox profile UUID,
+# "308046B0AF4A39CB". The app index stores Windows AppUserModelIDs in its VALUE
+# column - firefox maps to exactly that string - so the substring stage matched
+# the user's speech against that value, returned it as the executable, and
+# Windows resolved the AppID. Something unrelated opened, and the user was told
+# their own machine did not have the app in front of them.
+
+
+@pytest.mark.parametrize("identifier", [
+    "308046B0AF4A39CB",
+    "1AC14E77-02E7-4E5D-B744-2EB1AE5198B7",
+    "{6B29FC40-CA47-1067-B31D-00DD010662DA}",
+    "DEADBEEF1234",
+    "deadbeef",
+    "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+])
+def test_opaque_identifiers_are_recognised(identifier):
+    from actions.open_app import _looks_like_opaque_identifier
+    assert _looks_like_opaque_identifier(identifier) is True, identifier
+
+
+@pytest.mark.parametrize("name", [
+    "notepad", "firefox", "brave", "chrome", "edge", "word", "excel",
+    "obsidian", "pycharm", "antigravity", "vs code", "hello", "spotify",
+    "7zip", "notepad 3", "himalaya", "cc",
+])
+def test_real_app_names_are_not_mistaken_for_identifiers(name):
+    """The guard has to be narrow.
+
+    An app name is never all-hex, and names legitimately contain digits - 7zip,
+    Notepad 3, Himalaya. A guard that swept those up would break the very
+    thing it exists to protect.
+    """
+    from actions.open_app import _looks_like_opaque_identifier
+    assert _looks_like_opaque_identifier(name) is False, name
+
+
+def test_empty_input_is_not_an_identifier():
+    from actions.open_app import _looks_like_opaque_identifier
+    assert _looks_like_opaque_identifier("") is False
+    assert _looks_like_opaque_identifier(None) is False
+
+
+def test_resolver_refuses_the_appid_shaped_utterance():
+    """End to end: the exact string from the bug report."""
+    from actions.open_app import _resolve_app
+    _target, note = _resolve_app("308046B0AF4A39CB")
+    assert note, "an AppID-shaped request must come back with an explanation"
+    assert "identifier" in note.lower()
+
+
+def test_real_apps_still_resolve_after_the_guard():
+    """The guard must not cost the normal path."""
+    from actions.open_app import _resolve_app
+    for name in ("firefox", "notepad", "antigravity"):
+        _target, note = _resolve_app(name)
+        assert note is None, f"{name} was wrongly treated as an identifier"
+
+
+def test_index_values_are_appids_not_executables():
+    """Documents why the guard exists.
+
+    If this ever stops being true the guard may be removable - but that should
+    be a decision made deliberately rather than by accident.
+    """
+    from actions.open_app import _scan_installed_apps
+    idx = _scan_installed_apps()
+    firefox = idx.get("firefox")
+    if firefox is None:
+        pytest.skip("firefox is not installed on this machine")
+    assert not str(firefox).lower().endswith((".exe", ".lnk")), (
+        "firefox now maps to an executable path. The AppID guard in "
+        "_resolve_app may be reviewable, but keep it until proven otherwise."
+    )
+
+
 # ── category matching is word-bounded ───────────────────────────────────────
 
 def test_category_stage_splits_on_word_boundaries():

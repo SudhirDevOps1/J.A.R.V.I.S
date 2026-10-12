@@ -81,9 +81,30 @@ def test_task_first_is_present_in_every_mode(mode):
 @pytest.mark.parametrize("mode", sorted(AVAILABLE_PERSONAS))
 def test_task_first_comes_last(mode):
     """Placed last on purpose. A rule buried in the middle of a long persona
-    is outweighed by whatever is nearest the end of the prompt."""
+    is outweighed by whatever is nearest the end of the prompt.
+
+    Asserted by section marker rather than by the final sentence, so appending
+    a rule does not silently break the ordering guarantee.
+    """
     prompt = build_persona_system_prompt("X", mode=mode)
-    assert prompt.rstrip().endswith("confirmed it.")
+    assert "ABSOLUTE PRIORITY" in prompt
+    assert "NEVER FABRICATE A NEGATIVE" in prompt
+    # The directive must be the final section, not merely present somewhere.
+    assert prompt.rstrip().endswith("worse than\n  silence."), (
+        "the task-first directive must still be the last thing in the prompt"
+    )
+
+
+def test_anti_fabrication_rule_is_present_in_every_mode():
+    """From a real session: an installed, indexed app resolved correctly by the
+    tool, and the assistant still replied that it had no such application.
+
+    The tool result was right and the summary of it was invented, so the rule
+    has to bind in every persona - not only the professional one."""
+    for mode in sorted(AVAILABLE_PERSONAS):
+        text = build_persona_system_prompt("X", mode=mode).lower()
+        assert "never fabricate a negative" in text, mode
+        assert "not installed" in text or "is not installed" in text, mode
 
 
 def test_task_first_says_the_question_gets_answered():

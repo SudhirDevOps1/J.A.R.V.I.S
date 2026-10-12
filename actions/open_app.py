@@ -404,6 +404,48 @@ def _is_app_installed(name_or_bin: str) -> bool:
     return False
 
 
+def _looks_like_opaque_identifier(text: str) -> bool:
+    """Whether `text` is a machine identifier rather than a human app name.
+
+    Three shapes, all of which reach this function in practice because the
+    value column of the app index contains Windows AppUserModelIDs:
+
+      308046B0AF4A39CB                       a publisher/AppID hex token
+      1AC14E77-02E7-4E5D-B744-2EB1AE5198B7   a GUID / UUID
+      Microsoft.WindowsCalculator_8wekyb3d8bbwe  an AppID package family name
+
+    The test is deliberately narrow. A real app name is never all hex, and a
+    name containing a digit like "7zip" or "Notepad 3" must still resolve, so
+    the checks require the WHOLE string to be opaque - no words mixed in.
+
+    Ordinary prose is never flagged: "ab", "hello", "notepad" all fail every
+    test below and fall through to normal resolution.
+    """
+    s = str(text or "").strip()
+    if not s:
+        return False
+
+    # GUID / UUID, with or without braces.
+    if re.fullmatch(
+            r"\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+            r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?", s):
+        return True
+
+    # All-hex token with no separators. Needs >= 8 chars so that short tokens
+    # and ordinary words made of hex letters (deadbeef aside) are not swept up.
+    if len(s) >= 8 and re.fullmatch(r"[0-9a-fA-F]+", s):
+        return True
+
+    # AppID package family: words, but joined by dots and digits in the shape
+    # Windows uses. Requires a digit and at least one dot to stay clear of
+    # ordinary dotted names.
+    if "." in s and re.fullmatch(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+", s):
+        if any(c.isdigit() for c in s) and len(s) >= 12:
+            return True
+
+    return False
+
+
 def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | None]:
     """
     Intelligently resolves requested app with 4-stage search + dynamic self-healing rescan:
@@ -420,6 +462,26 @@ def _resolve_app(requested: str, allow_rescan: bool = True) -> tuple[str, str | 
     # Shortest meaningful app-name fragment. Guards the substring/fuzzy stages
     # below against matching on bare 2-3 character prefixes such as "hu".
     _MIN_SUBSTR = 4
+
+    # Opaque identifiers are not app names.
+    #
+    # Found in a real session: the user spoke a Firefox profile UUID,
+    # "308046B0AF4A39CB". The app index stores Windows AppUserModelIDs in the
+    # VALUE column - firefox maps to "308046B0AF4A39CB" - so the substring
+    # stage happily matched the user's text against that value and returned it
+    # as the executable. Windows then resolved the AppID and something
+    # unrelated opened, and the user was told their own machine did not have
+    # the app they were looking at.
+    #
+    # An AppID is not a path. Matching a spoken string against the value column
+    # can only ever produce garbage, because no user names an application by
+    # its AppID.
+    if _looks_like_opaque_identifier(requested):
+        return requested, (
+            "That is an identifier, not an application name "
+            "(it looks like a hex code, GUID or AppUserModelID). "
+            "Name the app instead."
+        )
 
     # Stage 0: Direct protocol / URI schemes
     if _SYSTEM == "Windows" and (key.endswith(":") or key.startswith("ms-") or key.startswith("microsoft.")):
