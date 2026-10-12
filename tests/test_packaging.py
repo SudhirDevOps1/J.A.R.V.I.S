@@ -235,14 +235,36 @@ def test_setup_py_import_has_no_side_effects(setup_module_):
 
 # ── the real thing ──────────────────────────────────────────────────────────
 
+def _build_backend_available() -> bool:
+    """Whether a PEP 517 backend can be imported without installing anything.
+
+    The test below runs pip with --no-build-isolation so it does not need the
+    network. That makes it dependent on setuptools already being importable,
+    which is NOT true everywhere: Python 3.12 stopped shipping setuptools in
+    venvs, so a fresh CI environment on 3.12 has no build backend at all and
+    pip fails with "Cannot import 'setuptools.build_meta'".
+
+    That is an environment fact, not a defect in the project, so the test skips
+    rather than fails. CI installs setuptools explicitly so it does run there.
+    """
+    try:
+        importlib.import_module("setuptools.build_meta")
+        return True
+    except Exception:
+        return False
+
+
 @pytest.mark.slow
-def test_editable_install_resolves_metadata(tmp_path):
+@pytest.mark.skipif(not _build_backend_available(),
+                    reason="no importable PEP 517 build backend (setuptools) "
+                           "in this environment; install it to run this check")
+def test_editable_install_resolves_metadata():
     """Actually ask pip to prepare editable metadata.
 
-    Marked slow: it spawns pip and installs build dependencies into a
-    throwaway environment. This is the only check that proves the two dispatch
-    branches above actually work together, so it is worth running before a
-    release.
+    This is the only check that proves the two setup.py dispatch branches work
+    together, so it is worth running before a release. It skips where no build
+    backend is importable rather than failing for a reason that has nothing to
+    do with the code.
     """
     r = subprocess.run(
         [sys.executable, "-m", "pip", "install", "-e", ".", "--no-deps",
@@ -255,3 +277,19 @@ def test_editable_install_resolves_metadata(tmp_path):
         "setup.py did not call setup() for the build backend"
     )
     assert "jarvis-assistant" in out
+
+
+def test_skip_guard_matches_the_real_environment():
+    """The skip must reflect reality, not be a permanent silent no-op.
+
+    If this ever returns False in an environment that does have setuptools, the
+    real check above is being skipped everywhere and nobody notices.
+    """
+    import importlib.util as _ilu
+
+    spec = _ilu.find_spec("setuptools")
+    if spec is None:
+        assert _build_backend_available() is False
+    else:
+        # setuptools is installed; the backend should import cleanly.
+        assert _build_backend_available() is True

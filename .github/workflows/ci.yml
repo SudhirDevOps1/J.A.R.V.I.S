@@ -34,7 +34,11 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest flake8
+          # setuptools and wheel provide the PEP 517 build backend. Python
+          # 3.12 stopped shipping setuptools in venvs, so without these the
+          # editable-install check skips on 3.12 and `pip install -e .` goes
+          # unverified on half the matrix.
+          python -m pip install -r requirements.txt pytest flake8 setuptools wheel
 
       - name: 🔒 Security & Secrets Audit
         shell: bash
