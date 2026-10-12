@@ -66,8 +66,62 @@ def test_build_system_is_declared(pyproject):
 
 def test_project_metadata_present(pyproject):
     proj = pyproject.get("project", {})
-    for key in ("name", "version", "description", "requires-python"):
+    for key in ("name", "description", "requires-python"):
         assert proj.get(key), f"project.{key} is missing"
+
+
+def test_version_is_not_hardcoded(pyproject):
+    """The single-source rule.
+
+    A literal version here desynchronises the moment Release Please bumps
+    core/version.py, and nothing complains: the repository says 0.2.0, the
+    package says 1.4.0, and both are correct files. This is not theoretical -
+    that is exactly what happened the first time this file was written.
+    """
+    assert "version" not in pyproject["project"], (
+        "project.version must stay absent; declare it in [project] dynamic and "
+        "read it from core/version.py, which is what Release Please bumps"
+    )
+    assert "version" in pyproject["project"].get("dynamic", [])
+
+
+def test_package_version_matches_the_version_module(pyproject):
+    """End to end: what pip would report is what the repo reports."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_version_probe", _ROOT / "core" / "version.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    attr = pyproject["tool"]["setuptools"]["dynamic"]
+    # Table form. The list form ([{version = {...}}]) is rejected by setuptools
+    # with "configuration error: tool.setuptools.dynamic must be object".
+    assert attr == {"version": {"attr": "core.version.__version__"}}, attr
+
+    from core.version import __version__
+    assert __version__ == mod.__version__
+    # A well-formed version, not None or empty.
+    assert __version__ and __version__[0].isdigit(), __version__
+
+
+def test_version_module_licence_matches_the_license_file(pyproject):
+    """core/version.py said __license__ = "MIT" after the relicensing pass.
+
+    Metadata nobody reads is where wrong facts survive longest, so this is
+    asserted rather than trusted.
+    """
+    from core.version import __license__
+    licence_text = (_ROOT / "LICENSE").read_text(encoding="utf-8", errors="replace")
+    assert "GNU GENERAL PUBLIC LICENSE" in licence_text
+    assert "MIT" not in __license__, (
+        f"core/version.py still declares {__license__!r}; the project is GPL-3.0"
+    )
+    declared = pyproject["project"].get("license", {})
+    text = declared.get("text", "") if isinstance(declared, dict) else str(declared)
+    assert __license__ in text, (
+        f"core/version.py says {__license__!r} and pyproject says {text!r}"
+    )
 
 
 def test_readme_is_declared_and_exists(pyproject):

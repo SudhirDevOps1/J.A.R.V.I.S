@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-assistant"
-version = "1.4.0"
+# Not a literal. core/version.py is the single source of truth, because that is
+# what Release Please bumps. A hardcoded copy here silently desynchronised the
+# moment a release landed: the repo said 0.2.0 and the package said 1.4.0.
+dynamic = ["version"]
 description = "A private, local-first voice AI assistant that controls your own PC."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -44,6 +47,13 @@ dependencies = []
 Homepage = "https://github.com/SudhirDevOps1/J.A.R.V.I.S"
 Source = "https://github.com/SudhirDevOps1/J.A.R.V.I.S"
 Issues = "https://github.com/SudhirDevOps1/J.A.R.V.I.S/issues"
+
+# The version is read from core/version.py, which is what Release Please bumps.
+# `attr` is resolved statically from the module source when possible, so
+# building the package does not require PyQt6 - or anything else in the runtime
+# dependency set - to be importable.
+[tool.setuptools.dynamic]
+version = { attr = "core.version.__version__" }
 
 [project.scripts]
 jarvis = "main:main"
