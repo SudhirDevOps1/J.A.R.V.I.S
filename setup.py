@@ -16,6 +16,27 @@ from pathlib import Path
 
 OS = platform.system()  # "Windows" | "Darwin" | "Linux"
 
+# Commands setuptools' build backend passes on argv when it executes this file.
+# When pip builds the project it runs `setup.py egg_info`, `setup.py develop`,
+# `setup.py bdist_wheel` and so on. A user running `python setup.py` passes none
+# of these.
+_BUILD_BACKEND_COMMANDS = {
+    "egg_info", "develop", "bdist_wheel", "bdist_egg", "sdist", "install",
+    "dist_info", "editable_wheel", "build_ext", "build_py",
+}
+
+
+def _invoked_by_build_backend() -> bool:
+    """True when a packaging tool, rather than a person, is running this file.
+
+    Without this guard, `pip install -e .` executes the bootstrap as a side
+    effect of the build, which shells out to `pip install -r requirements.txt`
+    and downloads Playwright browsers from inside a pip transaction. That has
+    no business happening during metadata generation, and on a machine with no
+    network it turns an install into a confusing failure.
+    """
+    return any(arg in _BUILD_BACKEND_COMMANDS for arg in sys.argv[1:])
+
 
 def _run(label: str, args: list[str]) -> None:
     print(f"\n▶ {label}")
@@ -68,5 +89,18 @@ def main() -> None:
     print("   3) (Optional) Enable 'Hey Jarvis' from ⚙ → WAKE WORD.")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and _invoked_by_build_backend():
+    # A packaging tool is running this file, not a person. Hand over to
+    # setuptools, which reads everything it needs from pyproject.toml.
+    #
+    # Both branches are required and neither alone is enough. Exiting quietly
+    # is not enough: setuptools runs `setup.py egg_info` to generate metadata
+    # and fails with "Exactly one .egg-info should have been produced, but
+    # found 0". Bootstrapping instead is not enough either: that shells out to
+    # `pip install -r requirements.txt` and downloads Playwright browsers from
+    # inside a pip transaction, which fails outright with no network.
+    from setuptools import setup as _setuptools_setup
+
+    _setuptools_setup()
+elif __name__ == "__main__":
     main()

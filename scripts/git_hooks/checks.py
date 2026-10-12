@@ -327,7 +327,13 @@ def run_pre_push(root: Optional[Path] = None, *, quiet: bool = False,
 
     failed = False
 
-    # 1. whole-tree syntax: catches a broken file that was never staged
+    # 1. whole-tree syntax: catches a broken file that was never staged.
+    #
+    # Also runs as tests/test_git_hooks.py::test_every_python_file_in_this_repo_parses,
+    # so a push pays for it twice. It is only ~3s for ~190 files against a
+    # ~450KB ui.py, which is a fair price for catching a syntax error in a
+    # script that no test imports, so it stays rather than being deferred to
+    # the pytest run.
     problems = check_syntax(iter_python_files(root), root)
     if problems:
         failed = True

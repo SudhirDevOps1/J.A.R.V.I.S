@@ -25,7 +25,22 @@ python -m pytest -q -m "not network"    # the test suite
 run_tests.bat                # Windows: the same thing plus the network tests
 ```
 
-There is no build step. It runs from source.
+There is no build step for normal use. It runs from source.
+
+### Installing as a package (optional)
+
+If you want the `jarvis` command on your PATH:
+
+```bash
+pip install -e .
+jarvis
+```
+
+This does **not** install dependencies. `requirements.txt` carries
+`sys_platform` markers so a Linux user never pulls Windows-only wheels, and
+`[project].dependencies` in `pyproject.toml` cannot express those without
+duplicating the file and letting the two drift apart. So still run
+`pip install -r requirements.txt` (or `python setup.py`) separately.
 
 **Please do not commit `config/api_keys.json`.** It is in `.gitignore` and it
 holds real credentials. Copy `config/api_keys.example.json` instead.

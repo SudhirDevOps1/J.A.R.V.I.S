@@ -262,6 +262,19 @@ cd J.A.R.V.I.S
 python main.py
 ```
 
+### `Developer Install (optional)`
+If you would rather have it on your PATH as a command:
+
+```bash
+pip install -e .
+jarvis
+```
+
+This does **not** install dependencies - `requirements.txt` carries
+`sys_platform` markers so a Linux user never pulls Windows-only wheels,
+and those cannot be expressed in `pyproject.toml` without duplicating the
+file. Install dependencies separately as shown above.
+
 ### 🔑 Getting a Free Gemini API Key
 1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey) (100% Free, no credit card required).
 2. Generate an API Key and paste it into the onboarding prompt or add it to `config/api_keys.json`.

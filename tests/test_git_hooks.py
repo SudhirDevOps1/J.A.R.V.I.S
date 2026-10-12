@@ -368,10 +368,17 @@ def _fake_git_run(target: Path):
 
 # â”€â”€ the real thing works end to end â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+@pytest.mark.slow
 def test_check_passes_on_a_clean_tree():
     """The actual check, run against this repository right now.
 
     Deliberately skip_tests: running the suite inside the suite would recurse.
+
+    Marked slow because the dominant cost is not the syntax scan - about 3s for
+    the whole tree - but the critical-import probe, which imports main.py and
+    with it effectively the whole application. That probe is genuinely worth
+    keeping: it is what catches a module that parses but cannot be imported.
+    It just does not belong in every default run.
     """
     from scripts.git_hooks.checks import run_pre_push
     assert run_pre_push(_ROOT, quiet=True, skip_tests=True) == 0
