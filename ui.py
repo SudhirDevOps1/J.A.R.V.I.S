@@ -171,6 +171,133 @@ def current_palette() -> dict[str, str]:
     return {k: getattr(C, k) for k in _HUE_LINKED}
 
 
+# ── full theme application ──────────────────────────────────────────────────
+#
+# apply_ui_accent() re-derives the teal family from a hue. That is one axis.
+# This applies a whole Theme: light OR dark backgrounds, a curated palette, a
+# font scale and a density, then repaints everything live.
+#
+# Additive. apply_ui_accent is untouched and still used by the existing colour
+# picker; this sits above it and drives `class C` the same way, because every
+# widget in this file reads C.BG, C.PRI, C.TEXT and so on rather than hardcoding
+# colours. That is what makes a full theme switch instant and total.
+
+# Palette attributes on C, keyed by the field name used in core.theme.Theme.
+_C_FIELD_MAP = {
+    "bg": "BG", "panel": "PANEL", "panel2": "PANEL2",
+    "border": "BORDER", "border_b": "BORDER_B",
+    "text": "TEXT", "text_dim": "TEXT_DIM", "text_med": "TEXT_MED",
+    "white": "WHITE", "bar_bg": "BAR_BG",
+}
+
+
+def apply_theme(theme) -> bool:
+    """Apply a core.theme.Theme to class C, live.
+
+    Returns False only if the theme could not be applied at all. Never raises:
+    a broken theme must not stop the interface from starting.
+    """
+    try:
+        applied = 0
+        for key, attr in _C_FIELD_MAP.items():
+            value = getattr(theme, key, None)
+            if value:
+                setattr(C, attr, value)
+                applied += 1
+        # The accent itself, plus its dim/ghost derivations.
+        accent = getattr(theme, "accent", None)
+        if accent:
+            setattr(C, "PRI", accent)
+            setattr(C, "PRI_DIM", _mix(accent, getattr(theme, "bg", C.BG), 0.55))
+            setattr(C, "PRI_GHO", _mix(accent, getattr(theme, "bg", C.BG), 0.18))
+            applied += 1
+
+        # getattr(..., None) swallows AttributeError, so an object that answers
+        # nothing at all used to fall through and return True - claiming a
+        # theme was applied when not one field had been. Reporting success for
+        # a no-op is the same class of lie this whole subsystem exists to stop.
+        if applied == 0:
+            print("[Theme] theme object supplied none of the expected fields")
+            return False
+        return True
+    except Exception as e:
+        print(f"[Theme] could not apply theme: {e}")
+        return False
+
+
+def _mix(a: str, b: str, ratio: float) -> str:
+    """Blend two hex colours. ratio 0 = a, 1 = b."""
+    try:
+        a = a.lstrip("#")
+        b = b.lstrip("#")
+        out = []
+        for i in (0, 2, 4):
+            ca, cb = int(a[i:i + 2], 16), int(b[i:i + 2], 16)
+            out.append(int(ca + (cb - ca) * ratio))
+        return "#{:02x}{:02x}{:02x}".format(*out)
+    except Exception:
+        return a
+
+
+def rescale_all_fonts(scale: float) -> None:
+    """Scale every widget's font that is not already at the requested scale.
+
+    Scoped honestly: this walks the widgets that exist now. The ~200 call sites
+    in this file pass a literal point size to QFont, so there is no single place
+    to intercept them. Walking the live widget tree is the only way to cover
+    them all without editing each one, at the cost of a widget created later
+    keeping the size it was born with. Applied again on every theme change and
+    after the interface builds, which is when every widget exists.
+    """
+    try:
+        if abs(float(scale) - 1.0) < 0.001:
+            return
+        app = QApplication.instance()
+        if app is None:
+            return
+        for w in app.allWidgets():
+            try:
+                f = w.font()
+                base = getattr(w, "_jarvis_base_point", None)
+                if base is None:
+                    base = f.pointSizeF()
+                    try:
+                        w._jarvis_base_point = base
+                    except Exception:
+                        continue
+                f.setPointSizeF(max(6.0, base * float(scale)))
+                w.setFont(f)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
+def apply_theme_from_prefs(persist: bool = True):
+    """Load the saved theme, apply it, return it. Safe to call at startup."""
+    try:
+        from core import theme as theme_mod
+    except Exception as e:
+        print(f"[Theme] module unavailable: {e}")
+        return None
+    try:
+        prefs = theme_mod.load()
+        built = theme_mod.build(
+            prefs.get("preset", theme_mod.DEFAULT_THEME),
+            prefs.get("accent") or None,
+            prefs.get("font_scale", 1.0),
+            prefs.get("density", "cozy"),
+        )
+        apply_theme(built)
+        rescale_all_fonts(built.font_scale)
+        if persist:
+            theme_mod.save(prefs)
+        return built
+    except Exception as e:
+        print(f"[Theme] could not load saved theme: {e}")
+        return None
+
+
 def retheme_all_widgets(old: dict[str, str], new: dict[str, str]) -> None:
     """
     LIVE full theme change. Replaces the old palette colours with the new ones
