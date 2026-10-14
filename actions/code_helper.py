@@ -270,7 +270,32 @@ def _run_file(path: Path, args: list, timeout: int) -> str:
         error  = result.stderr.strip()
         parts  = []
         if output: parts.append(f"Output:\n{output}")
-        if error:  parts.append(f"Stderr:\n{error}")
+
+        if error:
+            # A raw traceback used to be returned verbatim here, so a crash in
+            # generated code dumped CPython internals into the conversation:
+            #
+            #   Traceback (most recent call last):
+            #     File "calculator.py", line 12, in divide
+            #   ZeroDivisionError: division by zero
+            #
+            # The user gets the exception type, message and location - what they
+            # can act on. The frames stay available in the log for debugging.
+            try:
+                from core.errors import full_context, summarize_python_error
+                summary = summarize_python_error(error)
+                context = full_context(error)
+            except Exception:
+                # Never fall back to dumping the raw traceback: that is the
+                # behaviour this replaced. Keep only the first meaningful line.
+                head = next((ln.strip() for ln in reversed(error.splitlines())
+                             if ln.strip()), "")
+                summary = f"The script failed ({head})" if head else \
+                    "The script failed."
+                context = ""
+            parts.append(summary)
+            if context:
+                print(f"[Code] Full traceback for {path.name}:\n{context}")
         return "\n\n".join(parts) if parts else "Executed with no output."
 
     except subprocess.TimeoutExpired:

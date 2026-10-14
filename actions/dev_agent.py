@@ -338,7 +338,25 @@ def _run_project(run_command: str, project_dir: Path, timeout: int = 30) -> str:
         if stdout:
             combined_parts.append(f"STDOUT:\n{stdout}")
         if stderr:
-            combined_parts.append(f"STDERR:\n{stderr}")
+            # Same fix as actions/code_helper.py: a raw traceback is developer
+            # output, not an answer. Summarise for the user, keep the frames in
+            # the log.
+            try:
+                from core.errors import full_context, summarize_python_error
+                combined_parts.append(summarize_python_error(stderr))
+                context = full_context(stderr)
+                if context:
+                    print(f"[DevAgent] Full traceback:\n{context}")
+            except Exception:
+                # Never fall back to dumping the raw traceback: that is the
+                # exact behaviour this replaced. Say the summary could not be
+                # produced and keep the first line, which is the exception.
+                head = next((ln.strip() for ln in reversed(stderr.splitlines())
+                             if ln.strip()), "")
+                combined_parts.append(
+                    f"The script failed and the error could not be summarised"
+                    f" ({head})" if head else "The script failed."
+                )
 
         return "\n\n".join(combined_parts) if combined_parts else "Ran with no output."
 
