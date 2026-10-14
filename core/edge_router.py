@@ -511,6 +511,74 @@ class NeedleToolRouter:
             _t = re.sub(r"\b(ko|ki|ka|file|files|app|koi|ek|please|zara)\b", "", m_hunt.group(1)).strip()
             if _t and len(_t) > 1:
                 return _dispatch("file_controller", {"action": "hunt_delete", "name": _t})
+
+        # ADDITIVE: delete a NAMED file, in either word order.
+        #
+        # Found from a real session: "fle delete kro to muna.txt ko",
+        # "delete kro munna.txt" and "munna.txt delete karo" all went to the
+        # cloud, which then asked the user to clarify - three times - before
+        # doing the one thing they had already asked for clearly. file_controller
+        # has had a `delete` action the whole time; nothing routed to it.
+        #
+        # Both orders are handled because Hindi puts the object first as often
+        # as not: "munna.txt delete karo" and "delete kro munna.txt" are the
+        # same request.
+        _DEL_VERB = (r"(?:delete\s*(?:kro|karo|kar\s*do|kar\s*dena|it\s*na)?|"
+                     r"remove\s*(?:kro|karo|do)?|mita\s*do|mita\s*dena|"
+                     r"hata\s*do|hata\s*d[oa]|hatado|mitado)")
+        _DEL_OBJ = r"(?:ko|ka|ki|se|ko\s*se)?"
+
+        # Both word orders are tried, and the first one that yields a FILENAME-LIKE
+        # target wins. A fixed order was wrong in both directions.
+        #
+        # Order A's verb swallows the trailing "karo", then backtracks and
+        # captures it again as the filename:
+        #
+        #     'munna.txt delete karo'   A=match 'karo'       target=''
+        #     'delete kro munna.txt'    A=match 'munna.txt'  target='munna.txt'
+        #
+        # so the second phrasing worked and the first was silently dropped.
+        _candidates = []
+        _m_a = re.search(
+            _DEL_VERB + r"\s*" + _DEL_OBJ + r"\s*(?:kro|karo|kar\s*do|do|dena)?\s+"
+            r"(.+?)\s*$", clean)
+        if _m_a:
+            _candidates.append(_m_a.group(1))
+        _m_b = re.search(r"(.+?)\s+" + _DEL_VERB + r"\b", clean)
+        if _m_b:
+            _candidates.append(_m_b.group(1))
+
+        _REF_WORDS = (r"\b(fle|file|files|folder|isk[ae]|usko|uska|usi|ko|ka|ki|se|to|"
+                      r"please|zara|kro|karo|kar\s*do|do|dena|de\s*do|"
+                      r"delete|remove|ab|now|bas|hai|hain|ho\s*raha|rahi)\b")
+        _REFERENTIAL = {"jo", "jise", "jiska", "usi", "us", "uska", "uski",
+                        "wo", "woh", "file", "fle", "jo file", "usi file"}
+
+        for _raw in _candidates:
+            _target = re.sub(_REF_WORDS, " ", _raw).strip(" .,?!-\"'")
+            # A bare pronoun is not a filename. "fle delete kro jo hain" leaves
+            # "jo" behind, which is non-empty but names nothing - so the empty
+            # check alone never fired and the request went to the cloud, which
+            # asked the user to clarify. Three times, in the session this came
+            # from, for a file whose name the conversation already held.
+            if not _target or _target.lower() in _REFERENTIAL:
+                # "the file" means the file this conversation last touched.
+                # One lookup, rather than a round trip to a model that will
+                # only ask the same question again.
+                try:
+                    from core.context_buffer import get_context_buffer
+                    _buf = get_context_buffer()
+                    _target = str(getattr(_buf, "last_file", "") or "").strip()
+                except Exception:
+                    _target = ""
+            if not _target:
+                continue
+            if ("." in _target or "/" in _target
+                    or _target.lower() in ("desktop", "downloads",
+                                           "documents", "home")):
+                return _dispatch("file_controller",
+                                 {"action": "delete", "path": _target,
+                                  "name": _target})
         # "warning band karo" -> monitor mute
         if re.search(r"\b(warning|alert|monitor)\s*(band|off|mute|rok|chup)\b", clean):
             return _dispatch("monitor_ctl", {"action": "mute"})
@@ -1234,7 +1302,20 @@ class NeedleToolRouter:
 
         # -- System Power (Shutdown / Restart / Sleep) ------------------------
         # "PC band karo" / "shutdown" / "restart karo" / "sleep mode"
-        if re.search(r"\b(shutdown|pc\s*band|computer\s*band|band\s*karo\s*pc|band\s*kar\s*do)\b", clean):
+        #
+        # SAFETY: the bare phrase "band kar do" used to mean SHUTDOWN here, so
+        # "chrome band kar do" - which means close chrome - shut the computer
+        # down. Confirmed on this machine before the fix:
+        #     'chrome band kar do'  ->  computer_settings {'action': 'shutdown'}
+        #
+        # Shutting down is not undone by saying something else, so the subject
+        # must now be explicit: a named system word, or the word shutdown
+        # itself. "band kar do" on its own is far more often "close it".
+        if re.search(
+                r"\b(shutdown|shut\s*down|pc\s*band(?:o|\s*kar\s*do)?|"
+                r"computer\s*band(?:o|\s*kar\s*do)?|system\s*band(?:o|\s*kar\s*do)?|"
+                r"laptop\s*band(?:o|\s*kar\s*do)?|machine\s*band(?:o|\s*kar\s*do)?|"
+                r"band\s*kar\s*do\s*(?:pc|computer|system|laptop|machine))\b", clean):
             if "restart" not in clean and "reboot" not in clean:
                 return _dispatch("computer_settings", {"action": "shutdown"})
         if re.search(r"\b(restart|reboot|dobara\s*chalu|phir\s*se\s*start)\b", clean):
@@ -1602,7 +1683,13 @@ class LFMChatEngine:
 
         # Semantic Mapping 12: System Power
         # "PC band karo" / "PC off karo" / "restart karo" / "so jao"
-        if any(w in clean for w in ("pc band", "computer band", "pc off", "band kar do", "shut down", "shutdown")):
+        #
+        # "band kar do" was in this list with no subject, which is the second
+        # place "chrome band kar do" was read as a power command. An explicit
+        # system word is required, matching the fix in the tool dispatch above.
+        if any(w in clean for w in ("pc band", "computer band", "system band",
+                                    "laptop band", "pc off", "computer off",
+                                    "shut down", "shutdown")):
             if "restart" not in clean:
                 return "shutdown pc", "shutdown"
         if any(w in clean for w in ("restart karo", "reboot", "dobara chalu", "phir se start")):
