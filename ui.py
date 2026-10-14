@@ -9554,27 +9554,39 @@ class MainWindow(QMainWindow):
         self._open_history()
 
     def _open_appearance(self):
-        """Open the theme picker.
+        """Open the theme picker. Ctrl+Shift+T, the tray, and the palette.
 
-        Theme selection existed as an engine and a panel but had no way in at
-        all - no button, no shortcut, no menu entry, no voice route. A setting
-        nobody can reach is not a setting.
+        Three bugs in the first version of this, all of them mine:
 
-        Shows the window first: opening a picker behind a tray-hidden window
-        looks like the click did nothing.
+        1. It called _tray_toggle_window() first, "so the panel would be
+           visible". That method TOGGLES - with the window already up it hides
+           it. So pressing Ctrl+Shift+T made the whole interface disappear,
+           and the panel came along as its child. Replacing the toggle with an
+           explicit "show if hidden" is the entire fix.
+
+        2. It parented the panel to the MainWindow rather than
+           centralWidget(), so it spanned the metrics rail and the activity
+           log.
+
+        3. It never called _place_overlay(), which is what centres an overlay
+           that is deliberately outside the layout. Unplaced, a child sits at
+           (0,0).
+
+        Now it does exactly what _open_history does.
         """
         try:
-            self._tray_toggle_window()
-        except Exception:
-            pass
-        try:
+            if not self.isVisible() or self.isMinimized():
+                self.showNormal()
+                self.raise_()
+                self.activateWindow()
+
             if getattr(self, "_theme_panel", None) is None:
                 from ui.theme_panel import ThemePanel
                 self._theme_panel = ThemePanel(
-                    parent=self,
+                    self.centralWidget(),
                     on_close=lambda: None,
                 )
-                self._theme_panel.hide()
+            self._place_overlay(self._theme_panel, width=720, height=640)
             self._theme_panel.show_and_load()
             self._theme_panel.raise_()
         except Exception as e:
