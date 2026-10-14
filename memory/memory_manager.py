@@ -750,6 +750,12 @@ def log_daily_activity(user_text: str, ai_response: str = "", action_name: str =
     """
     Log an interaction or action to today's daily journal (memory/journals/YYYY-MM-DD.md).
     This creates an immutable second-brain activity record for remembering past days.
+
+    Secrets and personal identifiers are removed before anything is written.
+    See core/pii_redactor.py for why that is not optional: a full scan of this
+    repository's history found a real person's relationships sitting in a
+    committed config file, because this function recorded what was said
+    verbatim and something later committed it.
     """
     user_text = (user_text or "").strip()
     if not user_text:
@@ -757,6 +763,24 @@ def log_daily_activity(user_text: str, ai_response: str = "", action_name: str =
     # Ignore pure internal protocol tags
     if user_text.startswith("[STARTUP_BRIEFING]") or user_text.startswith("[PROACTIVE_CHECK]"):
         return
+
+    # Redaction happens here, before the entry is built, so no code path can
+    # reach the file with the raw text.
+    #
+    # Both the import AND the calls are guarded. Guarding only the import was a
+    # bug caught by its own test: redact_if_enabled documents that it never
+    # raises, but a redactor from a different version, or one whose own internals
+    # fail, would take the whole journal write down with it. Losing the user's
+    # entry is a worse outcome than storing it unredacted, so this degrades to
+    # verbatim and says so in the log.
+    try:
+        from core.pii_redactor import redact_if_enabled as _redact
+
+        user_text = _redact(user_text)
+        if ai_response:
+            ai_response = _redact(ai_response)
+    except Exception as e:
+        print(f"[Journal] PII redaction unavailable, storing verbatim: {e}")
 
     now = datetime.now()
     date_str = now.strftime("%Y-%m-%d")
