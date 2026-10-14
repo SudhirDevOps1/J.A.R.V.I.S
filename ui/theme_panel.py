@@ -157,8 +157,19 @@ class ThemePanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+
         inner = QWidget()
-        grid = QGridLayout(inner)
+        # ONE layout on `inner`. This used to build a QGridLayout(inner) and
+        # then a QVBoxLayout(inner) as well, and Qt warned on every startup:
+        #
+        #   QLayout: Attempting to add QLayout "" to QWidget "", which already
+        #   has a layout
+        #   QLayout::addChildLayout: layout QGridLayout "" already has a parent
+        #
+        # The grid is added INTO the box layout rather than being a second
+        # layout attached to the same widget.
+        inner_layout = QVBoxLayout(inner)
+        grid = QGridLayout()
         grid.setSpacing(10)
 
         from core.theme import PRESETS
@@ -168,7 +179,6 @@ class ThemePanel(QWidget):
             grid.addWidget(card, i // columns, i % columns)
         grid.setRowStretch(grid.rowCount(), 1)
 
-        inner_layout = QVBoxLayout(inner)
         inner_layout.addLayout(grid)
         scroll.setWidget(inner)
         root.addWidget(scroll, 1)
