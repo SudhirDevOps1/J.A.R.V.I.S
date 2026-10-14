@@ -404,6 +404,65 @@ def _is_app_installed(name_or_bin: str) -> bool:
     return False
 
 
+def _known_installed(name: str) -> bool | None:
+    """Is there any record that `name` is an application on this machine?
+
+    Returns
+    -------
+    True   - the installed-app index has a plausible entry for it.
+    False  - the index is populated and holds nothing plausible.
+    None   - the index could not be built, so nothing can honestly be claimed.
+
+    WHY THE THREE-WAY ANSWER
+    ------------------------
+    A two-way answer would turn a failed or still-building scan into "not
+    installed" for every request, breaking launches on any machine where the
+    scan misbehaves. None means "unknown", and the caller keeps its previous
+    behaviour rather than guessing.
+
+    Matched the same way _resolve_app matches, on purpose: two different
+    definitions of "installed" would eventually disagree, and the caller would
+    act on the wrong one.
+    """
+    try:
+        installed = _scan_installed_apps()
+    except Exception:
+        return None
+    if not installed:
+        # An empty index is indistinguishable from a broken one. Do not treat
+        # it as proof that nothing is installed.
+        return None
+
+    key = str(name or "").strip().lower()
+    if not key:
+        return False
+
+    if key in installed:
+        return True
+
+    # Colloquial names the resolver itself would translate.
+    if key in _HINDI_APP_NAMES and _HINDI_APP_NAMES[key] in installed:
+        return True
+
+    # An alias whose target is genuinely reachable is a hit, even when the
+    # alias name is not itself an index key.
+    if key in _APP_ALIASES:
+        try:
+            if _is_app_installed(_APP_ALIASES[key].get(_SYSTEM, key)):
+                return True
+        except Exception:
+            pass
+
+    # Word-overlap, using the same minimum-fragment guard as the resolver so
+    # a bare 2-3 character prefix can never count as a match.
+    words = {w for w in re.split(r"[\s_\-.]+", key) if len(w) >= 4}
+    if words:
+        for indexed in installed:
+            if words & set(re.split(r"[\s_\-.]+", indexed)):
+                return True
+    return False
+
+
 def _looks_like_opaque_identifier(text: str) -> bool:
     """Whether `text` is a machine identifier rather than a human app name.
 
@@ -894,6 +953,43 @@ def _launch_windows(app_name: str) -> bool:
         print(f"[open_app] refusing Start Menu search for non-name target "
               f"{app_name!r}")
         return False
+
+    # ADDITIVE gate: only hand a name to Windows Search when the machine
+    # actually has a record of that application.
+    #
+    # THE BUG
+    # -------
+    # Asking for Telegram produced:
+    #
+    #     [open_app] 'Telegram' not found in cache. Running dynamic on-demand
+    #                system rescan...
+    #     [open_app] Launching: 'Telegram' -> 'Telegram'
+    #
+    # and Windows Search opened showing "Telegram (software)". Telegram is not
+    # installed on this machine - no Get-StartApps entry, no uninstall
+    # registry key, nothing on disk. The user had to dismiss a search box and a
+    # Microsoft Store results page for an application that does not exist.
+    #
+    # This is worse than doing nothing. When Windows Search is given a name it
+    # cannot match locally, it does not report failure - it falls through to
+    # the Store and shows results to buy. So "type it and see" converts a
+    # one-line "not installed" into a shopping page, while stealing focus from
+    # whatever the user was actually doing.
+    #
+    # The stages above already handle everything genuinely installed: a real
+    # path, a binary on PATH, a protocol handler, an AppID. An application that
+    # is absent from the index AND unreachable by all of those is not installed,
+    # and searching for it cannot succeed - it can only reach the Store.
+    #
+    # Unknown (an index that could not be built) keeps the old behaviour, so a
+    # scan failure on someone else's machine degrades rather than breaks.
+    _on_record = _known_installed(clean_search)
+    if _on_record is False:
+        print(f"[open_app] '{clean_search}' is not in the installed-app index "
+              f"({len(_scan_installed_apps())} apps scanned). Refusing Windows "
+              f"Search: an unmatched query opens the Microsoft Store.")
+        return False
+
     if len(clean_search) >= 2:
         try:
             import pyautogui
@@ -1272,6 +1368,25 @@ def open_app(
                 time.sleep(0.3)
                 _activate_window(app_name)
                 return f"Opened {app_name}."
+
+        # ADDITIVE: say the useful thing when the machine can actually answer.
+        #
+        # "It may still be loading, or it might not be installed" is true for
+        # every app that ever fails, which makes it no use to anyone. When the
+        # index positively holds nothing for this name, the app is not
+        # installed and saying so is more useful than hedging - and it is
+        # checkable rather than a guess.
+        try:
+            _absent = _known_installed(app_name) is False
+        except Exception:
+            _absent = False
+        if _absent:
+            return (
+                f"{app_name} is not installed on this PC - it was not found in "
+                f"Start Menu apps, installed programs, UWP apps or the app list "
+                f"({len(_scan_installed_apps())} apps indexed). "
+                f"Kya main aapke liye web se iske baare mein search karoon?"
+            )
 
         return (
             f"Could not confirm that {app_name} launched. "
