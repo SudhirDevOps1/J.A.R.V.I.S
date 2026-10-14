@@ -3,7 +3,7 @@ J.A.R.V.I.S. — Version and Release Metadata
 Maintained by SudhirDevOps1
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __app_name__ = "J.A.R.V.I.S."
 __author__ = "SudhirDevOps1"
 # GPL-3.0-only, because the GUI framework is PyQt6, which Riverbank

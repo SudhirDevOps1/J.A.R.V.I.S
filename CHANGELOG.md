@@ -2,6 +2,28 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [0.4.0](https://github.com/SudhirDevOps1/J.A.R.V.I.S/compare/v0.3.0...v0.4.0) (2026-10-14)
+
+
+### Features
+
+* **appearance:** three ways in, and load the saved theme at startup ([47cf208](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/47cf208d65a7435dabdd78e47c68695e68294188))
+* **automation:** prove actions happened before claiming they did ([9cbd765](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/9cbd765ba9cd0068a2f849adce55db6c087ebf6e))
+* **evals:** measure what the assistant does, instead of claiming it ([5a96855](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/5a968556894340fa2db7009c56fa5107c3521665))
+* **theme-panel:** the appearance picker the theme engine was missing ([706d329](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/706d32969810071a4618973e4f2c636fb89e1e31))
+* **theme:** seven presets, a light mode, and a contrast floor under all of it ([4d1e4a1](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/4d1e4a17f417feaed36b338f29769a82861175c7))
+
+
+### Bug Fixes
+
+* **honesty:** stop reporting a 230M model that is not installed ([56e713a](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/56e713ab8a6155309a3d7aba04c0ddbf6d4b6993))
+* **open_app:** stop claiming success when xdg-open fails, and stop the tests hiding it ([e5e4f21](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/e5e4f212534ec13f83476f9fb734fbc5ba4d62f5))
+* **router, persona, theme:** delete routing, post-tool replies, a Qt warning ([3075c20](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/3075c20d9dfd076bbe7772071671ed0c22816244))
+* **router:** "band kar do" no longer means shut down the computer ([eefd8db](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/eefd8dba7fe2eb713456eefa95f6b95a7a66bd8b))
+* **routing:** answer time, weather and searches locally instead of via the cloud ([284133d](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/284133d7056b90645e64cf0d99e859938715dcd0))
+* **tests:** reset the context buffer around every test, not just the one that leaked ([3bf422f](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/3bf422f240d20beec43376857e192f50104cd365))
+* **ui:** Ctrl+Shift+T hid the whole app instead of opening the picker ([c2aa386](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/c2aa38673a94bb636e5c0827eee98191972de979))
+
 ## [0.3.0](https://github.com/SudhirDevOps1/J.A.R.V.I.S/compare/v0.2.0...v0.3.0) (2026-10-14)
 
 
