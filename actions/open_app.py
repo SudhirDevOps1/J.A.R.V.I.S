@@ -1125,8 +1125,19 @@ def _launch_linux(app_name: str) -> bool:
             pass
 
     try:
-        subprocess.run(["xdg-open", app_name], capture_output=True, timeout=5)
-        return True
+        result = subprocess.run(["xdg-open", app_name], capture_output=True, timeout=5)
+        # FIX: returncode was ignored and this returned True unconditionally.
+        #
+        # subprocess.run does not raise when the command fails - it returns a
+        # finished process with a non-zero exit status. xdg-open on Ubuntu
+        # exits non-zero for an application it cannot find, so asking for one
+        # that is not installed produced "Opened Telegram."
+        #
+        # Caught by the ubuntu-latest CI job, not by the Windows one. Same
+        # family as the empty-string bug fixed in _process_appeared: a launch
+        # reported as successful without ever checking whether it worked.
+        if result.returncode == 0:
+            return True
     except Exception:
         pass
 

@@ -230,7 +230,26 @@ def test_gate_is_only_a_gate_not_a_removal(fake_index):
 
 # ── the message the user actually reads ─────────────────────────────────────
 
-def test_absent_app_gets_a_definite_answer(fake_index):
+@pytest.fixture()
+def launcher_armed(fake_index, monkeypatch):
+    """Turn the no-real-launch guard OFF for tests that must exercise the real
+    decision path.
+
+    Without this these three tests passed only because conftest blocked every
+    launch, which made them a false green: they proved nothing about the code
+    they claim to test. That is how a Linux-only bug - _launch_linux returning
+    True without checking xdg-open's exit status - reached main and was caught
+    only by the ubuntu-latest CI job.
+
+    It is safe to disarm here. The app is absent from the index, so no stage
+    can actually start anything: every path either finds no binary or invokes a
+    tool that is asked for a name nothing is registered under.
+    """
+    monkeypatch.setattr(oa, "_NO_REAL_LAUNCH", False)
+    return fake_index
+
+
+def test_absent_app_gets_a_definite_answer(launcher_armed):
     """Not a hedge. The machine can answer this one, so it should."""
     out = oa.open_app(parameters={"app_name": "Telegram"})
     assert "not installed" in out.lower(), out
@@ -240,7 +259,7 @@ def test_absent_app_gets_a_definite_answer(fake_index):
     assert "telegram" in out.lower()
 
 
-def test_the_definite_answer_names_what_was_searched(fake_index):
+def test_the_definite_answer_names_what_was_searched(launcher_armed):
     """So the claim is checkable rather than asserted."""
     out = oa.open_app(parameters={"app_name": "Telegram"})
     low = out.lower()
@@ -248,6 +267,58 @@ def test_the_definite_answer_names_what_was_searched(fake_index):
     assert "indexed" in low
 
 
-def test_absent_app_is_not_announced_as_opened(fake_index, no_pyautogui):
+def test_absent_app_is_not_announced_as_opened(launcher_armed, no_pyautogui):
+    """The false success this whole gate exists to prevent.
+
+    On Linux this is the test that catches _launch_linux returning True
+    without looking at xdg-open's exit status."""
     out = oa.open_app(parameters={"app_name": "Telegram"})
     assert "Opened Telegram" not in out, out
+    assert "opened" not in out.lower(), out
+
+
+def test_linux_launcher_does_not_claim_success_on_a_nonzero_exit(monkeypatch):
+    """Regression for the ubuntu-latest CI failure.
+
+    `subprocess.run` does not raise when a command fails, so the original
+
+        subprocess.run(["xdg-open", app_name], ...)
+        return True
+
+    reported every attempt as launched. xdg-open exits non-zero for an
+    application it cannot find, so asking for one that is not installed
+    produced "Opened Telegram." on Linux while Windows behaved correctly.
+    """
+    class _Result:
+        returncode = 3          # what xdg-open returns for an unknown app
+        stdout = b""
+        stderr = b"not found"
+
+    calls = []
+
+    def fake_run(cmd, *a, **kw):
+        calls.append(cmd)
+        return _Result()
+
+    monkeypatch.setattr(oa, "_NO_REAL_LAUNCH", False)
+    monkeypatch.setattr(oa.subprocess, "run", fake_run)
+    monkeypatch.setattr(oa.shutil, "which", lambda *a, **kw: None)
+
+    assert oa._launch_linux("DefinitelyNotInstalled") is False, (
+        "a non-zero exit is not a successful launch"
+    )
+    assert ["xdg-open", "DefinitelyNotInstalled"] in calls
+
+
+def test_linux_launcher_reports_success_only_on_a_zero_exit(monkeypatch):
+    """The other half, so the fix cannot be 'never report success'."""
+    class _Result:
+        returncode = 0
+        stdout = b""
+        stderr = b""
+
+    monkeypatch.setattr(oa, "_NO_REAL_LAUNCH", False)
+    monkeypatch.setattr(oa.shutil, "which", lambda *a, **kw: None)
+    monkeypatch.setattr(oa.subprocess, "run", lambda cmd, *a, **kw: _Result())
+
+    assert oa._launch_linux("someapp") is True
