@@ -708,22 +708,33 @@ def _process_appeared(hint: str, before: set, timeout: float = 2.5) -> bool:
                 n = (_ps.Process(pid).name() or "").lower()
             except Exception:
                 continue
+            if not n:
+                # An unreadable or just-exited process reports an empty name.
+                # Python's `"" in "anything"` is True, so an unguarded empty
+                # name matches EVERY hint and this function reports success for
+                # a launch that never happened. Observed: asking for an app
+                # that is not installed returned "Opened <app>."
+                continue
             if n in ("explorer.exe", "shellexperiencehost.exe",
                      "startmenuexperiencehost.exe", "searchhost.exe", "sihost.exe"):
                 continue
             base = n.replace(".exe", "")
+            if not base:
+                continue
             for t in toks:
-                if t in base or base in t:
+                if t and base and (t == base or t in base or base in t):
                     _activate_window(hint)
                     return True
         # 2. Process was already running: Windows passes activation to existing instance
         for p in _ps.process_iter(['name']):
             try:
                 n = (p.info.get('name') or "").lower().replace(".exe", "")
+                if not n:
+                    continue        # same empty-name trap as the loop above
                 if n in ("explorer", "shellexperiencehost", "startmenuexperiencehost", "searchhost", "sihost"):
                     continue
                 for t in toks:
-                    if t == n or (len(t) >= 4 and (t in n or n in t)):
+                    if t and (t == n or (len(t) >= 4 and (t in n or n in t))):
                         _activate_window(hint)
                         return True
             except Exception:
