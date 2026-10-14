@@ -357,6 +357,21 @@ class NeedleToolRouter:
         if re.search(r"\b(privacy\s*mode\s*(?:on|enable|chalu|active)|screen\s*shield\s*on|enable\s*privacy)\b", clean):
             return _dispatch("privacy_ctl", {"action": "enable_privacy_mode"})
 
+        # -- Journal redaction ---------------------------------------------
+        # "redaction on" / "privacy redaction chalu karo" / "hide my api key"
+        #
+        # Found by evals/runner.py: the redaction actions existed on privacy_ctl
+        # and were reachable only by calling the tool directly. Spoken, they went
+        # to the cloud model, which then had to guess - and the whole point of
+        # the feature is that it is on without anyone having to think about it.
+        # A control that cannot be reached by voice is not a control.
+        if re.search(r"\b(redact(?:ion)?|pii|mask(?:ing)?)\b[\s\w]*(on|enable|chalu|start|activate|kar[oa])", clean):
+            return _dispatch("privacy_ctl", {"action": "enable_redaction"})
+        if re.search(r"\b(redact(?:ion)?|pii|mask(?:ing)?)\b[\s\w]*(off|disable|band|deactivate|rama)", clean):
+            return _dispatch("privacy_ctl", {"action": "disable_redaction"})
+        if re.search(r"\b(redaction\s*(?:on|off)|pii\s*(?:on|off))\b", clean):
+            return _dispatch("privacy_ctl", {"action": "enable_redaction"})
+
         # "privacy mode off" / "privacy mode band karo" / "screen shield off"
         if re.search(r"\b(privacy\s*mode\s*(?:off|disable|band|deactive)|screen\s*shield\s*off|disable\s*privacy)\b", clean):
             return _dispatch("privacy_ctl", {"action": "disable_privacy_mode"})

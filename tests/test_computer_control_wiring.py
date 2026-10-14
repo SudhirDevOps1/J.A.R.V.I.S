@@ -69,15 +69,26 @@ def test_retry_terminates_on_a_real_inner_action():
 
 # ── wait_until replaces sleeping ────────────────────────────────────────────
 
-def test_wait_until_on_a_file_that_exists_succeeds():
+def test_wait_until_on_a_file_that_exists_succeeds(tmp_path):
+    """Uses a real file the test creates, not a path that exists on one
+    platform only.
+
+    This test originally waited on C:/Windows/win.ini. It passed on Windows,
+    which is where it was written, and failed on ubuntu-latest for both Python
+    3.11 and 3.12 - a test that only runs on the machine that wrote it is not
+    a cross-platform test, it is a local habit."""
+    target = tmp_path / "already-here.txt"
+    target.write_text("x", encoding="utf-8")
+
     out = computer_control({"action": "wait_until", "for": "file",
-                            "value": "C:/Windows/win.ini", "timeout": 3})
+                            "value": str(target), "timeout": 3})
     assert "✓" in out, out
 
 
-def test_wait_until_on_a_file_that_cannot_exist_fails_honestly():
+def test_wait_until_on_a_file_that_cannot_exist_fails_honestly(tmp_path):
+    missing = tmp_path / "definitely" / "not" / "here.txt"
     out = computer_control({"action": "wait_until", "for": "file",
-                            "value": "C:/definitely/not/here.txt", "timeout": 0.5})
+                            "value": str(missing), "timeout": 0.5})
     assert "✗" in out, out
 
 
