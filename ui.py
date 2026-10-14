@@ -3026,11 +3026,31 @@ class ProviderSettingsOverlay(QWidget):
         ec_header.addWidget(_lbl("[*] TRI-TIER EDGE AI REFLEX (Local 10ms + Cloud Brain)", 8, bold=True, color=C.PRI))
         ec_lay.addLayout(ec_header)
 
-        # Badges row: LFM2.5 Ear (200MB), Needle 2 Hands (28MB), Gemini Cloud Brain
+        # Badges row, reflecting what is ACTUALLY loaded.
+        #
+        # These three labels used to be fixed strings. The first read
+        # "Ear: LFM2.5-230M" and "Semantic Parser | 200MB" on a machine with
+        # an empty models/lfm directory and no Ollama installed at all -
+        # checked on the user's PC. Nothing was loading, and 200 MB of RAM was
+        # never used. Now the ear badge says so when there is no model.
+        try:
+            from core.edge_router import get_tri_tier_dispatcher
+            _disp = get_tri_tier_dispatcher()
+            _lfm_ok = bool(_disp.lfm.is_available())
+            _ear_title = (f"Ear: {_disp.lfm.model_name.split('/')[-1]}"
+                          if _lfm_ok else "Ear: none installed")
+            _ear_sub = ("Semantic Parser | loaded" if _lfm_ok
+                        else "no local model - cloud only")
+            _ear_color = "#00d4ff" if _lfm_ok else "#8899aa"
+        except Exception:
+            _lfm_ok = False
+            _ear_title, _ear_sub, _ear_color = (
+                "Ear: unavailable", "could not check", "#8899aa")
+
         b_row = QHBoxLayout()
         b_row.setSpacing(4)
         for t_title, t_sub, t_color in (
-            ("Ear: LFM2.5-230M", "Semantic Parser | 200MB", "#00d4ff"),
+            (_ear_title, _ear_sub, _ear_color),
             ("Hands: Needle 2", "10ms OS Reflex | 28MB", "#00ffaa"),
             ("Brain: Gemini Cloud", "Live Voice/Vision | 0MB", "#ffaa00"),
         ):
@@ -3070,8 +3090,19 @@ class ProviderSettingsOverlay(QWidget):
         ctrl_row.addWidget(test_needle_btn)
         ec_lay.addLayout(ctrl_row)
 
-        self._edge_test_stat = QLabel("Active: LFM2.5 Ear (~200MB) + Needle 2 Hands (~28MB RAM)")
+        # Says what is actually running. The old text claimed
+        # "LFM2.5 Ear (~200MB) + Needle 2 Hands" regardless of whether a model
+        # existed, which is how an empty models directory still displayed 200MB.
+        if _lfm_ok:
+            _edge_text = "Active: LFM2.5 Ear (loaded) + Needle 2 Hands (~28MB RAM)"
+            _edge_color = C.TEXT_DIM
+        else:
+            _edge_text = ("Active: Needle 2 Hands only (~28MB RAM). "
+                          "LFM2.5 is not installed - chat goes to the cloud.")
+            _edge_color = "#ffaa00"
+        self._edge_test_stat = QLabel(_edge_text)
         self._edge_test_stat.setFont(QFont(FONT_UI, 7))
+        self._edge_test_stat.setStyleSheet(f"color: {_edge_color};")
         self._edge_test_stat.setStyleSheet("color: #00ffaa; padding-left: 2px;")
         ec_lay.addWidget(self._edge_test_stat)
 
@@ -6854,6 +6885,19 @@ class MainWindow(QMainWindow):
         if _ui_color and _ui_color.lower() != DEFAULT_UI_COLOR:
             apply_ui_accent(_ui_color)
 
+        # Apply the saved THEME (preset / light mode / text size) in the same
+        # place, for the same reason: every widget below reads class C while it
+        # is being constructed, so the palette has to be right first or the
+        # window is built in one theme and shown in another.
+        #
+        # This function existed with no caller, which meant a chosen theme was
+        # saved and then ignored until the process happened to be restarted by
+        # something else.
+        try:
+            apply_theme_from_prefs(persist=False)
+        except Exception as _theme_err:
+            print(f"[Theme] could not apply the saved theme at startup: {_theme_err}")
+
         self.setWindowTitle(f"{_display} — {APP_VERSION}")
         # Apply custom Arc Reactor icon to Window, Taskbar & Alt-Tab
         ico_file = Path(__file__).resolve().parent / "config" / "jarvis.ico"
@@ -9509,6 +9553,36 @@ class MainWindow(QMainWindow):
         self._tray_toggle_window()
         self._open_history()
 
+    def _open_appearance(self):
+        """Open the theme picker.
+
+        Theme selection existed as an engine and a panel but had no way in at
+        all - no button, no shortcut, no menu entry, no voice route. A setting
+        nobody can reach is not a setting.
+
+        Shows the window first: opening a picker behind a tray-hidden window
+        looks like the click did nothing.
+        """
+        try:
+            self._tray_toggle_window()
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_theme_panel", None) is None:
+                from ui.theme_panel import ThemePanel
+                self._theme_panel = ThemePanel(
+                    parent=self,
+                    on_close=lambda: None,
+                )
+                self._theme_panel.hide()
+            self._theme_panel.show_and_load()
+            self._theme_panel.raise_()
+        except Exception as e:
+            print(f"[UI] could not open the appearance panel: {e}")
+
+    def _tray_open_theme(self):
+        self._open_appearance()
+
     def _tray_quit(self):
         """The real exit.
 
@@ -9641,6 +9715,11 @@ class MainWindow(QMainWindow):
             "Interrupt speech":          self._do_interrupt,
             "Keyboard shortcuts":        self._open_shortcut_help,
             "Conversation history":      self._open_history,
+            # Three ways in, because none of them is discoverable alone:
+            # the tray is where you look after closing the window, Ctrl+Shift+T
+            # is where you look while typing, and the palette is where you look
+            # when you have forgotten both.
+            "Appearance (theme, light mode)": self._open_appearance,
             "Copy last reply":           self._copy_last_reply,
             "Clear input":               self._clear_input,
         }

@@ -74,6 +74,10 @@ def build_menu_actions(visible: bool, muted: bool) -> List[List[TrayAction]]:
             TrayAction("Command palette  (Ctrl+K)", "_tray_open_palette"),
             TrayAction("Keyboard shortcuts  (Ctrl+/)", "_tray_open_shortcuts"),
             TrayAction("Conversation history  (Ctrl+H)", "_tray_open_history"),
+            # Appearance lives in the tray because it is the one setting people
+            # look for after closing the window. A feature that exists and has
+            # no way in is the same as a feature that does not exist.
+            TrayAction("Appearance  (themes, text size)", "_tray_open_theme"),
         ],
         [
             TrayAction("Quit JARVIS", "_tray_quit", kind="quit"),

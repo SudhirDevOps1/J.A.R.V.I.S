@@ -18,6 +18,7 @@ Convention
   Ctrl+/   keyboard help          answers "what can I press?"
   Ctrl+H   conversation history   browse and re-run past turns
   Ctrl+,   settings               same as clicking the gear
+  Ctrl+Sh+T appearance            themes, light mode, text size
   Ctrl+P   PiP companion          toggle the always-on-top mini window
   Ctrl+L   clear input            empty the text box
   Ctrl+,/  nothing (reserved)
@@ -163,6 +164,8 @@ def register_defaults(mgr: ShortcutManager, win) -> None:
 
     # --- Window ---
     mgr.add("Ctrl+,", "Settings", _h("_open_settings"), "Window", "")
+    mgr.add("Ctrl+Shift+T", "Appearance", _h("_open_appearance"), "Window",
+            "Themes, light mode, text size")
     mgr.add("Ctrl+P", "Toggle PiP companion", _h("_toggle_pip"), "Window",
             "Always-on-top mini window")
     mgr.add("Ctrl+B", "Toggle quick drawer", _h("_toggle_quick_drawer"), "Window", "")
