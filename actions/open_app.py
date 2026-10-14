@@ -878,8 +878,42 @@ def _win_start(target: str, *extra: str) -> None:
     subprocess.Popen(cmd, **kw)
 
 
+# ── test guard ──────────────────────────────────────────────────────────────
+# J.A.R.V.I.S can put windows on the user's screen and press keys for them.
+# That is unacceptable while the test suite runs, because scripts/git_hooks/
+# checks.py executes the full suite on EVERY push. A test that really launched
+# Notepad would open Notepad on the developer's desktop once per commit.
+#
+# That is not hypothetical. tests/test_start_search_gate.py passed a real
+# AppUserModelID to _launch_windows to prove identifiers are never typed into
+# Start Menu. _launch_windows did exactly what it is built to do and opened
+# Notepad. Confirmed from the process table on this machine: notepad.exe whose
+# parent explorer.exe had already exited, created during the test run.
+#
+# The switch lives here, in the module someone is about to call, rather than as
+# a monkeypatch in conftest.py. A conftest patch makes the problem invisible to
+# the next person who writes a test; a named guard here does not.
+_NO_REAL_LAUNCH: bool | None = None
+
+
+def _real_launches_disabled() -> bool:
+    """True when nothing may actually be launched.
+
+    Callable side sets it directly; the environment variable exists so a test
+    that imported the module before conftest ran is still covered.
+    """
+    if _NO_REAL_LAUNCH is not None:
+        return bool(_NO_REAL_LAUNCH)
+    return str(os.environ.get("JARVIS_NO_REAL_LAUNCH", "")).strip().lower() \
+        not in ("", "0", "false", "no")
+
+
 def _launch_windows(app_name: str) -> bool:
     """Launch application on Windows via path, AppID, shell protocol, or Start Menu."""
+    if _real_launches_disabled():
+        print(f"[open_app] real launches disabled; not launching {app_name!r}")
+        return False
+
     # 1. Direct path to .lnk or .exe
     if app_name.endswith(".lnk") or app_name.endswith(".exe") and os.path.exists(app_name):
         try:
@@ -1015,6 +1049,9 @@ def _launch_windows(app_name: str) -> bool:
 
 
 def _launch_macos(app_name: str) -> bool:
+    # Same guard as _launch_windows: `open -a` really does launch the app.
+    if _real_launches_disabled():
+        return False
     try:
         result = subprocess.run(["open", "-a", app_name], capture_output=True, timeout=8)
         if result.returncode == 0:
@@ -1061,6 +1098,8 @@ _LINUX_TERMINAL_FALLBACKS = [
 ]
 
 def _launch_linux(app_name: str) -> bool:
+    if _real_launches_disabled():
+        return False
     if app_name in ("x-terminal-emulator", "gnome-terminal", "terminal"):
         for term in _LINUX_TERMINAL_FALLBACKS:
             if shutil.which(term):

@@ -39,6 +39,35 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_app_launches():
+    """The suite must never put a window on the machine running it.
+
+    scripts/git_hooks/checks.py runs the whole suite on every single push, so a
+    test that genuinely launched an application would open it once per commit.
+
+    That happened. tests/test_start_search_gate.py passed a real
+    AppUserModelID to _launch_windows to prove identifiers are never typed into
+    the Start Menu, and _launch_windows did what it is designed to do and
+    opened Notepad. Seen in this machine's process table: notepad.exe with an
+    already-exited explorer.exe parent, created mid-run.
+
+    The switch itself lives in actions/open_app.py rather than here, so that
+    the next person who writes a test can see it in the module they call. This
+    fixture only sets it.
+    """
+    try:
+        from actions import open_app
+    except Exception:
+        return
+    previous = open_app._NO_REAL_LAUNCH
+    open_app._NO_REAL_LAUNCH = True
+    try:
+        yield
+    finally:
+        open_app._NO_REAL_LAUNCH = previous
+
+
+@pytest.fixture(autouse=True)
 def _reflex_gate_off_by_default():
     """Run the suite with the reflex confidence gate disabled.
 

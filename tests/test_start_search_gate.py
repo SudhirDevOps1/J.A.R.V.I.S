@@ -177,14 +177,37 @@ def test_identifiers_are_never_typed_into_search(fake_index, no_pyautogui):
 
 
 def test_unknown_index_still_reaches_search(fake_index, no_pyautogui, monkeypatch):
-    """Degradation, not breakage: if we cannot tell, behave exactly as before."""
+    """Degradation, not breakage: if we cannot tell, behave exactly as before.
+
+    This one test opts back into the real launcher, because the whole point is
+    to observe the Start Menu stage. It stays safe because pyautogui is the
+    recorder fixture, so no key is ever pressed - the test asserts on the
+    recorded calls, not on anything happening on the machine.
+    """
     monkeypatch.setattr(oa, "_scan_installed_apps", lambda *a, **k: {})
     monkeypatch.setattr(oa, "_process_appeared", lambda *a, **k: False)
+    monkeypatch.setattr(oa, "_NO_REAL_LAUNCH", False)
 
     oa._launch_windows("SomeUninstalledThing")
     assert no_pyautogui.pressed, (
         "an unknown index must fall through to the old Start Menu behaviour"
     )
+
+
+def test_the_test_guard_actually_blocks_launches(fake_index, no_pyautogui):
+    """The guard exists because this suite runs on every git push.
+
+    Verified on this machine: before it, tests/test_start_search_gate.py passed
+    a real AppUserModelID to _launch_windows and Notepad opened on the
+    developer's desktop once per commit.
+    """
+    assert oa._real_launches_disabled() is True, (
+        "conftest must set the guard for the whole suite"
+    )
+    assert oa._launch_windows("notepad") is False
+    assert oa._launch_windows(r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\notepad.exe") is False
+    assert no_pyautogui.pressed == []
+    assert no_pyautogui.written == []
 
 
 def test_gate_runs_before_the_keystrokes(fake_index, no_pyautogui):
