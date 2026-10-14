@@ -29,6 +29,12 @@ try:
 except ImportError:
     _PYPERCLIP = False
 
+# Truncation marker for long tool results. Was a literal ellipsis that
+# had been corrupted to U+FFFD, which made these lines unmatchable by a
+# text edit and rendered as garbage in a cp1252 console.
+_TRUNC_MARK = '...'
+
+
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
@@ -170,9 +176,20 @@ def _user_profile() -> dict:
 
 def _type(text: str, interval: float = 0.03) -> str:
     _require_pyautogui()
+    av = _verifier()
+    # No screen hash needed: typing is verified by reading the focused
+    # control back, which is stronger and cheaper than comparing pixels.
+    before = av.snapshot(include_screen=False) if av else None
+
     time.sleep(0.3)
     pyautogui.typewrite(text, interval=interval)
-    return f"Typed: {text[:60]}{'…' if len(text) > 60 else ''}"
+    msg = f"Typed: {text[:60]}{_TRUNC_MARK}{'...' if len(text) > 60 else ''}"
+
+    # Read the focused control back and check the text actually arrived.
+    # This is the check that would have caught the original Notepad bug,
+    # where nothing was typed and the task was still reported complete.
+    verification = av.verify_typed(before, text) if av and before else None
+    return _verified(msg, verification)
 
 
 def _smart_type(text: str, clear_first: bool = True) -> str:
@@ -192,13 +209,177 @@ def _smart_type(text: str, clear_first: bool = True) -> str:
     return f"Smart-typed: {text[:60]}{'…' if len(text) > 60 else ''}"
 
 
+def _verifier():
+    """The verification layer, or None where it is unavailable.
+
+    Imported lazily so a machine without pywinauto or Pillow still gets a
+    working computer_control, just one that cannot prove anything.
+    """
+    try:
+        from core import action_verifier
+        return action_verifier
+    except Exception as e:
+        print(f"[ComputerControl] verifier unavailable: {e}")
+        return None
+
+
+def _verified(result: str, verification) -> str:
+    """Attach the truth to what the user is told.
+
+    An action reported as successful without proof is exactly the bug this
+    project shipped four times, so the result string now carries which of the
+    three states it ended in. Additive: a caller that only reads the original
+    text is unaffected, and nothing is removed.
+    """
+    if verification is None:
+        return result
+    try:
+        return f"{result}{verification.suffix()}"
+    except Exception:
+        return result
+
+
+def _wait_until_action(params: dict) -> str:
+    """Block until a condition holds, instead of guessing how long to sleep."""
+    av = _verifier()
+    if av is None:
+        return "Cannot wait for a condition: the verification layer is unavailable."
+
+    timeout = float(params.get("timeout", 10.0))
+    timeout = min(max(timeout, 0.1), 120.0)
+    kind = (params.get("for") or params.get("condition") or "").strip().lower()
+    value = str(params.get("value") or params.get("target") or "").strip()
+
+    if not value:
+        return ("Kis cheez ka wait karna hai? Batao, jaise: "
+                "'wait until a window Notepad appears' ya "
+                "'wait until file C:/temp/a.txt exists'.")
+
+    if kind in ("window", "app", "window_title"):
+        v = av.wait_for_window(value, timeout=timeout)
+    elif kind in ("process",):
+        v = av.wait_for_process(value, timeout=timeout)
+    elif kind in ("file", "path"):
+        v = av.wait_for_file(value, timeout=timeout)
+    elif kind in ("screen", "text", "visible"):
+        # LOCAL OCR only.
+        #
+        # This deliberately does not call _screen_find(). That uploads the
+        # entire screen to a cloud model, and the whole reason wait_until exists
+        # is that it is cheap enough to actually run in a loop - a cloud round
+        # trip per poll would be seconds and money per attempt, and it would
+        # ship the user's screen to a third party on every single poll.
+        # Cloud vision stays behind the explicit visual_verify action.
+        def _visible() -> bool:
+            try:
+                from actions.ocr_tools import _screen_ocr
+                return value.lower() in str(_screen_ocr()).lower()
+            except Exception:
+                return False
+        v = av.wait_until(_visible, timeout=timeout,
+                          description=f"{value!r} readable on screen by local OCR")
+    else:
+        return (f"Samajh nahi aaya '{kind or '(missing)'} kis cheez ka wait karna hai. "
+                f"Use for='window' | 'process' | 'file' | 'screen'.")
+
+    mark = {"ok": "✓", "failed": "✗", "unknown": "?"}.get(v.state, "?")
+    return f"{mark} wait_until({kind or '?'}={value!r}): {v.evidence}"
+
+
+# Depth guard for retry-in-retry. The explicit check on `inner` above is the
+# real fix; this is the belt to its braces, so a future action that happens to
+# route back here cannot build an unbounded loop either.
+_RETRY_DEPTH = 0
+
+
+def _retry_action(params: dict) -> str:
+    global _RETRY_DEPTH
+    av = _verifier()
+    if av is None:
+        return "Cannot retry with verification: the verification layer is unavailable."
+
+    # The inner action is read from `do`, NOT from `action`. Reading it from
+    # `action` made the feature impossible to use: `action` is by definition
+    # the key that selected `retry` in the first place, so it could only ever
+    # read back "retry" and refuse. Caught by running it rather than reading it.
+    #
+    #   {'action': 'retry', 'do': 'click', 'x': 100, 'y': 200, 'attempts': 3}
+    inner = str(params.get("do") or params.get("retry_action") or "").strip()
+    if not inner:
+        return ("Kis action ko retry karoon? 'retry' ke saath 'do' do, jaise: "
+                "{'action':'retry', 'do':'click', 'x':100, 'y':200}")
+
+    # A retry must wrap a real action, never itself.
+    #
+    # Found by running it: retry(action='retry') re-entered this function with
+    # the same arguments and recursed until the interpreter gave up with
+    # "maximum recursion depth exceeded". The inner action is read straight off
+    # params, so nothing stopped it being its own name.
+    if inner in ("retry", "wait_until"):
+        return ("'retry' aur 'wait_until' dobara retry nahi ho sakte - "
+                "retry ke andar ek asli action do jaise 'click', 'press' "
+                "ya 'hotkey'.")
+    if _RETRY_DEPTH >= 2:
+        return "Nested retry ke andar retry nahi karunga. Seedha action do."
+
+    attempts = int(params.get("attempts", 3))
+    attempts = min(max(attempts, 1), 5)
+    delay = float(params.get("delay", 0.4))
+
+    # Re-enter the public handler for the inner action rather than duplicating
+    # the dispatch logic, which would be a second thing to keep in sync.
+    def _run(_n: int) -> str:
+        return computer_control({
+            "action": inner,
+            **{k: v for k, v in params.items()
+               if k not in ("action", "do", "retry_action", "attempts",
+                            "delay", "timeout")},
+        })
+
+    before = av.snapshot()
+    _RETRY_DEPTH += 1
+    try:
+        result, verdict = av.with_retry(
+            _run,
+            lambda r: av.verify_press(before, inner),
+            attempts=attempts,
+            delay=delay,
+        )
+    finally:
+        _RETRY_DEPTH -= 1
+    mark = {"ok": "✓", "failed": "✗", "unknown": "?"}.get(verdict.state, "?")
+    return (f"{mark} retried '{inner}' up to {attempts}x: {verdict.evidence}. "
+            f"Last result: {result}")
+
+
 def _click(x=None, y=None, button: str = "left", clicks: int = 1) -> str:
     _require_pyautogui()
-    if x is not None and y is not None:
-        pyautogui.click(x, y, button=button, clicks=clicks)
-        return f"{'Double-c' if clicks == 2 else 'C'}licked ({x}, {y}) [{button}]"
-    pyautogui.click(button=button, clicks=clicks)
-    return f"Clicked at current position [{button}]"
+    av = _verifier()
+    before = av.snapshot() if av else None
+
+    # UIA pre-flight. If the accessibility tree knows which element owns these
+    # coordinates, invoke that element rather than replaying mouse events at a
+    # fixed point - which lands on something else entirely if the window moved
+    # since the screen was last looked at, and still reports success.
+    invoked = None
+    if av and x is not None and y is not None and button == "left" and clicks == 1:
+        try:
+            invoked = av.invoke_at(int(x), int(y))
+        except Exception:
+            invoked = None
+
+    if invoked:
+        msg = f"Clicked ({x}, {y}) [{button}]"
+    else:
+        if x is not None and y is not None:
+            pyautogui.click(x, y, button=button, clicks=clicks)
+            msg = f"{'Double-c' if clicks == 2 else 'C'}licked ({x}, {y}) [{button}]"
+        else:
+            pyautogui.click(button=button, clicks=clicks)
+            msg = f"Clicked at current position [{button}]"
+
+    verification = av.verify_click(before, x, y) if av and before else None
+    return _verified(msg, verification)
 
 
 def _hotkey(*keys) -> str:
@@ -542,15 +723,64 @@ def computer_control(
             return res or "No blocking error dialog or modal popup detected on screen."
 
         if action == "visual_verify":
-            desc = params.get("description", "")
+            # This action existed and nothing ever called it - it was reachable
+            # from the tool enum and dead everywhere else. Now it is the
+            # explicit, opt-in escalation path: use this ONLY when the cheap
+            # local checks cannot tell you anything.
+            #
+            # It uploads the entire screen to a cloud model, so it is slow,
+            # costs money, and is refused on privacy-sensitive windows by the
+            # guard inside _screen_find. That is why the verifier never calls
+            # it: verification must be cheap enough that it actually happens.
+            desc = str(params.get("description") or params.get("target") or "").strip()
+            if not desc:
+                return ("Kya verify karna hai? 'description' do, jaise "
+                        "'Save button dikh raha hai'.")
             coords = _screen_find(desc)
-            return f"Verified: '{desc}' is visible on screen at {coords}." if coords else f"Verification failed: '{desc}' not visible on screen."
+            if coords:
+                return (f"✓ Verified: '{desc}' is visible on screen at {coords} "
+                        f"(cloud vision check).")
+            return (f"✗ Not verified: '{desc}' was not found on screen "
+                    f"(cloud vision check). It may still be present but "
+                    f"unrecognised, or genuinely absent.")
 
         if action == "wait":
             secs = float(params.get("seconds", 1.0))
             secs = min(secs, 30.0)
             time.sleep(secs)
             return f"Waited {secs}s"
+
+        # ADDITIVE: wait for a CONDITION instead of sleeping a hopeful fixed
+        # amount. The documented failure mode of GUI automation is a window
+        # that is detected and then gone a few milliseconds later, and
+        # time.sleep() is exactly the wrong tool for that: it returns before
+        # the thing happened on a slow machine, and wastes seconds on a fast
+        # one.
+        if action == "wait_until":
+            return _wait_until_action(params)
+
+        # ADDITIVE: retry an action until it is verified. Retries only on a
+        # proven failure - never on 'unknown', because firing the same
+        # keystrokes again at something that may already have worked is how a
+        # half-typed field becomes a double-typed one.
+        if action == "retry":
+            return _retry_action(params)
+
+        # ADDITIVE: what this machine can actually verify, so the assistant can
+        # be honest about its own limits instead of implying it can check
+        # everything.
+        if action == "capabilities":
+            av = _verifier()
+            if av is None:
+                return "Verification layer unavailable: no local proof of any action."
+            caps = av.capabilities()
+            enabled = [k for k, v in caps.items() if v is True and k != "cloud_vision_used"]
+            return (
+                "Verification capabilities: "
+                + (", ".join(enabled) if enabled else "none")
+                + ". Cloud vision is deliberately never used for verification "
+                  "(it uploads the screen and is slow)."
+            )
 
         if action == "clear_field":
             return _clear_field()
@@ -611,7 +841,40 @@ TOOL = {
         "properties": {
             "action": {
                 "type": "STRING",
-                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | screen_find | screen_click | visual_solve_error | visual_verify | random_data | user_data"
+                "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | wait_until | retry | capabilities | clear_field | focus_window | screen_find | screen_click | visual_solve_error | visual_verify | random_data | user_data"
+            },
+            "for": {
+                "type": "STRING",
+                "description": (
+                    "For wait_until: what to wait for - window | process | "
+                    "file | screen"
+                )
+            },
+            "value": {
+                "type": "STRING",
+                "description": (
+                    "For wait_until: the title / process name / file path / "
+                    "on-screen text to wait for"
+                )
+            },
+            "timeout": {
+                "type": "NUMBER",
+                "description": "For wait_until: seconds to keep trying (default 10)"
+            },
+            "attempts": {
+                "type": "INTEGER",
+                "description": "For retry: how many attempts (default 3, max 5)"
+            },
+            "do": {
+                "type": "STRING",
+                "description": (
+                    "For retry: the action to actually run and verify, e.g. "
+                    "'click'. Never 'retry' itself."
+                )
+            },
+            "delay": {
+                "type": "NUMBER",
+                "description": "For retry: seconds before the second attempt (default 0.4)"
             },
             "text": {
                 "type": "STRING",
