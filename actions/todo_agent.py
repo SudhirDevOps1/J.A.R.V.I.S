@@ -123,6 +123,112 @@ def _get_active_task_summary() -> str:
 _cached_registry = None
 
 
+def _tool_reported_failure(step_output: str) -> bool:
+    """Whether a tool's own return value says the step did not work.
+
+    Complements _verify_step_artifact, which only fails a step that names a
+    file. Without this, a tool reporting "Unknown action", "no window found" or
+    any other refusal was counted as a success.
+
+    Deliberately narrow: only phrases that are unambiguous failures count, and
+    only when they start the reply. A tool whose output merely mentions the
+    word "error" in passing - a log line, a filename, a report about a crash
+    it handled - must not be marked failed, or honest work gets reported as
+    broken.
+
+    Reuses core.action_loader._looks_like_failure so there is one definition
+    of what counts as a failure, rather than a second, subtly different one
+    that could drift.
+    """
+    text = str(step_output or "").strip()
+    if not text:
+        return True                      # silence is not a result
+
+    try:
+        from core.action_loader import _looks_like_failure
+        return bool(_looks_like_failure(text))
+    except Exception:
+        pass
+
+    # Fallback if the shared helper cannot be imported.
+    low = text.lower()
+    return low.startswith((
+        "unknown action", "error:", "failed", "could not", "couldn't",
+        "unable to", "not supported", "no window",
+    ))
+
+
+def _parse_action_dsl(arg_text: str) -> dict:
+    """Parse a step argument of the form `action key='value' key2="v2"`.
+
+    Returns {} when the text is not in that form, so every existing caller
+    keeps its current behaviour.
+
+    Written as a separate function with no dependency on the registry so it can
+    be tested directly: this is pure string handling, and testing it through
+    the executor would require standing up the whole tool registry.
+
+    Handles the quoting that matters here. The real step was
+
+        type text='hii\\nhii\\nhii'
+
+    and a naive `split("=")` would cut the value at the first `=` inside it,
+    or a naive `split(" ")` would shatter a text payload on its spaces.
+    """
+    text = str(arg_text or "").strip()
+    if not text:
+        return {}
+
+    # First token is the action verb: letters and underscores only.
+    m = re.match(r"^([a-zA-Z_][a-zA-Z0-9_]*)\s*(.*)$", text, re.S)
+    if not m:
+        return {}
+    verb, remainder = m.group(1), m.group(2).strip()
+
+    # key='value' / key="value" / key=value pairs. The value may contain
+    # spaces and separators because it is quoted.
+    pattern = re.compile(
+        r"""([A-Za-z_][A-Za-z0-9_]*)\s*=\s*
+            (?:"([^"]*)"|'([^']*)'|([^\s]+))""",
+        re.X,
+    )
+    pairs = list(pattern.finditer(remainder))
+
+    # A bare word is only an action when it stands alone.
+    #
+    # Without this, "write the file to desktop" parsed as
+    # {"action": "write"} and hijacked plain-language steps, which the
+    # executor below handles far better in its own way. Requiring at least one
+    # key=value pair keeps the DSL unambiguous.
+    if not pairs:
+        return {"action": verb} if not remainder else {}
+
+    out: dict = {"action": verb}
+    for km in pairs:
+        value = km.group(2)
+        if value is None:
+            value = km.group(3)
+        if value is None:
+            value = km.group(4)
+        out[km.group(1)] = _unescape(value)
+    return out
+
+
+def _unescape(value: str) -> str:
+    """Turn the escapes a step author writes into what the tool expects.
+
+    The real step was `type text='hii\\nhii'` - the literal two characters
+    backslash-n. Typing that into Notepad would produce "hiinhii" rather than
+    ten lines, so the escapes have to be resolved before the text reaches the
+    keyboard. Only the three that a typing step meaningfully contains, and a
+    backslash is always escaped first so `\\n` stays a literal backslash-n.
+    """
+    out = str(value or "")
+    out = out.replace("\\\\", "\x00")
+    out = out.replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t")
+    return out.replace("\x00", "\\")
+
+
 def _get_registry():
     global _cached_registry
     if _cached_registry is not None:
@@ -399,6 +505,19 @@ def _dispatch_step_to_tool(step: str, goal: str, player=None, speak_fn=None, pri
     reg = _get_registry()
     params: dict = {}
 
+    # ADDITIVE: understand the `tool:action key='value'` step form before the
+    # generic fallbacks below discard it.
+    #
+    # Found on a real run: the step
+    #     computer_control:type text='hii\nhii'
+    # reached the generic branch, which saw an "action" property and returned
+    # {"action": "status"} - throwing away both the `type` action and the text.
+    # The tool then reported "Unknown action: 'status'" and the task was
+    # announced as completed successfully.
+    _dsl = _parse_action_dsl(arg_candidate)
+    if _dsl:
+        params = _dsl
+
     if tool_name == "visual_agent":
         params = {"goal": arg_candidate or step or goal, "max_steps": 4}
     elif tool_name == "travel_transit":
@@ -564,6 +683,20 @@ def _execute_plan_worker(task_id: str, goal: str, steps: list[str], player=None,
             if not ok:
                 step_failed = True
                 step_output = f"{step_output} [{vnote}]"
+
+        # Tool-reported failure check.
+        #
+        # The artifact check only covers steps that name a file, so a tool that
+        # returned "Unknown action: 'status'" sailed through and the task was
+        # announced as completed successfully. Observed on a real run:
+        #
+        #   TODO: Step 1/1 done — Unknown action: 'status'
+        #   SYS: Task 'Notepad khol ke usmein 10 bar hii likhein' completed
+        #        successfully! All 1 sub-tasks finished.
+        #
+        # Nothing had been typed, and the user was told it had worked.
+        if not step_failed and _tool_reported_failure(step_output):
+            step_failed = True
 
         if step_failed:
             failed += 1

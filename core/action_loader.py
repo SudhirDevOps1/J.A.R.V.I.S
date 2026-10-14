@@ -123,6 +123,13 @@ _FAILURE_MARKERS = (
     "not available", "failed", "error", "kuch nahi mila", "nahi mila",
     "nahi chala", "refuse", "galat", "invalid", "not found", "unavailable",
     "confirm gate unavailable", "nahi hua", "ho gayi hai?",
+    # ADDITIVE: observed on a real run. A step dispatched to computer_control
+    # came back as "Unknown action: 'status'" and the autonomous task still
+    # reported "completed successfully! All 1 sub-tasks finished." Nothing had
+    # been typed. These were missing, so a tool refusing to do the thing read
+    # as the thing being done.
+    "unknown action", "could not", "couldn't", "unable to", "unsupported",
+    "no window", "not supported",
 )
 
 
