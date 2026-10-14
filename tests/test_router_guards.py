@@ -103,8 +103,20 @@ def test_hindi_daily_verbs_naive_bayes_classification():
     assert pred_mem is not None and pred_mem[0] == "tinydb_memory"
 
 
-def test_hindi_daily_verbs_lfm_interpret_and_generate():
-    """Verify LFMChatEngine handles Sunna, Dekhna, Chalna, and Bolna colloquial queries."""
+def test_hindi_daily_verbs_lfm_interpret_and_generate(monkeypatch):
+    """Verify LFMChatEngine handles Sunna, Dekhna, Chalna, and Bolna colloquial queries.
+
+    The two generate() checks below exercise the hand-written conversational
+    reflexes, which are now opt-in: with no model installed, generate() returns
+    None rather than a fluent sentence that looks like a 230M model answering.
+    See tests/test_lfm_honesty.py for why.
+
+    So this test opts in explicitly. That is the correct shape for it - it is a
+    test OF that fallback path, so it should be the one place that turns it on
+    rather than the one place that quietly depended on it being always on.
+    """
+    monkeypatch.setenv("JARVIS_LFM_CANNED", "1")
+
     from core.edge_router import LFMChatEngine
     lfm = LFMChatEngine()
 
@@ -123,11 +135,32 @@ def test_hindi_daily_verbs_lfm_interpret_and_generate():
 
     # 4. Sunna: Audibility / Mic check
     resp_hear = lfm.generate("meri awaaz aa rahi hai")
+    assert resp_hear, "opted-in canned path returned nothing"
     assert "sun raha hoon" in resp_hear.lower() or "sun" in resp_hear.lower()
 
     # 5. Bolna: Conversational continuation
     resp_cont = lfm.generate("aur batao")
-    assert len(resp_cont) > 10
+    assert resp_cont and len(resp_cont) > 10
+
+
+def test_generated_conversation_requires_the_explicit_opt_in():
+    """The counterpart, so the opt-in cannot be dropped unnoticed.
+
+    Without a model, generate() must say nothing rather than invent an answer.
+    Before this, a machine with an empty models directory and no Ollama
+    installed still produced a confident Hinglish sentence in four seconds."""
+    import os
+    from core.edge_router import LFMChatEngine
+
+    previous = os.environ.pop("JARVIS_LFM_CANNED", None)
+    try:
+        lfm = LFMChatEngine()
+        lfm.is_available = lambda: False
+        assert lfm.generate("meri awaaz aa rahi hai") is None
+        assert lfm.generate("aur batao") is None
+    finally:
+        if previous is not None:
+            os.environ["JARVIS_LFM_CANNED"] = previous
 
 
 def test_persona_colloquial_directive_injected():

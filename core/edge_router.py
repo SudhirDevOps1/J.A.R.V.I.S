@@ -1701,7 +1701,30 @@ class LFMChatEngine:
         return text, "general"
 
     def generate(self, prompt: str, system_prompt: str = "") -> Optional[str]:
-        """Offline Edge conversational generation."""
+        """Offline Edge conversational generation.
+
+        HONESTY, AND WHY THE SECOND HALF IS OPT-IN NOW
+        -----------------------------------------------
+        There is a block of ~23 hand-written regex branches below that returns
+        fluent Hinglish ("Shubh Prabhat, sir! ...", "Sir, abhi samay ho raha
+        hai ..."). For years this function returned those whether or not a
+        model existed, and the settings screen labelled it "Ear: LFM2.5-230M,
+        Semantic Parser / 200M".
+
+        Measured on the user's machine: models/lfm is an empty directory,
+        Ollama is not installed, nothing answers on localhost:11434, and
+        is_available() is False - and generate("hello") still answered in four
+        seconds with a confident, natural sentence. That is the exact shape of
+        the four false-success bugs already fixed elsewhere in this project: a
+        system reporting a capability it did not have.
+
+        Those branches are pattern matching, not a 230M parameter model, and
+        they are kept - removing working behaviour is not the fix - but they now
+        require an explicit opt-in and never claim to be the model.
+
+        Returns None when no model is available, so callers can tell the
+        difference between "the model answered" and "nothing was here".
+        """
         # 1. Ollama live endpoint fallback if running
         if _REQUESTS_AVAILABLE:
             try:
@@ -1720,7 +1743,16 @@ class LFMChatEngine:
             except Exception:
                 pass
 
-        # 2. Local LFM2.5 offline conversational reflex responses (30+ Smart Patterns)
+        # 2. Canned conversational reflexes.
+        #
+        # Gated on BOTH: a real model being available, AND the operator asking
+        # for these specifically. Silently substituting them for a model is
+        # what made the settings screen claim 200 MB of RAM that was never
+        # used. If neither holds, say nothing rather than invent an answer.
+        if not self.is_available():
+            if os.environ.get("JARVIS_LFM_CANNED", "").strip() not in ("1", "true", "yes"):
+                return None
+
         clean = prompt.lower().strip()
         from datetime import datetime
         now = datetime.now()
@@ -1826,6 +1858,46 @@ class TriTierDispatcher:
         self.needle = NeedleToolRouter()
         self.lfm = LFMChatEngine()
 
+    def _ear_ram(self) -> str:
+        """The RAM claim, which was a constant while nothing was loaded.
+
+        A fixed "200 MB" in a routing payload is the same class of unverified
+        claim as a fixed model name. Report it only when it is true.
+        """
+        try:
+            if self.lfm.is_available():
+                return "200 MB"
+        except Exception:
+            pass
+        return "0 MB (model not loaded)"
+
+    def _ear_name(self) -> str:
+        """What the 'ear' actually is, truthfully.
+
+        route() carried a hardcoded "ear": self._ear_name() on every branch,
+        including the cloud branch where no local model runs at all. Anything
+        displaying that field - the settings screen, a log line, an eval - was
+        reporting a model that was not loaded.
+
+        Returns "none" when there is no model, so the caller is forced to
+        render something different rather than repeat a constant.
+        """
+        try:
+            if self.lfm.is_available():
+                return str(self.lfm.model_name)
+        except Exception:
+            pass
+        return "none"
+
+    def _ear_label(self) -> str:
+        """Human-readable and still honest: a loaded model, or a plain absence."""
+        try:
+            if self.lfm.is_available():
+                return f"{self.lfm.model_name} (loaded)"
+        except Exception:
+            pass
+        return "LFM2.5 not installed"
+
     def route(self, user_text: str, is_online: bool = True) -> Dict[str, Any]:
         """Determine execution tier and routing payload."""
         # Step -0.5: Resolve anaphora (pronouns: isko, use, wahan) from active context buffer
@@ -1843,7 +1915,7 @@ class TriTierDispatcher:
             _obs_raw_call = self.needle.classify_tool_intent(user_text)
             if _obs_raw_call is not None and isinstance(_obs_raw_call, tuple) and _obs_raw_call[0] == "obsidian_brain":
                 return {
-                    "tier": 1, "engine": "needle_2", "ear": "lfm2.5-230m",
+                    "tier": 1, "engine": "needle_2", "ear": self._ear_name(),
                     "ear_normalized": None, "intent": "obsidian",
                     "tool": _obs_raw_call, "target": "local_tool",
                     "ram_footprint": "28 MB", "latency_estimate": "10ms",
@@ -1862,7 +1934,7 @@ class TriTierDispatcher:
             return {
                 "tier": 1,
                 "engine": "needle_2",
-                "ear": "lfm2.5-230m",
+                "ear": self._ear_name(),
                 "ear_normalized": norm_text if norm_text != user_text else None,
                 "intent": intent_label,
                 "tool": tool_call,
@@ -1879,7 +1951,7 @@ class TriTierDispatcher:
                 return {
                     "tier": 1,
                     "engine": "llm_cache",
-                    "ear": "lfm2.5-230m",
+                    "ear": self._ear_name(),
                     "cached_response": cached_ans,
                     "tool": None,
                     "target": "cached_reply",
@@ -1894,7 +1966,7 @@ class TriTierDispatcher:
             return {
                 "tier": 2,
                 "engine": "lfm2.5-230m",
-                "ear": "lfm2.5-230m",
+                "ear": self._ear_name(),
                 "tool": None,
                 "target": "local_chat",
                 "ram_footprint": "200 MB",
@@ -1905,7 +1977,7 @@ class TriTierDispatcher:
         return {
             "tier": 3,
             "engine": "gemini_cloud",
-            "ear": "lfm2.5-230m",
+            "ear": self._ear_name(),
             "tool": None,
             "target": "cloud_llm",
             "ram_footprint": "0 MB local",
