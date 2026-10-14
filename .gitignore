@@ -127,3 +127,8 @@ cache/
 config/generated_sniffers/*.py
 config/swarm_outputs/*.json
 node_modules/
+
+# Theme choice made on one machine - 'preset', text size and density are personal
+# preference, not source, and committing it ships the user's UI settings to every fork.
+# Written by core/theme.py on first save; see core/theme.py for the defaults.
+config/ui_theme.json
