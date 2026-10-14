@@ -2,6 +2,27 @@
 
 All notable changes, bug fixes, enhancements, and roadmap progressions for J.A.R.V.I.S. are documented in this file with dates and timestamps.
 
+## [0.3.0](https://github.com/SudhirDevOps1/J.A.R.V.I.S/compare/v0.2.0...v0.3.0) (2026-10-14)
+
+
+### Features
+
+* **privacy:** redact secrets before anything reaches the journal on disk ([036430d](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/036430d1d5034083186accd4145c4cd7ae66b4eb))
+
+
+### Bug Fixes
+
+* **ci:** packaging test must skip without a build backend, not fail ([2c7579a](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/2c7579adc9ffd76886d56334859409bed16a8fa4))
+* **errors:** report script failures as answers, not Python tracebacks ([3ecb189](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/3ecb1890853a6186196377501a8d9d20584298b9))
+* **open_app:** launch Store/UWP apps by AppID instead of typing into Start Menu ([a0a08d6](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/a0a08d6d879968021d967161f09f80cf6aab6e06))
+* **open_app:** stop reporting launches as successful when nothing opened ([4ecdfbb](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/4ecdfbb2f20cc35b3c6833d47f77a37ce310326c))
+* **open_app:** stop resolving opaque identifiers as application names ([35c1694](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/35c1694183b08b348fa6f2038432bb2815f60416))
+* **open_app:** stop sending uninstalled app names to Windows Search ([95b42f5](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/95b42f5ff49904bb5272c19a2cf962b0083fdb58))
+* **packaging:** make `pip install -e .` actually work ([b437123](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/b4371238d2fb5dc1b24c103371163efb94022345))
+* **packaging:** single-source the version, correct the licence in version.py ([0c2dd6a](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/0c2dd6a10523e8c59a2acbff52122f1c282c2e82))
+* **tests:** stop the test suite opening real applications on every push ([a606dcb](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/a606dcbf1984a22f9ab49688475139ed211986cf))
+* **todo:** parse autonomous steps properly, and stop calling failures a success ([09cd8fa](https://github.com/SudhirDevOps1/J.A.R.V.I.S/commit/09cd8faab1528e16f141ee1cb14468b78ec7aa9e))
+
 ## [0.2.0](https://github.com/SudhirDevOps1/J.A.R.V.I.S/compare/v0.1.0...v0.2.0) (2026-10-11)
 
 
