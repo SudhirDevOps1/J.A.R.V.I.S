@@ -734,12 +734,60 @@ def _process_appeared(hint: str, before: set, timeout: float = 2.5) -> bool:
 
 
 def _looks_like_appid(name: str) -> bool:
-    """shell:AppsFolder sirf plausible AppID par try karo taaki invalid ID par
-    Explorer Documents na khole (screenshot wala bug)."""
+    """Is this a Windows AppUserModelID, launchable via shell:AppsFolder?
+
+    THE BUG THIS FIXES
+    ------------------
+    The old version rejected anything containing a backslash:
+
+        if not n or " " in n or "\\" in n or "/" in n or ":" in n:
+            return False
+
+    That was well intentioned - a real path like `C:\\Program Files\\...` must
+    not be handed to the shell namespace. But `{1AC14E77-...}\\notepad.exe`
+    IS the genuine Notepad AppID, straight from Get-StartApps:
+
+        Firefox    308046B0AF4A39CB
+        Notepad    {1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\notepad.exe
+        Calculator Microsoft.WindowsCalculator_8wekyb3d8bbwe!App
+
+    So the AppID stage was skipped for Notepad, control fell through to the
+    Start Menu keyboard automation, and pyautogui typed the literal tail of
+    the id into the Windows search box - `5198B7}\\notepad` in the All apps
+    list - while the assistant reported "Opened Notepad."
+
+    The distinction that actually matters is not "contains a backslash". It is
+    "is this a filesystem path or an opaque Windows identifier":
+      * a GUID in braces followed by one backslash and a name is an AppID
+      * a drive letter, or more than one separator, is a real path
+    """
     n = (name or "").strip()
-    if not n or " " in n or "\\" in n or "/" in n or ":" in n:
+    if not n or " " in n:
         return False
-    return ("!" in n) or ("." in n and len(n) > 4)
+
+    # "Family.Name!App" - the packaged-app form.
+    if "!" in n:
+        return "/" not in n and ":" not in n
+
+    # "{GUID}\\name.exe" - the form Get-StartApps reports for Notepad.
+    # Exactly one backslash, braces around the first segment, and no drive.
+    if "\\" in n:
+        if n.count("\\") != 1 or ":" in n or "/" in n:
+            return False                    # a real path, not an identifier
+        head, _, tail = n.partition("\\")
+        return bool(re.fullmatch(r"\{[0-9A-Fa-f-]{36}\}", head)) and bool(tail)
+
+    # A bare AppID with no separator at all, e.g. Firefox's publisher token.
+    # Get-StartApps also reports suffixed variants such as
+    # "308046B0AF4A39CB;PrivateBrowsingAUMID", so a semicolon is allowed here.
+    # Requires a digit so ordinary words never qualify.
+    if "/" in n or ":" in n:
+        return False
+    if (len(n) >= 8 and re.fullmatch(r"[0-9A-Za-z;]+", n)
+            and any(c.isdigit() for c in n)):
+        return True
+
+    return "." in n and len(n) > 4
 
 
 def _win_start(target: str, *extra: str) -> None:
@@ -823,8 +871,18 @@ def _launch_windows(app_name: str) -> bool:
             pass
 
     # 5. Last resort: Start Menu keyboard automation (verify ke saath)
-    # Never type dotted names into Start Menu — Windows interprets dots as file extensions and opens Documents folder!
+    # Never type dotted names into Start Menu — Windows interprets dots as file
+    # extensions and opens the Documents folder instead.
+    #
+    # And never type an identifier at all. Typing the tail of
+    # "{1AC14E77-...}\notepad.exe" produced a Windows search box reading
+    # "5198B7}\notepad", which is not a search anyone can act on - it is
+    # developer output leaking into the user's screen.
     clean_search = app_name.split(".")[0].strip() if "." in app_name else app_name
+    if _looks_like_opaque_identifier(clean_search) or _looks_like_appid(app_name):
+        print(f"[open_app] refusing Start Menu search for non-name target "
+              f"{app_name!r}")
+        return False
     if len(clean_search) >= 2:
         try:
             import pyautogui
