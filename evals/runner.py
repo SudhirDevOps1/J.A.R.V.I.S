@@ -125,20 +125,15 @@ def default_cases() -> list[Case]:
         Case(prompt="list running applications", must_route="open_app",
              tags=("routing",), name="list running apps"),
 
-        # ── a real gap, recorded rather than hidden ─────────────────────
-        # There IS a local clock action. "kya time hai" is routed to the cloud
-        # LLM instead, which spends a network round trip on a question this
-        # machine can answer instantly and privately.
-        #
-        # Marked known_gap so it is visible in the report and excluded from the
-        # score. Asserting the current behaviour as correct would make this an
-        # eval that flatters the code instead of measuring it.
-        Case(prompt="kya time hai", known_gap=True,
-             tags=("routing", "gap"),
-             name="'kya time hai' goes to the cloud, not the local clock"),
-        Case(prompt="delhi ka mausam kaisa hai", known_gap=True,
-             tags=("routing", "gap"),
-             name="weather also goes to the cloud rather than the local action"),
+        # ── the gaps that were real, now closed ─────────────────────────────────
+        # Both of these were recorded as known gaps when the eval first ran.
+        # They are ordinary requirements again, which is the point of having a
+        # harness: a gap can be promoted back to a requirement once it is
+        # fixed, and it will fail again if it ever regresses.
+        Case(prompt="kya time hai", must_route="clock",
+             tags=("routing",), name="'kya time hai' answers locally, not via the cloud"),
+        Case(prompt="delhi ka mausam kaisa hai", must_route="weather_report",
+             tags=("routing",), name="weather answers locally"),
 
         # ── routing: the wrong tool is worse than none ─────────────────
         Case(prompt="what does the log say", must_not_route=("open_app",),

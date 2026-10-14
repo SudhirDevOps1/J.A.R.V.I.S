@@ -650,7 +650,9 @@ class NeedleToolRouter:
 
         # 2. Ultra-fast local reflex pattern matching (deterministic edge reflex in ~1ms)
         # -- App Management ---------------------------------------------------
-        if re.search(r"\b(running apps|active apps|kaun se app|open apps|konsa app)\b", clean):
+        if re.search(r"\b(running apps|active apps|kaun se app|open apps|konsa app"
+                          r"|running applications|running programs|what(?:'s| is) running"
+                          r"|list running)\b", clean):
             return _dispatch("open_app", {"action": "list_running"})
 
         # Refresh/rescan installed apps: "apps refresh karo", "scan apps", "refresh installed apps"
@@ -802,9 +804,16 @@ class NeedleToolRouter:
             vid_q = " ".join(vid_q.split())
             return _dispatch("youtube_video", {"action": "play", "query": vid_q or "trending", "mode": "video", "open_browser": True})
 
-        # ADDITIVE clock: "time batao" web_search me jaata tha (galat). 
+        # ADDITIVE clock: "time batao" web_search me jaata tha (galat).
         # Zero-token local jawab. Pehle, taaki date/time web me na ghuse.
-        if re.search(r"\b(time batao|time kya|kitne baje|time dikhao|samay)\b", clean):
+        #
+        # The old pattern listed "time kya" and missed "kya time", which is the
+        # order people actually speak in. "kya time hai" therefore fell through
+        # to the cloud model for a question this machine answers instantly and
+        # privately. Found by evals/runner.py, which marked it a known gap.
+        if re.search(
+                r"\b(time batao|time kya|kya time|kitne baje|time dikhao|samay"
+                r"|current time|abhi ka time|time kitna hai|time kya hai)\b", clean):
             return _dispatch("clock", {"action": "time"})
         if re.search(r"\b(aaj (kya )?date|tarikh batao|date batao)\b", clean):
             return _dispatch("clock", {"action": "date"})
@@ -976,7 +985,9 @@ class NeedleToolRouter:
 
         # -- Web Search (Explicit search commands only; conversational questions go to Gemini) --
         # "google karo X" / "search karo X" / "web search karo X"
-        m_ws_en = re.search(r"\b(?:google|web\s*search|search\s+on\s+google|search\s+online)\s+(?:for\s+)?(.+)", clean)
+        m_ws_en = re.search(
+            r"\b(?:google|web\s*search|search\s+the\s+web|search\s+on\s+google|search\s+online"
+            r"|google\s+search|look\s*up|lookup)\s+(?:for\s+|on\s+|about\s+)?(.+)", clean)
         m_ws_hi = re.search(r"(.+?)\s+(?:google\s*karo|search\s*karo|net\s*par\s*dhundo|web\s*search\s*karo|online\s*dhundo)\b", clean)
 
         # Screen / camera / physical hand / Obsidian queries MUST NEVER go to web search

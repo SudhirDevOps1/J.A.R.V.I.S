@@ -194,14 +194,48 @@ def test_no_route_result_ever_claims_the_model_when_there_is_none(monkeypatch):
 # ── what must NOT change ────────────────────────────────────────────────────
 
 def test_normal_chat_still_goes_to_the_cloud(monkeypatch):
-    """Making the local model honest must not make the assistant worse."""
+    """Making the local model honest must not make the assistant worse.
+
+    Genuinely conversational phrasing - the kind with no tool to call.
+    Deliberately NOT "kya time hai": that now routes to the local clock, which
+    is the point of another fix, and asserting cloud here would have pinned the
+    old behaviour back in place."""
     from core import reflex_policy
     reflex_policy.set_enabled(False)
     from core.edge_router import get_tri_tier_dispatcher
 
     dispatcher = get_tri_tier_dispatcher()
     monkeypatch.setattr(dispatcher.lfm, "is_available", lambda: False)
-    assert dispatcher.route("kya time hai").get("target") == "cloud_llm"
+
+    # "explain quantum computing simply" - no tool can answer this, it needs
+    # reasoning. Deliberately not "kya time hai" or "suno kya chal raha hai":
+    # both now route locally, which is the point of another fix, and pinning
+    # cloud for them here would have undone it.
+    assert dispatcher.route(
+        "explain quantum computing simply").get("target") == "cloud_llm"
+
+
+def test_simple_questions_stay_local_after_the_honesty_work(monkeypatch):
+    """Cloud routing for a question this machine can answer offline costs
+    latency, money, and the user's text going to a third party.
+
+    Asserted here as well as in evals/runner.py, so the guarantee sits beside
+    the tests whose changes made these routes local in the first place."""
+    from core import reflex_policy
+    reflex_policy.set_enabled(False)
+    from core.edge_router import get_tri_tier_dispatcher
+
+    dispatcher = get_tri_tier_dispatcher()
+    monkeypatch.setattr(dispatcher.lfm, "is_available", lambda: False)
+
+    for prompt, tool in (("kya time hai", "clock"),
+                         ("time batao", "clock"),
+                         ("delhi ka mausam kaisa hai", "weather_report")):
+        decision = dispatcher.route(prompt)
+        assert decision.get("target") == "local_tool", (
+            f"{prompt!r} went to {decision.get('target')!r} instead of {tool}"
+        )
+        assert decision["tool"][0] == tool
 
 
 def test_tool_routing_is_unaffected(monkeypatch):

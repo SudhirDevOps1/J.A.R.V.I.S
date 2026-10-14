@@ -127,12 +127,41 @@ def test_the_honesty_cases_exist():
 
 
 def test_known_gaps_are_labelled_not_hidden():
-    """A case that documents bad behaviour must say so, or the report turns
-    into a compliment."""
+    """The guarantee is about the MECHANISM, not about gaps being open.
+
+    This used to assert that the shipped set contains at least one known_gap,
+    reasoning that "none recorded" meant "the router is perfect". That
+    reasoning broke the moment two gaps were fixed - the best possible outcome
+    - and the test failed to celebrate it.
+
+    What must stay true is that a case marked known_gap is reported and
+    excluded from the score. Asserted with a constructed case below, so it
+    holds whether or not any gap is currently open.
+    """
     gaps = [c for c in default_cases() if c.known_gap]
-    assert gaps, "no known gaps recorded - is the router actually perfect?"
     for g in gaps:
         assert "gap" in g.tags, f"{g.name} is a gap but not tagged as one"
+
+
+def test_an_open_gap_would_be_labelled_and_excluded_from_the_score():
+    """Constructed rather than taken from the shipped set, so it keeps working
+    after every gap is closed."""
+    case = Case(prompt="anything", known_gap=True, tags=("routing", "gap"),
+                name="a hypothetical open gap")
+    assert "gap" in case.tags
+    result = run_case(case)
+    assert result.passed is True
+    assert "not scored" in result.detail
+
+
+def test_a_closed_case_is_scored_normally():
+    """The counterpart. Without this the flag would be a way to quietly excuse
+    anything, and a test asserting only the mechanism would not notice."""
+    case = Case(prompt="open notepad", must_route="open_app",
+                tags=("routing",), name="a real requirement")
+    result = run_case(case)
+    assert result.detail != "known gap - reported, not scored"
+    assert result.passed is True
 
 
 def test_a_known_gap_is_not_scored_but_is_reported(monkeypatch):
