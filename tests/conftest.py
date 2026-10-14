@@ -39,6 +39,52 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def _no_conversation_carryover():
+    """Reset the shared context buffer around every test.
+
+    SECOND OCCURRENCE OF THIS EXACT BUG, so it is fixed globally rather than
+    in whichever file tripped it this time.
+
+    TriTierDispatcher.route() writes to core.context_buffer, and NeedleToolRouter
+    reads anaphora out of it. Any test that routes a prompt therefore leaves
+    state behind, and the NEXT test - with its own brand new router, sharing the
+    same module-level buffer - resolves pronouns against it.
+
+    Observed twice:
+
+      evals/runner.py    "open notepad" left last_app = notepad, and
+                         "main nahi kiya hu use band kro" resolved "use" to
+                         notepad and routed to open_app, failing a regression
+                         test about Hindi prose.
+
+      this file          the same two cases, the same way.
+
+    A file-local fix would have left the next file to rediscover it. The buffer
+    is process-global and belongs to the conversation, not to a test, so every
+    test starts and ends without one.
+    """
+    try:
+        import core.context_buffer as cb
+    except Exception:
+        yield
+        return
+
+    def _reset():
+        buf = getattr(cb, "_GLOBAL_CONTEXT", None)
+        if buf is not None and hasattr(buf, "reset"):
+            try:
+                buf.reset()
+            except Exception:
+                pass
+
+    _reset()
+    try:
+        yield
+    finally:
+        _reset()
+
+
+@pytest.fixture(autouse=True)
 def _no_real_app_launches():
     """The suite must never put a window on the machine running it.
 
